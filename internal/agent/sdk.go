@@ -78,7 +78,7 @@ func (m *Middleware) InterceptResponse(ctx context.Context, resp Response) (Resp
 	return resp, nil
 }
 
-func (m *Middleware) applySteering(text, metric string, score float64) string {
+func (m *Middleware) applySteering(text string, _ string, _ float64) string {
 	// In production: apply steering vector to model activations
 	return text
 }
