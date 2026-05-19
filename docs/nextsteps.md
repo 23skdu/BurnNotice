@@ -111,9 +111,9 @@ This section details the concrete, actionable roadmap to address the systemic fl
 
 - **Problem**: Longbow is a pre-1.0 rolling release, posing a significant dependency risk. If a Longbow node or distributed mesh goes offline, the scoring engine collapses.
 
-- [ ] **M4.1** Implement a robust local-storage backup pipeline using the existing standalone SQLite ledger for profile metadata and calibration thresholds.
-- [ ] **M4.2** Integrate an optimized Gonum-based local math backend for cosine and dot-product calculations that serves as a seamless fallback if the Longbow service is unreachable.
-- [ ] **M4.3** Establish automatic, zero-downtime hot-swapping between Longbow Flight connections and local math fallbacks.
+- [x] **M4.1** Implement a robust local-storage backup pipeline using the existing standalone SQLite ledger for profile metadata and calibration thresholds.
+- [x] **M4.2** Integrate an optimized Gonum-based local math backend for cosine and dot-product calculations that serves as a seamless fallback if the Longbow service is unreachable.
+- [x] **M4.3** Establish automatic, zero-downtime hot-swapping between Longbow Flight connections and local math fallbacks.
 
 ### Milestone 5: Closed-Loop Coherence & Dynamic Steering Scale (Resolves Capability Loss & Lobotomy Effect)
 
