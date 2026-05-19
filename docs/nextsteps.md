@@ -6,6 +6,75 @@
 
 ---
 
+## P0 Blockers: Production-Ready Enhancements
+
+The following features represent high-priority (P0) engineering requirements for production-readiness, hardening the real-time latent governance engine against adversarial attacks, performance degradation, and model drift.
+
+### P0.1 Adaptive, Model-Specific Threshold Calibration
+
+- [ ] **P0.1.1** Implement an automated calibration pipeline that ingests a held-out contrastive validation dataset and performs ROC curve analysis to select optimal detection thresholds.
+- [ ] **P0.1.2** Develop an optimization routine to automatically balance precision and recall, setting model-specific thresholds that maximize the F1-score for deception and safety metrics.
+- [ ] **P0.1.3** Implement dynamic threshold updating inside `internal/policy/engine.go` to adapt active policies based on real-time baseline activation drifts.
+- [ ] **P0.1.4** Write comprehensive unit and fuzz tests simulating extreme validation datasets (e.g. all-positive, all-negative, high-variance scores) and verifying calibration safety invariants.
+- [ ] **P0.1.5** **UI/UX Update**: Add a calibration section to the model profile dashboard showing ROC curves, precision-recall graphs, and a single-click "Recalibrate" trigger.
+- [ ] **P0.1.6** **e2e Update**: Create an end-to-end integration test running a full model profile dataset pipeline, verifying calibration values are written to `profile.gob` and immediately loaded by the policy engine.
+
+### P0.2 Adversarial Robustness & Defense-in-Depth
+
+- [ ] **P0.2.1** Integrate an input-level sanitization layer inside the agent SDK to filter out token patterns typical of activation-space adversarial suffix attacks.
+- [ ] **P0.2.2** Implement gradient-masking strategies at the latent layer during active steering, preventing attackers from using white-box gradients to construct jailbreak suffixes.
+- [ ] **P0.2.3** Add a low-amplitude noise injection layer (random Gaussian perturbations) to the extracted activations prior to scoring to defend against high-precision vector projection attacks.
+- [ ] **P0.2.4** Write fuzz tests injecting adversarial and high-frequency noise inputs to the scorer, ensuring similarity metrics and classification labels remain stable.
+- [ ] **P0.2.5** **UI/UX Update**: Add an "Adversarial Shield" panel on the dashboard displaying the live adversarial perturbation rates, blocked jailbreak attempts, and dynamic gradient masking metrics.
+- [ ] **P0.2.6** **e2e Update**: Run end-to-end safety evaluation benchmarks under simulated adversarial attacks, verifying the agent remains fully governed even under direct projection steering manipulation.
+
+### P0.3 Multi-Format Quantization & Direction Transfer
+
+- [ ] **P0.3.1** Implement quantization loaders for Turboquant, SQ8, and PQ formats inside `internal/engine/onnx.go`, enabling low-precision execution of models.
+- [ ] **P0.3.2** Design a mathematical scale-factor calibration mechanism to align activation magnitude variations between FP16 and INT8/FP8 model versions.
+- [ ] **P0.3.3** Implement direction vector transfer validation: ensure deception and alignment steering vectors extracted from an FP16 baseline map onto the quantized model layers without loss of cosine similarity.
+- [ ] **P0.3.4** Write unit and fuzz tests verifying the mathematical projection vectors and steering effectiveness under various quantization widths (FP16, FP8, INT8).
+- [ ] **P0.3.5** **UI/UX Update**: Add a "Quantization Compatibility" chart in the dashboard profiling layer weight and activation scaling metrics under different formats.
+- [ ] **P0.3.6** **e2e Update**: Write a complete end-to-end test converting a model to INT8, transferring baseline direction vectors, and executing steering to verify identical behavioral outputs.
+
+### P0.4 Multi-Direction Subspace Extraction
+
+- [ ] **P0.4.1** Implement multi-direction subspace extraction as the default inside `internal/extract/pca.go` using top-k right singular SVD vectors instead of single-direction vectors.
+- [ ] **P0.4.2** Integrate Iterative Nullspace Projection (INLP) to find multiple orthogonal safety directions, capturing complex multi-dimensional alignment concepts.
+- [ ] **P0.4.3** Update `internal/scoring/scorer.go` to perform subspace projections (using `ScoreSubspace`) as the primary metric, evaluating overall projection energy.
+- [ ] **P0.4.4** Write robust unit tests verifying SVD orthogonal bases recover complex synthetic high-dimensional subspaces, and INLP successfully projects out deception vectors.
+- [ ] **P0.4.5** **UI/UX Update**: Overhaul the dashboard visualization to render a 3D scatter plot of the multi-dimensional activation projections using uPlot.
+- [ ] **P0.4.6** **e2e Update**: Build an end-to-end integration test verifying that multi-direction steering successfully suppresses deception even when the model attempts evasive representational shifts.
+
+### P0.5 Temporal Deception Sequence Scoring
+
+- [ ] **P0.5.1** Implement a temporal scoring pipeline that computes exponential moving averages (EMA) of metric scores across the last $N$ tokens to track sequence-level deception signals.
+- [ ] **P0.5.2** Integrate sliding window sequence monitoring to identify slow-drift deception patterns that do not trigger single-token safety thresholds.
+- [ ] **P0.5.3** Update the policy engine to support sequence-level temporal operators (e.g. cumulative safety thresholds or sustained violations over time).
+- [ ] **P0.5.4** Write unit and fuzz tests simulating variable token sequence speeds, verifying temporal decay and activation energy aggregation formulas remain numerically stable.
+- [ ] **P0.5.5** **UI/UX Update**: Add a real-time temporal sequence chart to the web monitor showing the cumulative deception trend line and sliding threshold envelopes.
+- [ ] **P0.5.6** **e2e Update**: Implement an end-to-end test feeding a sequence of increasingly deceptive prompt tokens, verifying the temporal policy triggers preemptive intervention prior to completion.
+
+### P0.6 Capability Preservation & Steering Side-Effect Benchmarks
+
+- [ ] **P0.6.1** Integrate an automated evaluation harness in the steering tests that measures the model's core intelligence metrics (e.g. logic, reasoning, code generation) under dynamic steering.
+- [ ] **P0.6.2** Compute and report capability degradation scores comparing baseline MMLU, GSM8k, and HumanEval performance against steered states.
+- [ ] **P0.6.3** Implement safe steering clamping in `internal/steer/selective.go` to prevent excessive activation distortion and preserve model performance.
+- [ ] **P0.6.4** Write unit tests checking that clamping and norm-preservation limits are strictly enforced, rejecting steering scaling coefficients that trigger high distortion.
+- [ ] **P0.6.5** **UI/UX Update**: Add a "Capability Health" gauge on the dashboard, displaying the live MMLU/GSM8k score retention and layer-wise distortion statistics.
+- [ ] **P0.6.6** **e2e Update**: Create a full end-to-end benchmark test running standard reasoning tasks under maximum steering strength, asserting capability preservation remains above 98%.
+
+### P0.7 Asynchronous Non-Blocking Scoring Engine
+
+- [ ] **P0.7.1** Decouple ONNX/WASM inference from the scoring and policy evaluation pipeline using asynchronous Go channels and highly efficient ring buffers.
+- [ ] **P0.7.2** Implement a zero-copy activation queue to hand off intermediate tensors to a background worker pool, preventing inference pipeline blocking.
+- [ ] **P0.7.3** Integrate emergency sync bypass triggers: if queue saturation occurs or latency thresholds are breached, temporarily switch back to synchronous blocking evaluation for high-risk prompts.
+- [ ] **P0.7.4** Write exhaustive concurrency and race tests running high-throughput inference under parallel scoring loads, verifying zero race conditions or memory leaks.
+- [ ] **P0.7.5** **UI/UX Update**: Add a system latency panel on the dashboard showing the exact queue depth, asynchronous worker pool saturation, and engine processing delay metrics.
+- [ ] **P0.7.6** **e2e Update**: Run an end-to-end throughput benchmark under high parallel agent requests, asserting scoring pipeline introduces zero overhead to core token generation latency.
+
+---
+
 ## Phase 1: Core Infrastructure (Weeks 1-4)
 
 **Goals**: Go module setup, Longbow integration, ONNX model loading, CLI tool, direction extraction

@@ -1445,6 +1445,141 @@ For closed models (GPT-4, Claude), BurnNotice can operate in proxy mode:
 - "When Safety Geometry Collapses" (2026). arXiv:2605.02914.
 - TRACEALIGN (2025). "Diagnosing Alignment Drift via Belief Attribution." arXiv:2508.02063.
 
+## 13. Production-Ready Design Enhancements (P0)
+
+To move BurnNotice from a proof-of-concept into a highly hardened, production-grade latent governance framework, we establish the following detailed technical design specifications:
+
+### 13.1 Adaptive Model-Specific Calibration
+
+Fixed threshold values are highly vulnerable to False Positives under out-of-distribution (OOD) agent environments, and False Negatives under subtle, slow-drift deception prompts. 
+
+#### Mathematical Formulation
+
+For a given metric score function $S(a)$ projecting activation vector $a$ onto safety direction $v$:
+$$S(a) = \text{Sigmoid}\left(\frac{a \cdot v}{\|a\| \|v\|} \times \gamma\right)$$
+
+Instead of a static threshold $T \in [0.1, 0.9]$, we define a calibration optimization objective over a held-out validation dataset $\mathcal{D}_{\text{val}} = \{(x_i, y_i)\}_{i=1}^N$ containing positive (compliant) and negative (violating/deceptive) agent activation traces.
+
+We optimize the classification threshold $T^*$ dynamically using the F1-score metric:
+$$T^* = \arg\max_{T} F_1(T) = \arg\max_{T} \frac{2 \cdot \text{Precision}(T) \cdot \text{Recall}(T)}{\text{Precision}(T) + \text{Recall}(T)}$$
+
+Where:
+*   $\text{Precision}(T) = \frac{TP(T)}{TP(T) + FP(T)}$
+*   $\text{Recall}(T) = \frac{TP(T)}{TP(T) + FN(T)}$
+
+#### Implementation Details
+
+1.  **Calibration Harness**: Inside `internal/profile/manager.go`, a background calibration worker is introduced. It loads a held-out reference dataset, runs activation inference, computes projections, and builds ROC curves.
+2.  **Adaptive Threshold Adjustment**: Calibrated values are persisted to `profile.gob` as:
+    ```go
+    type CalibratedThreshold struct {
+        Metric      string    `json:"metric"`
+        OptimalT    float64   `json:"optimal_t"`
+        TargetF1    float64   `json:"target_f1"`
+        CalibratedAt time.Time `json:"calibrated_at"`
+    }
+    ```
+3.  **Real-Time Shift Detection**: If the rolling average baseline projection drift exceeds $1.5\sigma$, the engine triggers an automatic background recalibration task.
+
+---
+
+### 13.2 Adversarial Robustness & Defense-in-Depth
+
+Activations are vulnerable to high-precision adversarial prompt injection attacks (e.g. suffix tokens that systematically shift activation projections to bypass refusal/deception directions).
+
+#### Robustness Mechanisms
+
+1.  **Input Token Sanitization**: A lightweight vocabulary filter within the agent SDK blocks known low-probability token transitions typical of gradient-optimized jailbreak suffixes.
+2.  **Steering Gradient Masking**: The steering engine hides its latent projection vectors from being inferred by black-box probe queries. If a client attempts back-to-back probes with high-cosine similarity inputs, the monitor restricts prompt tracing and generates decoy activation distributions.
+3.  **Latent Noise Injection**: Add a low-amplitude Gaussian perturbation $\eta \sim \mathcal{N}(0, \sigma_{\text{noise}}^2)$ directly to the projected activations before evaluating similarity:
+    $$S_{\text{robust}}(a) = S(a + \eta)$$
+    *   This defeats high-precision target optimization attacks by making the local loss geometry highly non-differentiable and noisy.
+
+---
+
+### 13.3 Multi-Format Quantization & Direction Transfer
+
+In enterprise environments, models are frequently quantized to INT8, FP8, or Group-wise Block Quantized formats (Turboquant, SQ8, PQ) to fit GPU vRAM limits. This compression scales down activation variances and creates severe representation mismatches.
+
+#### Mathematical Alignment
+
+Let $a_{\text{FP16}}$ be the activation in FP16 precision, and $a_{\text{quant}}$ be the corresponding layer activation in a quantized model version. The scale factor mismatch is calibrated by computing the standard deviation over standard calibration tokens:
+$$s_{\text{calib}} = \frac{\text{std}(a_{\text{FP16}})}{\text{std}(a_{\text{quant}})}$$
+
+The transferred steering direction vector $v_{\text{quant}}$ is aligned using:
+$$v_{\text{quant}} = s_{\text{calib}} \cdot v_{\text{FP16}}$$
+
+#### Direction Robustness Checks
+
+To verify direction stability post-quantization:
+1.  **Cosine Parity Check**: Ensure the projection angle satisfies:
+    $$\text{CosineSimilarity}(v_{\text{quant}}, v_{\text{FP16}}) \ge 0.98$$
+2.  **Clipping Bound Enforcement**: Dynamically clip the steering rotation amplitudes inside the selective steering solver to prevent over-steering overflows in integer representation layers.
+
+---
+
+### 13.4 Multi-Direction Subspace Extraction (SVD & INLP)
+
+A single direction represents a highly simplified linear probe. Real deceptive planning often spans multiple latent features that cannot be captured by simple difference-in-means (DIM).
+
+#### Subspace Projection Design
+
+1.  **Top-K SVD Subspace**: Rather than extracting one PCA vector, we extract the top-k right singular columns of the contrastive difference matrix $X_{\text{diff}}$:
+    $$X_{\text{diff}} = U \Sigma V^T$$
+    We build a $k$-dimensional orthonormal basis $B = [v_1, v_2, \dots, v_k]$ from the columns of $V$ corresponding to the largest singular values in $\Sigma$.
+2.  **Iterative Nullspace Projection (INLP)**:
+    *   Trains a linear probe to classify deception.
+    *   Projects all activations onto the nullspace of this probe.
+    *   Iteratively trains new probes on the projected activations to identify secondary and tertiary orthogonal deceptive pathways.
+3.  **Aggregate Energy Projection**: The scoring engine evaluates the subspace energy projection:
+    $$E_{\text{subspace}}(a) = \sqrt{\sum_{i=1}^k (a \cdot v_i)^2}$$
+
+---
+
+### 13.5 Temporal Deception Sequence Scoring
+
+Strategic deception is rarely a single-token event; it manifests as a sustained sequence of subtly misleading planning steps.
+
+#### Sequence Accumulator Design
+
+We track deception trajectories using an Exponential Moving Average (EMA) of token-level projection scores across a sequence window:
+$$EMA_t = \alpha \cdot S(a_t) + (1 - \alpha) \cdot EMA_{t-1}$$
+Where:
+*   $\alpha \in [0.05, 0.2]$ is the temporal decay factor.
+*   $S(a_t)$ is the projection score at token index $t$.
+
+#### Temporal Policy Violation
+
+A temporal violation triggers when the EMA score remains sustained above a warning threshold $T_{\text{warn}}$ for more than $K$ consecutive tokens, or when the cumulative sequence integral crosses the emergency envelope limit:
+$$\int_{t-W}^{t} S(a_{\tau}) d\tau \ge E_{\text{emergency}}$$
+
+---
+
+### 13.6 Capability Preservation & Steering Side-Effect Benchmarks
+
+Applying norm-preserving steering can inadvertently warp neighboring semantic directions, causing the agent to experience high cognitive degradation (e.g. grammar errors, logical loops, core reasoning failures on MMLU/GSM8k).
+
+#### Intelligence Metrics Guardrails
+
+1.  **Norm-Clamping Safety Envelope**:
+    $$v_{\text{steered}} = \text{AngularRotation}(a, v, \theta)$$
+    We clamp the maximum rotation angle $\theta \le \theta_{\text{max}}$ (typically $15^{\circ}$) to restrict latent space distortion.
+2.  **Capability Health Ratio**: An automated benchmark pipeline evaluates baseline task intelligence models against steered instances:
+    $$\mathcal{R}_{\text{cap}} = \frac{\text{Accuracy}_{\text{steered}}(\text{GSM8k})}{\text{Accuracy}_{\text{baseline}}(\text{GSM8k})} \ge 0.98$$
+    If the capability health ratio drops below $98\%$, the selective steerer automatically scales down the steering strength coefficient.
+
+---
+
+### 13.7 Asynchronous Non-Blocking Scoring Engine
+
+Integrating real-time latent governance directly into production token generation loops creates significant latency overhead. We design a zero-copy asynchronous pipeline to offload safety computations.
+
+#### Pipeline Specification
+
+1.  **Lock-Free Multi-Producer Single-Consumer Queue**: A highly efficient ring buffer hands off intermediate layer activation pointers from the ONNX/WASM inference execution thread.
+2.  **Worker Pool Execution**: A dedicated background thread pool dequeues activation blocks, calculates subspace projection energies, and evaluates policy configurations.
+3.  **Emergency Synchronous Interlock**: If the queue fills beyond $85\%$ capacity, or the scoring delay exceeds $2.5\text{ms}$, the engine triggers an immediate interlock signal, forcing synchronous blocking evaluations on high-risk compliance pipelines until queue pressure is fully relieved.
+
 ---
 
 ## 14. Glossary

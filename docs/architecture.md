@@ -472,3 +472,87 @@ graph TB
     NODE1 --> LEDGER
     NODE1 --> PARQUET
 ```
+
+---
+
+## Production-Ready Architectural Enhancements (P0)
+
+To achieve microsecond-scale latency targets, high security, and model representation parity in enterprise production environments, BurnNotice introduces the following architectural additions:
+
+### Asynchronous Non-Blocking Scoring Subsystem
+
+To isolate core token generation latency from neural safety calculations, we introduce a highly concurrent, asynchronous handoff pipeline in the execution engine.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Engine as ONNX/WASM Inference
+    participant RingBuf as Lock-Free Ring Buffer
+    participant Workers as Async Worker Pool
+    participant Scorer as Subspace Scorer
+    participant Policy as Policy Engine
+    participant Ledg as Activity Ledger
+    participant Steer as Steering Engine
+
+    Engine->{bracket_open}RingBuf: Enqueue Activation Tensor (Zero-Copy Pointer)
+    Note over Engine: Resume Next Token Generation
+    RingBuf->>Workers: Dequeue Activation (FIFO Handoff)
+    Workers->>Scorer: Project Activation onto Subspace
+    Scorer->>Policy: Evaluate Metric Projection Energy
+    alt Policy Violation Detected
+        Policy->>Steer: Dispatch Steering Vector (Dynamic Rotation)
+        Policy->>Ledg: Record Alert in Ledger
+        Note over Steer: Intervene on active layers
+    end
+```
+
+*   **Lock-Free Ring Buffer**: Replaces simple blocking channels to guarantee low-allocation, sub-microsecond queue/dequeue performance.
+*   **Emergency Synchronous Bypass**: A latch circuit monitors queue depth and processing latency. If latency exceeds a threshold, it automatically falls back to synchronous evaluation on high-risk prompt layers to prevent undetected deception leakages.
+
+### Quantization & Direction Transfer Architecture
+
+Quantized models (Turboquant, SQ8, PQ, INT8/FP8) scale down weight precision and alter latent activation geometries. To maintain alignment, a scaling transfer layer is introduced.
+
+```mermaid
+graph TD
+    subgraph baseline["FP16 Baseline Space"]
+        V_FP16["FP16 Steering Direction Vector V"]
+    end
+    subgraph quant["INT8/FP8 Quantized Space"]
+        V_INT8["INT8 Steering Direction Vector V'"]
+    end
+
+    ScaleCalib["Mathematical Scale Calibration Layer"]
+    ActScale["Activation Variance Matching"]
+    ClipBound["Clip Boundary Alignment"]
+
+    V_FP16 --> ScaleCalib
+    ScaleCalib --> ActScale
+    ScaleCalib --> ClipBound
+    ActScale --> V_INT8
+    ClipBound --> V_INT8
+```
+
+*   **Scale Calibration Layer**: Standardizes different numerical representations by matching the standard deviation of activations between FP16 baselines and INT8/FP8 quantized paths.
+*   **Direction Mapping Engine**: Mathematically projects extracted baseline steering direction matrices onto quantized layers, validating that multi-dimensional geometric structures remain invariant under low-precision representation formats.
+
+### Multi-Direction Subspace Extraction & INLP
+
+A single direction is vulnerable to model evasion. We expand our extraction pipeline to construct multi-direction safety subspaces.
+
+```mermaid
+graph LR
+    Dataset["Contrastive Dataset"] --> SVD["Top-K SVD Factorization"]
+    Dataset --> INLP["Iterative Nullspace Projection"]
+    SVD --> Subspace["Multi-Dimensional Safety Subspace Basis"]
+    INLP --> Subspace
+    Subspace --> Projection["Subspace Projection Scorer"]
+```
+
+*   **Top-K SVD Subspace**: Extract the top-k right singular columns of the activation difference matrices using Gonum, building an orthonormal basis for safety governance.
+*   **Iterative Nullspace Projection (INLP)**: Progressively removes features matching known deception styles by projecting activations onto the nullspace of linear deception probes, revealing orthogonal safety directions.
+
+### Temporal Sequence Scoring & Adaptive Calibration
+
+*   **Adaptive Calibration Subsystem**: Regularly updates safety thresholds based on held-out validation databases. Runs ROC/F1 analysis on background workers to select dynamic, model-specific threshold metrics.
+*   **Temporal Sequence Aggregator**: Computes sequence-level exponential moving averages (EMA) of token-level similarity scores. Tracks long-term drift trajectories across multi-agent chat logs to detect sustained deception or jailbreak attempts.
