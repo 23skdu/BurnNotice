@@ -155,7 +155,7 @@ func (r *Reporter) ExportPDF(report *Report) ([]byte, error) {
 	contentStream := fmt.Sprintf("3 0 obj\n<< /Length %d >>\nstream\n%s\nendstream\nendobj\n", len(content), content)
 	buf.WriteString(contentStream)
 
-	pageObj := fmt.Sprintf("4 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 3 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n")
+	pageObj := "4 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 3 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n"
 	buf.WriteString(pageObj)
 
 	fontObj := "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n"
