@@ -1,5 +1,7 @@
 package steer
 
+import "math"
+
 // Dispatcher routes steering commands to the appropriate method.
 type Dispatcher struct {
 	TargetLayers map[int]bool
@@ -34,6 +36,25 @@ func (d *Dispatcher) Apply(layerIdx int, activation, direction []float64, streng
 		return Angular(activation, direction, strength)
 	case MethodAblation:
 		return Ablate(activation, direction)
+	case MethodSelective:
+		// Selective steering: dynamically check alignment projection along direction
+		// direction is assumed to be the difference vector (truth - deception)
+		v := normalizeVec(direction)
+		proj := vecDot(activation, v)
+		if proj >= 0 {
+			// Compliant / not leaning towards deception, do not steer
+			return activation
+		}
+		clamped := proj
+		if clamped < -1 {
+			clamped = -1
+		}
+		if clamped > 1 {
+			clamped = 1
+		}
+		// Calculate the steering angle theta based on how far it is unaligned
+		theta := strength * math.Asin(-clamped)
+		return rotate2D(activation, v, theta)
 	default:
 		return activation
 	}

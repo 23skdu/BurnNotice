@@ -22,6 +22,7 @@ type Policy struct {
 	Name             string  `yaml:"name"`
 	Metric           string  `yaml:"metric"`
 	Threshold        float64 `yaml:"threshold"`
+	Operator         string  `yaml:"operator,omitempty"` // "less" or "greater" (defaults to "greater" if empty)
 	Action           Action  `yaml:"action"`
 	SteeringVector   string  `yaml:"steering_vector,omitempty"`
 	SteeringStrength float64 `yaml:"steering_strength,omitempty"`

@@ -131,3 +131,21 @@ func TestCKASimilarity_Empty(t *testing.T) {
 		t.Fatal("expected error for empty matrices")
 	}
 }
+
+func TestCKASimilarity_ZeroSelfSimilarity(t *testing.T) {
+	X := [][]float64{
+		{0, 0},
+		{0, 0},
+	}
+	_, err := CKASimilarity(X, X)
+	if err == nil {
+		t.Fatal("expected error for zero self-similarity")
+	}
+}
+
+func TestHsic_Empty(t *testing.T) {
+	res := hsic(nil, nil)
+	if res != 0 {
+		t.Errorf("hsic(nil, nil) = %f, want 0", res)
+	}
+}

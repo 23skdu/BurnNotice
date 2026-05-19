@@ -174,3 +174,15 @@ func TestNormalize_OutputNorm(t *testing.T) {
 		}
 	}
 }
+
+func TestColumnMean_Empty(t *testing.T) {
+	res := columnMean(nil)
+	if res != nil {
+		t.Errorf("columnMean(nil) = %v, want nil", res)
+	}
+
+	res = columnMean([][]float64{})
+	if res != nil {
+		t.Errorf("columnMean(empty) = %v, want nil", res)
+	}
+}

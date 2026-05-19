@@ -51,9 +51,12 @@ func ExtractPCA(positive, negative [][]float64, k int) (directions [][]float64, 
 	}
 
 	directions = make([][]float64, k)
-	for i := range directions {
-		directions[i] = mat.Row(nil, i, vt)
-		directions[i] = Normalize(directions[i])
+	for i := 0; i < k; i++ {
+		colVec := make([]float64, cols)
+		for rowIdx := 0; rowIdx < cols; rowIdx++ {
+			colVec[rowIdx] = vt.At(rowIdx, i)
+		}
+		directions[i] = Normalize(colVec)
 	}
 
 	return directions, singularValues

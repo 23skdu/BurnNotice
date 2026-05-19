@@ -1914,11 +1914,11 @@ func TestDecodeStructWithUnknownField(t *testing.T) {
 
 func TestDecodeStructWithEscapedKey(t *testing.T) {
 	type TestStruct struct {
-		Name string `json:"na\"me"`
+		Name string `json:"name"`
 	}
 
 	var s TestStruct
-	if err := Unmarshal([]byte(`{"na\"me":"Alice"}`), &s); err != nil {
+	if err := Unmarshal([]byte(`{"na\u006d\u0065":"Alice"}`), &s); err != nil {
 		t.Fatal(err)
 	}
 	if s.Name != "Alice" {

@@ -792,7 +792,7 @@ func (d *decoder) decodeBool(rv reflect.Value) error {
 }
 
 // decodeNull decodes a JSON null (should not be called directly since null is handled in decodeValue).
-func (d *decoder) decodeNull(rv reflect.Value) error {
+func (d *decoder) decodeNull(_ reflect.Value) error {
 	// This should not be called directly since null is handled in decodeValue
 	return &SyntaxError{Offset: d.pos, Msg: "unexpected null"}
 }

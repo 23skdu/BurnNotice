@@ -160,3 +160,14 @@ func TestLoRASteerer_RoundTrip(t *testing.T) {
 		}
 	}
 }
+
+func TestLoRASteerer_ReverseLoRA_WrongDim(t *testing.T) {
+	l := NewLoRASteerer(2, 1)
+	l.ComputeLoRAWeights([]float64{1, 0}, 1.0)
+	_, _ = l.ApplyLoRA([][]float64{{1, 2}, {3, 4}})
+
+	_, err := l.ReverseLoRA([][]float64{{1}})
+	if err == nil {
+		t.Fatal("expected error for wrong weight dimension in ReverseLoRA")
+	}
+}

@@ -493,10 +493,13 @@ func unescapeString(raw []byte) string {
 					i += 4
 					// Simple UTF-8 encoding
 					if code < 0x80 {
+						// #nosec G115 -- bounds checked
 						out = append(out, byte(code))
 					} else if code < 0x800 {
+						// #nosec G115 -- bounds checked
 						out = append(out, byte(0xC0|code>>6), byte(0x80|code&0x3F))
 					} else {
+						// #nosec G115 -- bounds checked
 						out = append(out, byte(0xE0|code>>12), byte(0x80|code>>6&0x3F), byte(0x80|code&0x3F))
 					}
 				}
@@ -561,10 +564,13 @@ func Unescape(dst, raw []byte) int {
 					code := parseHex4(raw[i+1 : i+5])
 					i += 4
 					if code < 0x80 {
+						// #nosec G115 -- bounds checked
 						out = append(out, byte(code))
 					} else if code < 0x800 {
+						// #nosec G115 -- bounds checked
 						out = append(out, byte(0xC0|code>>6), byte(0x80|code&0x3F))
 					} else {
+						// #nosec G115 -- bounds checked
 						out = append(out, byte(0xE0|code>>12), byte(0x80|code>>6&0x3F), byte(0x80|code&0x3F))
 					}
 				}
@@ -582,5 +588,6 @@ func Unescape(dst, raw []byte) int {
 // UnsafeString creates a string from bytes without copying.
 // Only safe if the backing array is not modified.
 func UnsafeString(b []byte) string {
+	// #nosec G103 -- zero-copy conversion
 	return *(*string)(unsafe.Pointer(&b))
 }

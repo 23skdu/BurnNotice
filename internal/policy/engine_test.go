@@ -240,6 +240,60 @@ func TestEngine_Evaluate_MultiplePolicies(t *testing.T) {
 	}
 }
 
+func TestLoadPolicies_Operator(t *testing.T) {
+	content := `policies:
+  - name: compliance_threshold
+    metric: compliance_score
+    threshold: 0.5
+    operator: less
+    action: block
+`
+	tmp := writeTempFile(t, content)
+	defer os.Remove(tmp)
+
+	policies, err := LoadPolicies(tmp)
+	if err != nil {
+		t.Fatalf("LoadPolicies() error = %v", err)
+	}
+
+	if len(policies) != 1 {
+		t.Fatalf("len(policies) = %d, want 1", len(policies))
+	}
+
+	if policies[0].Operator != "less" {
+		t.Errorf("policy[0].Operator = %s, want less", policies[0].Operator)
+	}
+}
+
+func TestEngine_Evaluate_LessOperator(t *testing.T) {
+	policies := []Policy{
+		{Name: "test", Metric: "compliance_score", Threshold: 0.5, Operator: "less", Action: ActionBlock},
+	}
+	engine := NewEngine(policies)
+
+	// Score is above threshold, should not violate
+	scores := map[string]float64{"compliance_score": 0.8}
+	violations := engine.Evaluate(scores)
+	if len(violations) != 0 {
+		t.Errorf("expected 0 violations for score above threshold, got %d", len(violations))
+	}
+
+	// Score is below threshold, should violate
+	scores = map[string]float64{"compliance_score": 0.3}
+	violations = engine.Evaluate(scores)
+	if len(violations) != 1 {
+		t.Fatalf("expected 1 violation for score below threshold, got %d", len(violations))
+	}
+
+	v := violations[0]
+	if v.PolicyName != "test" {
+		t.Errorf("PolicyName = %s, want test", v.PolicyName)
+	}
+	if v.Score != 0.3 {
+		t.Errorf("Score = %f, want 0.3", v.Score)
+	}
+}
+
 func writeTempFile(t *testing.T, content string) string {
 	t.Helper()
 	tmp := filepath.Join(t.TempDir(), "policies.yaml")

@@ -98,3 +98,30 @@ func TestExtractPCA_MultipleComponents(t *testing.T) {
 		t.Errorf("singular values not sorted descending: %v", singularValues)
 	}
 }
+
+func TestExtractPCA_K_ZeroOrNegative(t *testing.T) {
+	positive := [][]float64{{1, 2}}
+	negative := [][]float64{{3, 4}}
+	d, s := ExtractPCA(positive, negative, 0)
+	if d != nil || s != nil {
+		t.Errorf("ExtractPCA with k=0 returned %v, %v, want nil, nil", d, s)
+	}
+
+	d, s = ExtractPCA(positive, negative, -1)
+	if d != nil || s != nil {
+		t.Errorf("ExtractPCA with k=-1 returned %v, %v, want nil, nil", d, s)
+	}
+}
+
+func TestExtractPCA_NegativeEmpty(t *testing.T) {
+	positive := [][]float64{{1, 2}}
+	d, s := ExtractPCA(positive, nil, 1)
+	if d != nil || s != nil {
+		t.Errorf("ExtractPCA with nil negative returned %v, %v, want nil, nil", d, s)
+	}
+
+	d, s = ExtractPCA(positive, [][]float64{}, 1)
+	if d != nil || s != nil {
+		t.Errorf("ExtractPCA with empty negative returned %v, %v, want nil, nil", d, s)
+	}
+}

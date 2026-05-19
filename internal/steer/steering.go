@@ -31,41 +31,39 @@ func ActAdd(activation, direction []float64, alpha float64) []float64 {
 // Angular performs norm-preserving angular steering.
 func Angular(activation, direction []float64, alpha float64) []float64 {
 	aNorm := vecNorm(activation)
-	vNorm := vecNorm(direction)
-	if vNorm < 1e-10 || aNorm < 1e-10 {
+	if aNorm < 1e-10 {
 		return activation
 	}
 
-	dot := vecDot(activation, direction)
-	parallelScale := dot / (vNorm * vNorm)
-
-	parallel := make([]float64, len(direction))
-	for i := range direction {
-		parallel[i] = parallelScale * direction[i]
+	// Normalize the steering direction to make it a unit vector
+	u := normalizeVec(direction)
+	uNorm := vecNorm(u)
+	if uNorm < 1e-10 {
+		return activation
 	}
 
+	// Since u is a unit vector, proj is the scalar projection
+	proj := vecDot(activation, u)
+
+	// Compute the component orthogonal to u
 	ortho := make([]float64, len(activation))
 	for i := range activation {
-		ortho[i] = activation[i] - parallel[i]
+		ortho[i] = activation[i] - proj*u[i]
 	}
 	orthoNorm := vecNorm(ortho)
+	if orthoNorm < 1e-10 {
+		return activation
+	}
 
 	theta := alpha * math.Pi
-
 	cosT := math.Cos(theta)
 	sinT := math.Sin(theta)
 
+	// Compute the orthonormal basis vector w (orthogonal to activation, same norm)
+	// w = orthoNorm * u - proj * (ortho / orthoNorm)
 	result := make([]float64, len(activation))
 	for i := range activation {
-		result[i] = cosT*activation[i] + sinT*(orthoNorm*direction[i]/vNorm - parallelScale*ortho[i]/orthoNorm)
-	}
-
-	resultNorm := vecNorm(result)
-	if resultNorm > 1e-10 {
-		scale := aNorm / resultNorm
-		for i := range result {
-			result[i] *= scale
-		}
+		result[i] = cosT*activation[i] + sinT*(orthoNorm*u[i] - proj*ortho[i]/orthoNorm)
 	}
 
 	return result
@@ -110,8 +108,16 @@ func NewSelectiveSteerer(truthDir, deceptionDir map[int][]float64, layers []int)
 
 // IsDiscriminative returns true if truth and deception projections have opposite signs.
 func (s *SelectiveSteerer) IsDiscriminative(layerIdx int, activation []float64) bool {
-	truthProj := vecDot(activation, s.TruthDir[layerIdx])
-	deceptionProj := vecDot(activation, s.DeceptionDir[layerIdx])
+	if s.TruthDir == nil || s.DeceptionDir == nil {
+		return false
+	}
+	truth, ok1 := s.TruthDir[layerIdx]
+	deception, ok2 := s.DeceptionDir[layerIdx]
+	if !ok1 || !ok2 || len(truth) != len(activation) || len(deception) != len(activation) {
+		return false
+	}
+	truthProj := vecDot(activation, truth)
+	deceptionProj := vecDot(activation, deception)
 	return truthProj*deceptionProj < 0
 }
 
@@ -120,12 +126,17 @@ func (s *SelectiveSteerer) ComputeSteering(layerIdx int, activation []float64, s
 	if !s.TargetLayers[layerIdx] {
 		return nil
 	}
+	if s.TruthDir == nil || s.DeceptionDir == nil {
+		return nil
+	}
+	truth, ok1 := s.TruthDir[layerIdx]
+	deception, ok2 := s.DeceptionDir[layerIdx]
+	if !ok1 || !ok2 || len(truth) != len(activation) || len(deception) != len(activation) {
+		return nil
+	}
 	if !s.IsDiscriminative(layerIdx, activation) {
 		return nil
 	}
-
-	truth := s.TruthDir[layerIdx]
-	deception := s.DeceptionDir[layerIdx]
 
 	v := make([]float64, len(truth))
 	for i := range truth {

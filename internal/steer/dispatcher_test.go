@@ -109,3 +109,32 @@ func TestDispatcher_Apply_UnknownMethod(t *testing.T) {
 		}
 	}
 }
+
+func TestDispatcher_Apply_SelectiveMethod(t *testing.T) {
+	d := NewDispatcher([]int{0}, map[int]Method{0: MethodSelective})
+
+	// Vector in same direction (compliant): no steering
+	activation := []float64{1, 2, 3}
+	direction := []float64{1, 2, 3}
+
+	result := d.Apply(0, activation, direction, 1.0)
+	for i := range result {
+		if math.Abs(result[i]-activation[i]) > 1e-9 {
+			t.Errorf("Apply(Selective) steered compliant activation[%d] = %f, want %f", i, result[i], activation[i])
+		}
+	}
+
+	// Vector in opposite direction (deceptive): should steer
+	deceptiveActivation := []float64{-1, 0, -3}
+	steeredResult := d.Apply(0, deceptiveActivation, direction, 0.5)
+
+	diffCount := 0
+	for i := range steeredResult {
+		if math.Abs(steeredResult[i]-deceptiveActivation[i]) > 1e-4 {
+			diffCount++
+		}
+	}
+	if diffCount == 0 {
+		t.Error("Apply(Selective) failed to steer unaligned activation")
+	}
+}

@@ -18,22 +18,26 @@ type GoString struct {
 // Mem2Str converts a byte slice to a string without copying.
 // The caller must ensure the backing array is not modified while the string is in use.
 func Mem2Str(b []byte) string {
+	// #nosec G103 -- intentional zero-copy conversion for performance
 	return *(*string)(unsafe.Pointer(&b))
 }
 
 // Str2Mem converts a string to a byte slice without copying.
 // The returned slice must NOT be modified (read-only access only).
 func Str2Mem(s string) []byte {
+	// #nosec G103 -- intentional zero-copy conversion for performance
 	return unsafe.Slice((*byte)(unsafe.Pointer(unsafe.StringData(s))), len(s))
 }
 
 // SliceHeader returns a mutable GoSlice pointer for a byte slice.
 func SliceHeader(b *[]byte) *GoSlice {
+	// #nosec G103 -- direct memory reflection for zero-allocation parsing
 	return (*GoSlice)(unsafe.Pointer(b))
 }
 
 // StringHeader returns a GoString pointer for a string.
 func StringHeader(s *string) *GoString {
+	// #nosec G103 -- direct memory reflection for zero-allocation parsing
 	return (*GoString)(unsafe.Pointer(s))
 }
 

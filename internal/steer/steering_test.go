@@ -252,3 +252,41 @@ func TestSelectiveSteerer_ComputeSteering_ClampedProjection(t *testing.T) {
 	}
 }
 
+func TestSelectiveSteerer_NilsAndDimensionMismatches(t *testing.T) {
+	// Nil maps
+	sNil := &SelectiveSteerer{
+		TruthDir:     nil,
+		DeceptionDir: nil,
+		TargetLayers: map[int]bool{0: true},
+	}
+	if sNil.IsDiscriminative(0, []float64{1}) {
+		t.Error("IsDiscriminative should return false for nil maps")
+	}
+	if sNil.ComputeSteering(0, []float64{1}, 0.5) != nil {
+		t.Error("ComputeSteering should return nil for nil maps")
+	}
+
+	// Mismatched vector dimensions
+	sMismatch := &SelectiveSteerer{
+		TruthDir:     map[int][]float64{0: {1, 0}},
+		DeceptionDir: map[int][]float64{0: {-1, 0, 0}}, // mismatch
+		TargetLayers: map[int]bool{0: true},
+	}
+	if sMismatch.IsDiscriminative(0, []float64{1, 0}) {
+		t.Error("IsDiscriminative should return false for dimension mismatch")
+	}
+	if sMismatch.ComputeSteering(0, []float64{1, 0}, 0.5) != nil {
+		t.Error("ComputeSteering should return nil for dimension mismatch")
+	}
+}
+
+func TestAngular_ZeroOrthoNorm(t *testing.T) {
+	// If orthoNorm < 1e-10 (activation and direction perfectly collinear)
+	act := []float64{1, 2, 3}
+	dir := []float64{1, 2, 3}
+	res := Angular(act, dir, 0.5)
+	if len(res) != 3 {
+		t.Fatalf("len(res) = %d, want 3", len(res))
+	}
+}
+

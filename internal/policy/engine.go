@@ -41,7 +41,13 @@ func (e *Engine) Evaluate(scores map[string]float64) []PolicyViolation {
 		if !ok {
 			continue
 		}
-		if score > p.Threshold {
+		violated := false
+		if p.Operator == "less" {
+			violated = score < p.Threshold
+		} else {
+			violated = score > p.Threshold
+		}
+		if violated {
 			e.violations[p.Name]++
 			violations = append(violations, PolicyViolation{
 				PolicyName: p.Name,
