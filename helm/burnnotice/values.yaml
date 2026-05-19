@@ -1,0 +1,100 @@
+replicaCount: 1
+
+image:
+  repository: burnnotice/burnnotice
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+service:
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: burnnotice.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+
+resources:
+  limits:
+    cpu: 4000m
+    memory: 8Gi
+  requests:
+    cpu: 1000m
+    memory: 2Gi
+
+longbow:
+  enabled: true
+  image:
+    repository: 23skdu/longbow
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  service:
+    type: ClusterIP
+    dataPort: 3000
+    metaPort: 3001
+    metricsPort: 9090
+  resources:
+    limits:
+      cpu: 4000m
+      memory: 16Gi
+    requests:
+      cpu: 2000m
+      memory: 8Gi
+  storage:
+    enabled: true
+    size: 50Gi
+    storageClass: ""
+  config:
+    storageUseIOUring: false
+    hnswTurboQuantEnabled: false
+    learnedIndexEnabled: false
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+persistence:
+  profiles:
+    enabled: true
+    size: 20Gi
+    storageClass: ""
+  models:
+    enabled: true
+    size: 100Gi
+    storageClass: ""
+
+monitoring:
+  enabled: true
+  serviceMonitor:
+    enabled: false
+    interval: 15s
+    scrapeTimeout: 10s
+  grafanaDashboard:
+    enabled: true
+    namespace: monitoring
+    label:
+      grafana_dashboard: "1"
+
+config:
+  logLevel: "info"
+  logFormat: "json"
+  profileDir: "/data/profiles"
+  modelDir: "/data/models"

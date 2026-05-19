@@ -1,0 +1,18 @@
+apiVersion: v2
+name: burnnotice
+description: LLM Deception Detection and Alignment Monitoring Framework
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">= 1.24.0-0"
+keywords:
+  - llm
+  - safety
+  - alignment
+  - monitoring
+  - activation-steering
+home: https://github.com/anomalyco/BurnNotice
+sources:
+  - https://github.com/anomalyco/BurnNotice
+maintainers:
+  - name: BurnNotice Team

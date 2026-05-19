@@ -1,0 +1,63 @@
+{{- if .Values.longbow.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "burnnotice.fullname" . }}-longbow
+  labels:
+    {{- include "burnnotice.labels" . | nindent 4 }}
+    app.kubernetes.io/component: longbow
+spec:
+  replicas: {{ .Values.longbow.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "burnnotice.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: longbow
+  template:
+    metadata:
+      labels:
+        {{- include "burnnotice.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: longbow
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: longbow
+          image: "{{ .Values.longbow.image.repository }}:{{ .Values.longbow.image.tag }}"
+          imagePullPolicy: {{ .Values.longbow.image.pullPolicy }}
+          ports:
+            - name: data
+              containerPort: 3000
+              protocol: TCP
+            - name: meta
+              containerPort: 3001
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          env:
+            - name: STORAGE_USE_IOURING
+              value: {{ .Values.longbow.config.storageUseIOUring | quote }}
+            - name: LONGBOW_HNSW_TURBOQUANT_ENABLED
+              value: {{ .Values.longbow.config.hnswTurboQuantEnabled | quote }}
+            - name: LONGBOW_LEARNED_INDEX_ENABLED
+              value: {{ .Values.longbow.config.learnedIndexEnabled | quote }}
+          resources:
+            {{- toYaml .Values.longbow.resources | nindent 12 }}
+          volumeMounts:
+            - name: longbow-data
+              mountPath: /data
+      volumes:
+        - name: longbow-data
+          {{- if .Values.longbow.storage.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "burnnotice.fullname" . }}-longbow
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+{{- end }}

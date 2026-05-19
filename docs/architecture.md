@@ -1,0 +1,474 @@
+# BurnNotice: Architecture Overview
+
+> **Status**: Draft
+> **Date**: 2026-05-18
+> **Version**: 0.1
+
+---
+
+## System Overview
+
+BurnNotice is a real-time neural activation monitoring and intervention framework designed to detect when an LLM agent is considering deception, policy violation, or alignment drift — before the behavior manifests in output. The system operates entirely in Go with ONNX-based model inference, WebAssembly (WASM) execution for portable deployment, and Longbow's Apache Arrow Flight vector engine for high-performance activation storage and processing.
+
+```mermaid
+graph TB
+    subgraph CLI["CLI Tool (burnnotice)"]
+        DL["HuggingFace Downloader"]
+        CONV["ONNX Converter"]
+        PROF["Model Profiler"]
+    end
+
+    subgraph Engine["Go Engine"]
+        ONNX["ONNX Inference Engine"]
+        WASM["WASM Inference Backend"]
+        MON["Activation Monitor"]
+        SCORE["Scoring Engine"]
+        STEER["Steering Engine"]
+        POLICY["Policy Engine"]
+    end
+
+    subgraph Longbow["Longbow Vector Engine"]
+        ARROW["Apache Arrow Flight"]
+        SLAB["SlabArena Off-Heap"]
+        HNSW["HNSW Index"]
+        SIMD["SIMD Distance Kernels"]
+        COW["COW Publication"]
+    end
+
+    subgraph Dashboard["Web Dashboard"]
+        HTTP["net/http Server"]
+        TEMPL["Templ Templates"]
+        HTMX["HTMX UI"]
+        SSE["SSE Hub"]
+    end
+
+    subgraph Storage["Storage"]
+        PROFILES["Model Profiles"]
+        CHECKPOINTS["Job Checkpoints"]
+        LEDGER["Activity Ledger"]
+    end
+
+    DL --> CONV
+    CONV --> ONNX
+    CONV --> WASM
+    PROF --> ONNX
+    PROF --> SCORE
+
+    ONNX --> MON
+    WASM --> MON
+    MON --> ARROW
+    ARROW --> SLAB
+    SLAB --> HNSW
+    HNSW --> SIMD
+    SIMD --> SCORE
+    COW --> SCORE
+    SCORE --> STEER
+    SCORE --> POLICY
+    POLICY --> STEER
+
+    MON --> SSE
+    SCORE --> SSE
+    SSE --> HTMX
+    TEMPL --> HTTP
+    HTMX --> HTTP
+
+    PROFILES --> SCORE
+    CHECKPOINTS --> PROF
+    LEDGER --> POLICY
+```
+
+---
+
+## Longbow Vector Engine Integration
+
+BurnNotice leverages Longbow (github.com/23skdu/longbow) as its activation storage and processing backbone. Longbow provides:
+
+### Zero-Copy Activation Transport
+
+Activations flow from ONNX inference directly into Longbow's Apache Arrow Flight store without serialization overhead. Arrow RecordBatches enable batch processing of thousands of activation vectors simultaneously.
+
+```mermaid
+graph LR
+    ONNX["ONNX Output"] --> BATCH["Arrow RecordBatch"]
+    BATCH --> FLIGHT["Arrow Flight DoPut"]
+    FLIGHT --> STORE["Longbow Vector Store"]
+    STORE --> SCORER["Scoring Engine"]
+```
+
+### Off-Heap Memory Management
+
+Longbow's SlabArena allocates activation matrices in 1MB contiguous slabs outside Go's heap, bypassing GC pressure from billion-scale float32 allocations. The SlabPool reclaims memory via `Munmap` to prevent virtual memory fragmentation.
+
+```mermaid
+graph TB
+    subgraph SlabArena["SlabArena Memory"]
+        ALLOC["1MB Slab Allocation"]
+        NUMA["NUMA-Aware Placement"]
+        RECLAIM["Munmap Reclamation"]
+    end
+
+    subgraph GoHeap["Go Heap"]
+        GC["Garbage Collector"]
+    end
+
+    ALLOC -.->|Bypasses| GC
+    NUMA --> ALLOC
+    RECLAIM --> ALLOC
+```
+
+### SIMD-Optimized Distance Calculations
+
+All activation scoring (cosine similarity, euclidean distance, dot product) uses Longbow's hand-optimized SIMD kernels instead of gonum:
+
+| Architecture | Optimization | Throughput Gain |
+|-------------|-------------|----------------|
+| AVX2 (x86) | 256-bit vectorized dot product | 3-4x |
+| AVX-512 (x86) | 512-bit vectorized + softmax kernels | 5-8x |
+| NEON (ARM64) | 128-bit vectorized for Apple Silicon/Graviton | 3-4x |
+| TurboQuant | FWHT-optimized bit-packing | 8x |
+
+### HNSW Index for Centroid Lookup
+
+The HNSW index enables fast nearest-neighbor lookups on activation centroids, used for:
+- Conflict subspace detection (find nearest conflict centroid)
+- Policy violation detection (find nearest policy-violating cluster)
+- Truth direction validation (verify activation proximity to truth subspace)
+
+### COW Publication for Lock-Free Scoring
+
+Longbow's Copy-On-Write publication model enables lock-free concurrent scoring. When new activations are ingested, a new version of the graph data is created and published via atomic pointer swap. Scoring goroutines read the stable version without acquiring locks.
+
+```mermaid
+graph TB
+    subgraph Ingest["Ingest Worker"]
+        CLONE["Clone Current Version"]
+        APPEND["Append Activations"]
+        CAS["Atomic Pointer Swap"]
+    end
+
+    subgraph Scoring["Scoring Goroutines"]
+        R1["Reader 1 → Stable V1"]
+        R2["Reader 2 → Stable V1"]
+        R3["Reader 3 → New V2"]
+    end
+
+    CLONE --> APPEND
+    APPEND --> CAS
+    CAS -.->|Swaps| R3
+```
+
+### Distributed Activation Sharing
+
+For multi-node deployments, Longbow's gossip-based mesh enables activation sharing across cluster nodes. Consistent hashing partitions activation data, and load-aware routing steers scoring requests to the least-loaded node.
+
+---
+
+## Component Architecture
+
+### ONNX Inference Engine
+
+Loads and executes models in ONNX format. Forward hooks capture intermediate activations at specified layers for monitoring and profiling.
+
+```mermaid
+graph LR
+    subgraph ONNX["ONNX Inference Engine"]
+        LOAD["Model Loader"]
+        HOOKS["Forward Hooks"]
+        FWD["Forward Pass"]
+        ACTS["Activation Capture"]
+    end
+
+    LOAD --> HOOKS
+    HOOKS --> FWD
+    FWD --> ACTS
+    ACTS --> MON["Activation Monitor"]
+```
+
+### WASM Execution Backend
+
+For environments without GPU access or where ONNX Runtime is unavailable, BurnNotice supports WASM-based inference using `wazero`. ONNX models are compiled to WASM via `webnn` or `onnx2wasm`, enabling pure Go execution.
+
+```mermaid
+graph LR
+    MODEL["ONNX Model"] --> COMPILER["onnx2wasm Compiler"]
+    COMPILER --> WASM_FILE["WASM Binary"]
+    WASM_FILE --> RUNTIME["wazero Runtime"]
+    RUNTIME --> EXEC["Forward Execution"]
+    EXEC --> OUTPUT["Activation Output"]
+```
+
+### Activation Scoring Pipeline
+
+Receives activation streams from the inference engine, computes scoring metrics against registered direction profiles, and triggers steering interventions when thresholds are exceeded.
+
+```mermaid
+graph TB
+    subgraph Scoring["Scoring Pipeline"]
+        INPUT["Activation Vector"]
+        NORM["Normalize"]
+        PROJ["Project onto Directions"]
+        AGG["Aggregate Scores"]
+        THRESH["Threshold Check"]
+    end
+
+    INPUT --> NORM
+    NORM --> PROJ
+    PROJ --> AGG
+    AGG --> THRESH
+
+    THRESH -->|Below threshold| PASS["Pass Through"]
+    THRESH -->|Above threshold| ALERT["Alert + Steer"]
+    THRESH -->|Critical| KILL["Kill Switch"]
+```
+
+### Steering Intervention Flow
+
+When a score exceeds its configured threshold, one of four steering interventions is applied:
+
+```mermaid
+graph TB
+    subgraph Steering["Steering Methods"]
+        ACTADD["Activation Addition<br/>h' = h + α·v"]
+        ANGULAR["Angular Steering<br/>Norm-preserving rotation"]
+        SELECTIVE["Selective Steering<br/>Discriminative layers only"]
+        ABLATION["Ablation<br/>h' = h - (h·v̂)v̂"]
+    end
+
+    TRIGGER["Score Threshold Exceeded"] --> DECIDE{Method?}
+    DECIDE -->|Default| ACTADD
+    DECIDE -->|Large model| ANGULAR
+    DECIDE -->|Production| SELECTIVE
+    DECIDE -->|Last resort| ABLATION
+
+    ACTADD --> APPLY["Apply to Activation"]
+    ANGULAR --> APPLY
+    SELECTIVE --> APPLY
+    ABLATION --> APPLY
+```
+
+### Web Dashboard Architecture
+
+The monitoring dashboard uses Go's `net/http` server, Templ for type-safe HTML templates, and HTMX for dynamic updates without a JavaScript framework. Real-time data flows via Server-Sent Events (SSE).
+
+```mermaid
+graph TB
+    subgraph Browser["Browser"]
+        HTMX_VIEW["HTMX View"]
+        CHARTS["Charts (uPlot)"]
+    end
+
+    subgraph Server["Go Server"]
+        HTTP["net/http"]
+        ROUTER["Mux Router"]
+        HANDLERS["HTTP Handlers"]
+        TEMPL["Templ Renderer"]
+        SSE_HUB["SSE Hub"]
+    end
+
+    subgraph Data["Data Sources"]
+        SCORES["Live Scores"]
+        EVENTS["Steering Events"]
+        JOBS["Profiler Jobs"]
+    end
+
+    Browser -->|HTTP Request| HTTP
+    HTTP --> ROUTER
+    ROUTER --> HANDLERS
+    HANDLERS --> TEMPL
+    TEMPL -->|HTML Response| Browser
+
+    SCORES --> SSE_HUB
+    EVENTS --> SSE_HUB
+    JOBS --> SSE_HUB
+    SSE_HUB -->|SSE Stream| HTMX_VIEW
+    HTMX_VIEW -->|Partial Swap| CHARTS
+```
+
+### Model Profiling Pipeline
+
+Each model requires a profile that identifies its unique activation-space geometry. The profiling pipeline extracts behavioral directions, subspaces, and truth neurons.
+
+```mermaid
+graph TB
+    subgraph Profiling["Model Profiling Pipeline"]
+        LOAD["Load ONNX Model"]
+        HOOK["Install Forward Hooks"]
+        BATCH["Run Contrastive Batches"]
+        COLLECT["Collect Activations"]
+        EXTRACT["Extract Directions<br/>(DIM, PCA, SVD, INLP)"]
+        VALIDATE["Validate Directions"]
+        PERSIST["Persist Profile"]
+    end
+
+    LOAD --> HOOK
+    HOOK --> BATCH
+    BATCH --> COLLECT
+    COLLECT --> EXTRACT
+    EXTRACT --> VALIDATE
+    VALIDATE --> PERSIST
+
+    PERSIST --> PROFILE["Model Profile<br/>(Protobuf/gob)"]
+```
+
+### Long-Running Architecture
+
+BurnNotice is designed for continuous operation profiling and monitoring LLM deployments with memory pooling, layer subsampling, and checkpointing.
+
+```mermaid
+graph TB
+    subgraph LongRunning["Long-Running Architecture"]
+        subgraph Memory["Memory Management"]
+            POOL["sync.Pool<br/>Activation Buffers"]
+            STREAM["Disk Streaming<br/>Large Activations"]
+        end
+
+        subgraph Scheduling["Job Scheduling"]
+            QUEUE["Job Queue"]
+            GPU["GPU Memory-Aware<br/>Scheduler"]
+            PROGRESSIVE["Progressive<br/>Layer Profiling"]
+        end
+
+        subgraph Resilience["Resilience"]
+            CHECKPOINT["Checkpoint Manager"]
+            VERSION["Profile Versioning"]
+            RECOVERY["Job Recovery"]
+        end
+    end
+
+    QUEUE --> GPU
+    GPU --> PROGRESSIVE
+    PROGRESSIVE --> POOL
+    POOL --> STREAM
+    STREAM --> CHECKPOINT
+    CHECKPOINT --> VERSION
+    VERSION --> RECOVERY
+```
+
+---
+
+## Data Flow
+
+### Inference-Time Monitoring
+
+```mermaid
+sequenceDiagram
+    participant Agent as LLM Agent
+    participant Engine as ONNX/WASM Engine
+    participant Monitor as Activation Monitor
+    participant Scorer as Scoring Engine
+    participant Policy as Policy Engine
+    participant Steer as Steering Engine
+    participant Dashboard as Web Dashboard
+
+    Agent->>Engine: Generate response
+    Engine->>Monitor: Stream activations (per token, per layer)
+    Monitor->>Scorer: Score against direction profiles
+    Scorer->>Policy: Evaluate thresholds
+    alt Score exceeds threshold
+        Policy->>Steer: Trigger intervention
+        Steer->>Engine: Apply steering vector
+        Engine->>Agent: Steered activation
+    end
+    Scorer->>Dashboard: SSE score update
+    Policy->>Dashboard: SSE alert event
+```
+
+### Model Profiling
+
+```mermaid
+sequenceDiagram
+    participant CLI as CLI Tool
+    participant Downloader as HF Downloader
+    participant Converter as ONNX Converter
+    participant Engine as ONNX Engine
+    participant Extractor as Direction Extractor
+    participant Profile as Profile Store
+
+    CLI->>Downloader: Download model from HuggingFace
+    Downloader-->>CLI: Model files
+    CLI->>Converter: Convert to ONNX format
+    Converter-->>CLI: ONNX model
+    CLI->>Engine: Load ONNX model + install hooks
+    Engine->>Engine: Run contrastive prompt batches
+    Engine-->>Extractor: Stream collected activations
+    Extractor->>Extractor: Extract directions (DIM, PCA, SVD)
+    Extractor->>Extractor: Validate on held-out data
+    Extractor-->>Profile: Persist model profile
+    Profile-->>CLI: Profile saved
+```
+
+---
+
+## Technology Stack
+
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| **Primary Language** | Go | Concurrency, memory efficiency, single binary |
+| **Model Inference** | ONNX Runtime | Portable model execution across CPU/GPU |
+| **Fallback Inference** | WASM (wazero) | Pure Go execution, no native dependencies |
+| **Vector Engine** | Longbow (Apache Arrow Flight) | Zero-copy activation storage, SIMD distance, HNSW |
+| **Off-Heap Memory** | Longbow SlabArena | 1MB slab allocation, NUMA-aware, bypasses Go GC |
+| **Distance Kernels** | Longbow SIMD (AVX2/AVX-512/NEON) | 3-8x faster cosine, euclidean, dot product |
+| **Linear Algebra** | gonum.org/v1/gonum | Direction extraction (DIM, PCA, SVD, whitening) |
+| **CLI Framework** | cobra | HuggingFace download, ONNX conversion, profiling |
+| **Web Server** | net/http | Built-in HTTP server |
+| **Templates** | Templ | Type-safe HTML generation |
+| **Dynamic UI** | HTMX | Partial page updates, SSE integration |
+| **Real-time** | Server-Sent Events | Live score streaming to dashboard |
+| **Serialization** | Protocol Buffers / gob | Profile storage, checkpointing |
+| **Charting** | uPlot | Lightweight activation visualizations |
+
+---
+
+## Deployment Topology
+
+```mermaid
+graph TB
+    subgraph Dev["Development"]
+        DEV_CLI["burnnotice CLI"]
+        DEV_DASH["Local Dashboard :8080"]
+        DEV_LONGBOW["Longbow Single Node"]
+    end
+
+    subgraph Prod["Production"]
+        subgraph GPU_Cluster["GPU Cluster"]
+            PROFILER["Long-Running Profiler"]
+            ONNX_GPU["ONNX Runtime (GPU)"]
+        end
+
+        subgraph CPU_Cluster["CPU Cluster"]
+            MONITOR["Activation Monitor"]
+            WASM_CPU["WASM Inference"]
+            DASHBOARD["Web Dashboard"]
+        end
+
+        subgraph Longbow_Cluster["Longbow Distributed Mesh"]
+            NODE1["Longbow Node 1"]
+            NODE2["Longbow Node 2"]
+            NODE3["Longbow Node N"]
+            GOSSIP["Gossip Protocol (SWIM)"]
+            HASH_RING["Consistent Hash Ring"]
+        end
+
+        subgraph Storage["Shared Storage"]
+            PROFILE_REG["Profile Registry"]
+            LEDGER["Activity Ledger"]
+            PARQUET["Parquet Snapshots"]
+        end
+    end
+
+    DEV_CLI --> ONNX_GPU
+    DEV_CLI --> DEV_LONGBOW
+    PROFILER --> ONNX_GPU
+    ONNX_GPU --> MONITOR
+    WASM_CPU --> MONITOR
+    MONITOR --> NODE1
+    NODE1 <--> GOSSIP
+    GOSSIP <--> NODE2
+    GOSSIP <--> NODE3
+    NODE1 <--> HASH_RING
+    MONITOR --> DASHBOARD
+    NODE1 --> PROFILE_REG
+    NODE1 --> LEDGER
+    NODE1 --> PARQUET
+```

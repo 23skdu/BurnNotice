@@ -1,0 +1,17 @@
+{{- if .Values.persistence.profiles.enabled -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "burnnotice.fullname" . }}-profiles
+  labels:
+    {{- include "burnnotice.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.persistence.profiles.storageClass }}
+  storageClassName: {{ .Values.persistence.profiles.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.profiles.size }}
+{{- end }}

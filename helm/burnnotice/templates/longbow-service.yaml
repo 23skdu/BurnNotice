@@ -1,0 +1,27 @@
+{{- if .Values.longbow.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "burnnotice.fullname" . }}-longbow
+  labels:
+    {{- include "burnnotice.labels" . | nindent 4 }}
+    app.kubernetes.io/component: longbow
+spec:
+  type: {{ .Values.longbow.service.type }}
+  ports:
+    - port: {{ .Values.longbow.service.dataPort }}
+      targetPort: data
+      protocol: TCP
+      name: data
+    - port: {{ .Values.longbow.service.metaPort }}
+      targetPort: meta
+      protocol: TCP
+      name: meta
+    - port: {{ .Values.longbow.service.metricsPort }}
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    {{- include "burnnotice.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: longbow
+{{- end }}

@@ -1,0 +1,68 @@
+version: "3.9"
+
+services:
+  burnnotice:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - LOG_LEVEL=debug
+      - LOG_FORMAT=json
+      - PROFILE_DIR=/data/profiles
+      - MODEL_DIR=/data/models
+      - LONGBOW_ADDR=longbow:3000
+    volumes:
+      - ./profiles:/data/profiles
+      - ./models:/data/models
+    depends_on:
+      - longbow
+    networks:
+      - burnnotice-net
+
+  longbow:
+    image: 23skdu/longbow:latest
+    ports:
+      - "3000:3000"
+      - "3001:3001"
+      - "9090:9090"
+    environment:
+      - STORAGE_USE_IOURING=false
+      - LONGBOW_HNSW_TURBOQUANT_ENABLED=false
+      - LONGBOW_LEARNED_INDEX_ENABLED=false
+    volumes:
+      - longbow-data:/data
+    networks:
+      - burnnotice-net
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./grafana/provisioning/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - burnnotice-net
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    networks:
+      - burnnotice-net
+
+volumes:
+  longbow-data:
+
+networks:
+  burnnotice-net:
+    driver: bridge
