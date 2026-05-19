@@ -162,4 +162,35 @@ var (
 		},
 		[]string{"method", "model_id"},
 	)
+
+	PolicyViolationsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "burnnotice_policy_violations_total",
+			Help: "Total number of policy violations detected",
+		},
+		[]string{"policy_name", "metric", "action"},
+	)
+
+	ProfileJobsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "burnnotice_profile_jobs_total",
+			Help: "Total number of profiling jobs by status",
+		},
+		[]string{"status"},
+	)
+
+	ProfileJobsActive = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "burnnotice_profile_jobs_active",
+			Help: "Number of currently running profiling jobs",
+		},
+	)
+
+	SteeringDispatchTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "burnnotice_steering_dispatch_total",
+			Help: "Total number of steering commands dispatched by method",
+		},
+		[]string{"method"},
+	)
 )
