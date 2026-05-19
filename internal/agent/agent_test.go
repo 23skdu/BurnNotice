@@ -194,3 +194,67 @@ func TestGetAgentInfo(t *testing.T) {
 		t.Fatal("should not find nonexistent agent")
 	}
 }
+
+func TestNewMiddleware_NoModelID(t *testing.T) {
+	_, err := NewMiddleware(Config{ModelID: ""})
+	if err == nil {
+		t.Error("expected error for empty ModelID")
+	}
+}
+
+func TestMiddleware_ShouldBlockAndGetMonitoringInterval(t *testing.T) {
+	mw, _ := NewMiddleware(Config{ModelID: "test", ScoringThreshold: 0.6, MonitoringInterval: 5 * time.Second})
+	
+	if mw.GetMonitoringInterval() != 5*time.Second {
+		t.Errorf("GetMonitoringInterval = %v, want 5s", mw.GetMonitoringInterval())
+	}
+	
+	if !mw.ShouldBlock(map[string]float64{"deception": 0.8}) {
+		t.Error("expected ShouldBlock to return true for score > threshold")
+	}
+	
+	if mw.ShouldBlock(map[string]float64{"deception": 0.4}) {
+		t.Error("expected ShouldBlock to return false for score < threshold")
+	}
+}
+
+func TestCrewAITaskDecorator_MonitorToolUse(t *testing.T) {
+	mw, _ := NewMiddleware(Config{ModelID: "test", ScoringThreshold: 0.7})
+	decorator := NewCrewAITaskDecorator(mw, "sess-001")
+	
+	err := decorator.MonitorToolUse(context.Background(), "calculator", "2+2", "4")
+	if err != nil {
+		t.Fatalf("MonitorToolUse failed: %v", err)
+	}
+}
+
+func TestLangChainCallback(t *testing.T) {
+	mw, _ := NewMiddleware(Config{ModelID: "test", ScoringThreshold: 0.7})
+	callback := NewLangChainCallback(mw, "sess-001")
+	
+	ctx := context.Background()
+	
+	if err := callback.OnLLMStart(ctx, "hello"); err != nil {
+		t.Errorf("OnLLMStart failed: %v", err)
+	}
+	
+	if err := callback.OnLLMEnd(ctx, "world"); err != nil {
+		t.Errorf("OnLLMEnd failed: %v", err)
+	}
+	
+	if err := callback.OnChainStart(ctx, nil); err != nil {
+		t.Errorf("OnChainStart failed: %v", err)
+	}
+	
+	if err := callback.OnChainEnd(ctx, nil); err != nil {
+		t.Errorf("OnChainEnd failed: %v", err)
+	}
+	
+	if err := callback.OnToolStart(ctx, "", ""); err != nil {
+		t.Errorf("OnToolStart failed: %v", err)
+	}
+	
+	if err := callback.OnToolEnd(ctx, "", ""); err != nil {
+		t.Errorf("OnToolEnd failed: %v", err)
+	}
+}

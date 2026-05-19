@@ -2,6 +2,7 @@ package ledger
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -404,5 +405,83 @@ func TestLongbowBackend_GetAlertStats(t *testing.T) {
 	}
 	if stats["deception_score"] != 2 {
 		t.Errorf("deception_score count = %d, want 2", stats["deception_score"])
+	}
+}
+
+func TestSQLite_Batch(t *testing.T) {
+	tmp := t.TempDir() + "/sqlite_batch_test.db"
+	defer os.Remove(tmp)
+
+	backend, _ := NewBackend("sqlite", tmp)
+	defer backend.Close()
+	backend.Init()
+
+	now := time.Now()
+	batch := []Alert{
+		{Timestamp: now, SessionID: "sess-batch-sqlite", Metric: "deception_score", Score: 0.85, Threshold: 0.7, Action: "steer"},
+		{Timestamp: now, SessionID: "sess-batch-sqlite", Metric: "conflict_score", Score: 0.65, Threshold: 0.8, Action: "log"},
+	}
+
+	if err := backend.IngestBatch(batch); err != nil {
+		t.Fatalf("SQLite IngestBatch failed: %v", err)
+	}
+
+	retrieved, err := backend.RetrieveBatch("sess-batch-sqlite")
+	if err != nil {
+		t.Fatalf("SQLite RetrieveBatch failed: %v", err)
+	}
+	if len(retrieved) != 2 {
+		t.Errorf("retrieved len = %d, want 2", len(retrieved))
+	}
+}
+
+func TestLongbow_InterventionsAndCSV(t *testing.T) {
+	backend, err := NewBackend("longbow", "localhost:9090")
+	if err != nil {
+		t.Fatalf("failed to create longbow backend: %v", err)
+	}
+	defer backend.Close()
+	backend.Init()
+
+	now := time.Now()
+	intervention := Intervention{
+		Timestamp: now,
+		SessionID: "sess-longbow-interventions",
+		Method:    "ActAdd",
+		Layer:     12,
+		Result:    "success",
+	}
+
+	if err := backend.RecordIntervention(intervention); err != nil {
+		t.Fatalf("Longbow RecordIntervention failed: %v", err)
+	}
+
+	retrieved, err := backend.QueryInterventions("sess-longbow-interventions")
+	if err != nil {
+		t.Fatalf("Longbow QueryInterventions failed: %v", err)
+	}
+	if len(retrieved) != 1 {
+		t.Fatalf("retrieved interventions len = %d, want 1", len(retrieved))
+	}
+	if retrieved[0].Layer != 12 || retrieved[0].Method != "ActAdd" {
+		t.Errorf("unexpected intervention retrieved: %+v", retrieved[0])
+	}
+
+	// Test ExportAlertsCSV on Longbow backend
+	backend.RecordAlert(Alert{
+		Timestamp: now,
+		SessionID: "sess-longbow-interventions",
+		Metric:    "deception_score",
+		Score:     0.95,
+		Threshold: 0.7,
+		Action:    "terminate",
+	})
+
+	csv, err := backend.ExportAlertsCSV(AlertFilter{SessionID: "sess-longbow-interventions"})
+	if err != nil {
+		t.Fatalf("ExportAlertsCSV failed: %v", err)
+	}
+	if !strings.Contains(csv, "deception_score") || !strings.Contains(csv, "terminate") {
+		t.Errorf("expected CSV to contain deception_score and terminate, got: %s", csv)
 	}
 }

@@ -270,3 +270,65 @@ func TestDefaultTimeout(t *testing.T) {
 		t.Errorf("defaultTimeout = %v, want 5m", aw.defaultTimeout)
 	}
 }
+
+func TestExportPDF(t *testing.T) {
+	tmp := t.TempDir() + "/pdf_test.db"
+	defer os.Remove(tmp)
+
+	backend, _ := ledger.NewBackend("sqlite", tmp)
+	defer backend.Close()
+	backend.Init()
+
+	reporter := NewReporter(backend)
+	report := &Report{
+		GeneratedAt:     time.Now(),
+		StartTime:       time.Now().Add(-24 * time.Hour),
+		EndTime:         time.Now(),
+		TotalAlerts:     3,
+		ComplianceScore: 0.66,
+		AlertsByMetric:  map[string]int{"deception_score": 3},
+		EUAIAct: EUAIActReport{
+			HighRiskAlerts: 1,
+		},
+		NISTAIRMF: NISTAIRMFReport{
+			Govern: 1,
+		},
+	}
+
+	pdfBytes, err := reporter.ExportPDF(report)
+	if err != nil {
+		t.Fatalf("ExportPDF failed: %v", err)
+	}
+	if len(pdfBytes) == 0 {
+		t.Fatal("pdfBytes is empty")
+	}
+
+	// Verify it contains PDF magic header
+	pdfStr := string(pdfBytes)
+	if len(pdfStr) < 8 || pdfStr[:8] != "%PDF-1.4" {
+		t.Errorf("Expected PDF header, got: %q", pdfStr[:8])
+	}
+}
+
+func TestRejectNotFound(t *testing.T) {
+	aw := NewApprovalWorkflow(1 * time.Minute)
+	defer aw.Stop()
+
+	err := aw.Reject("nonexistent", "reviewer", "Reason")
+	if err == nil {
+		t.Error("expected error for rejecting nonexistent request")
+	}
+}
+
+func TestRejectNotPending(t *testing.T) {
+	aw := NewApprovalWorkflow(1 * time.Minute)
+	defer aw.Stop()
+
+	id := aw.RequestApproval("sess-001", "Test reason")
+	_ = aw.Reject(id, "reviewer", "Reason")
+
+	err := aw.Reject(id, "reviewer-2", "Reason-2")
+	if err == nil {
+		t.Error("expected error for rejecting non-pending request")
+	}
+}
