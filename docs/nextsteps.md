@@ -83,13 +83,13 @@ This section details the concrete, actionable roadmap to address the systemic fl
 
 - **Problem**: Extracting intermediate activations from GPU memory to CPU Host memory at every token/layer introduces unacceptable latency and breaks continuous batching optimizations. ONNX Runtime lacks the memory scheduling capabilities (like PagedAttention) of modern production serving stacks.
 
-- [ ] **M1.1** Implement direct integration plugins for high-performance serving backends like **vLLM** and **TensorRT-LLM**.
-- [ ] **M1.2** Move intermediate activation vector operations (e.g., cosine similarity and orthogonal projections) directly into custom GPU/CUDA tensor kernels.
-- [ ] **M1.3** Retain all per-token critical calculations inside GPU VRAM, reserving the CPU Go/Longbow layer exclusively for asynchronous reporting, policy updates, and ledger tracking.
-- [ ] **M1.4** Support advanced key-value (KV) cache hook storage to capture multi-turn contextual activation trajectories efficiently without redundant computations.
-- [ ] **M1.5** Write custom **Metal Shading Language (MSL)** kernels and Objective-C dispatch bindings to accelerate activation metric scoring directly on Apple Silicon GPUs (darwin/arm64).
-- [ ] **M1.6** Develop high-performance **C++/CUDA** kernels executing parallel activation projections and dynamic rotations directly on NVIDIA V100/A100/H100 Tensor Cores (linux/amd64).
-- [ ] **M1.7** Construct PyTorch/C++ custom extension wrappers linking the native Metal and CUDA kernels to enable inline, zero-latency activation steering inside the **vLLM** execution graph.
+- [x] **M1.1** Implement direct integration plugins for high-performance serving backends like **vLLM** and **TensorRT-LLM**.
+- [x] **M1.2** Move intermediate activation vector operations (e.g., cosine similarity and orthogonal projections) directly into custom GPU/CUDA tensor kernels.
+- [x] **M1.3** Retain all per-token critical calculations inside GPU VRAM, reserving the CPU Go/Longbow layer exclusively for asynchronous reporting, policy updates, and ledger tracking.
+- [x] **M1.4** Support advanced key-value (KV) cache hook storage to capture multi-turn contextual activation trajectories efficiently without redundant computations.
+- [x] **M1.5** Write custom **Metal Shading Language (MSL)** kernels and Objective-C dispatch bindings to accelerate activation metric scoring directly on Apple Silicon GPUs (darwin/arm64).
+- [x] **M1.6** Develop high-performance **C++/CUDA** kernels executing parallel activation projections and dynamic rotations directly on NVIDIA V100/A100/H100 Tensor Cores (linux/amd64).
+- [x] **M1.7** Construct PyTorch/C++ custom extension wrappers linking the native Metal and CUDA kernels to enable inline, zero-latency activation steering inside the **vLLM** execution graph.
 
 ### Milestone 2: Context-Aware Semantic Intent Gating (Resolves Semantic Ambiguity & False Positives)
 
