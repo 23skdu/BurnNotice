@@ -103,9 +103,9 @@ This section details the concrete, actionable roadmap to address the systemic fl
 
 - **Problem**: Advanced models or malicious prompt crafters can generate activation-space obfuscation perturbations (e.g., Bailey et al. ICLR 2026) that bypass static linear probes entirely while maintaining harmful outputs.
 
-- [ ] **M3.1** Upgrade direction extraction from static 1D linear probes to non-linear Multi-Layer Perceptrons (MLPs) and multi-directional ensemble networks that capture complex conceptual manifolds.
-- [ ] **M3.2** Introduce adversarial training during the profiling phase: perturb activation states using gradient-based noise optimization to train the detection probes to be robust against activation-space evasion vectors.
-- [ ] **M3.3** Implement real-time anomaly detection inside the residual stream to flag suspicious, out-of-distribution (OOD) activation structures that suggest intentional safety obfuscation.
+- [x] **M3.1** Upgrade direction extraction from static 1D linear probes to non-linear Multi-Layer Perceptrons (MLPs) and multi-directional ensemble networks that capture complex conceptual manifolds.
+- [x] **M3.2** Introduce adversarial training during the profiling phase: perturb activation states using gradient-based noise optimization to train the detection probes to be robust against activation-space evasion vectors.
+- [x] **M3.3** Implement real-time anomaly detection inside the residual stream to flag suspicious, out-of-distribution (OOD) activation structures that suggest intentional safety obfuscation.
 
 ### Milestone 4: Decentralized Standalone Fallback Engine (Resolves Longbow Pre-1.0 Dependency Risk)
 
