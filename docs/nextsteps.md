@@ -95,9 +95,9 @@ This section details the concrete, actionable roadmap to address the systemic fl
 
 - **Problem**: Deception is highly contextual; static linear directions will trigger false positives when the agent simulates fictional characters, discusses deception academically, or performs roleplay, leading to unwarranted capability degradation.
 
-- [ ] **M2.1** Integrate a lightweight, fast text-based semantic pre-classifier (e.g., Llama Guard or specialized distillation models) running in parallel with prompt tokenization.
-- [ ] **M2.2** Implement dynamic gating logic: disable specific steering vectors (such as `deception_direction`) if the user prompt is classified under creative writing, academic analysis, or safe fictional roleplay.
-- [ ] **M2.3** Formulate class-specific confidence weights that scale the active intervention metrics dynamically based on conversational context.
+- [x] **M2.1** Integrate a lightweight, fast text-based semantic pre-classifier (e.g., Llama Guard or specialized distillation models) running in parallel with prompt tokenization.
+- [x] **M2.2** Implement dynamic gating logic: disable specific steering vectors (such as `deception_direction`) if the user prompt is classified under creative writing, academic analysis, or safe fictional roleplay.
+- [x] **M2.3** Formulate class-specific confidence weights that scale the active intervention metrics dynamically based on conversational context.
 
 ### Milestone 3: Obfuscation-Resilient Probe Training (Resolves Bailey et al. Evasion Vulnerability)
 
