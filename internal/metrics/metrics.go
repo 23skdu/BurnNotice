@@ -224,4 +224,95 @@ var (
 		},
 		[]string{"page"},
 	)
+
+	SAEFeatureExtractionDuration = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "burnnotice_sae_feature_extraction_duration_seconds",
+			Help:    "Duration of SAE feature extraction operations",
+			Buckets: prometheus.ExponentialBuckets(0.0001, 2, 12),
+		},
+		[]string{"model_id", "layer"},
+	)
+
+	SAEReconstructionError = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "burnnotice_sae_reconstruction_error",
+			Help:    "SAE reconstruction L2 error",
+			Buckets: prometheus.ExponentialBuckets(0.001, 2, 15),
+		},
+		[]string{"model_id"},
+	)
+
+	HallucinationEnergyCurrent = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "burnnotice_hallucination_energy_current",
+			Help: "Current hallucination energy score",
+		},
+		[]string{"model_id", "layer"},
+	)
+
+	HallucinationAlertsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "burnnotice_hallucination_alerts_total",
+			Help: "Total number of hallucination alerts triggered",
+		},
+		[]string{"model_id", "layer"},
+	)
+
+	WhiteningDetectionDuration = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "burnnotice_whitening_detection_duration_seconds",
+			Help:    "Duration of whitening-based policy violation detection",
+			Buckets: prometheus.ExponentialBuckets(0.0001, 2, 12),
+		},
+		[]string{"model_id"},
+	)
+
+	CrossModelTransferTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "burnnotice_cross_model_transfer_total",
+			Help: "Total number of cross-model direction transfers",
+		},
+		[]string{"source_model", "target_model", "direction"},
+	)
+
+	MoEExpertActivationTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "burnnotice_moe_expert_activation_total",
+			Help: "Total number of MoE expert activations",
+		},
+		[]string{"model_id", "expert_id", "layer"},
+	)
+
+	LoRAApplicationTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "burnnotice_lora_application_total",
+			Help: "Total number of LoRA steering applications",
+		},
+		[]string{"model_id", "rank"},
+	)
+
+	ProfileExportTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "burnnotice_profile_export_total",
+			Help: "Total number of profile exports by format",
+		},
+		[]string{"format"},
+	)
+
+	ProfileImportTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "burnnotice_profile_import_total",
+			Help: "Total number of profile imports by format",
+		},
+		[]string{"format"},
+	)
+
+	AlignmentDriftAlertsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "burnnotice_alignment_drift_alerts_total",
+			Help: "Total number of alignment drift alerts",
+		},
+		[]string{"direction", "layer"},
+	)
 )
