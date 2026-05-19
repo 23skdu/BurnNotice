@@ -654,3 +654,39 @@ The following features represent high-priority (P0) engineering requirements for
 - [x] **7.6.4** Verify fuzz stability (888K+ execs/sec, no crashes)
 - [x] **7.6.5** Verify round-trip correctness (Marshal → Unmarshal → compare)
 - [x] **7.6.6** Verify stdlib compatibility (compare results with `encoding/json`)
+
+## Improvement Plan: Addressing Architectural, Performance, and Adversarial Flaws
+
+This section details the concrete, actionable roadmap to address the systemic flaws identified in `docs/analysis.md`, `docs/analysis2.md`, `docs/analysis3.md`, and `docs/comparison.md`.
+
+### Milestone 1: GPU-Native Inference & Enterprise Engine Pivot (Resolves Latency Bottleneck & ONNX Limitations)
+* **Problem**: Extracting intermediate activations from GPU memory to CPU Host memory at every token/layer introduces unacceptable latency and breaks continuous batching optimizations. ONNX Runtime lacks the memory scheduling capabilities (like PagedAttention) of modern production serving stacks.
+- [ ] **M1.1** Implement direct integration plugins for high-performance serving backends like **vLLM** and **TensorRT-LLM**.
+- [ ] **M1.2** Move intermediate activation vector operations (e.g., cosine similarity and orthogonal projections) directly into custom GPU/CUDA tensor kernels.
+- [ ] **M1.3** Retain all per-token critical calculations inside GPU VRAM, reserving the CPU Go/Longbow layer exclusively for asynchronous reporting, policy updates, and ledger tracking.
+- [ ] **M1.4** Support advanced key-value (KV) cache hook storage to capture multi-turn contextual activation trajectories efficiently without redundant computations.
+
+### Milestone 2: Context-Aware Semantic Intent Gating (Resolves Semantic Ambiguity & False Positives)
+* **Problem**: Deception is highly contextual; static linear directions will trigger false positives when the agent simulates fictional characters, discusses deception academically, or performs roleplay, leading to unwarranted capability degradation.
+- [ ] **M2.1** Integrate a lightweight, fast text-based semantic pre-classifier (e.g., Llama Guard or specialized distillation models) running in parallel with prompt tokenization.
+- [ ] **M2.2** Implement dynamic gating logic: disable specific steering vectors (such as `deception_direction`) if the user prompt is classified under creative writing, academic analysis, or safe fictional roleplay.
+- [ ] **M2.3** Formulate class-specific confidence weights that scale the active intervention metrics dynamically based on conversational context.
+
+### Milestone 3: Obfuscation-Resilient Probe Training (Resolves Bailey et al. Evasion Vulnerability)
+* **Problem**: Advanced models or malicious prompt crafters can generate activation-space obfuscation perturbations (e.g., Bailey et al. ICLR 2026) that bypass static linear probes entirely while maintaining harmful outputs.
+- [ ] **M3.1** Upgrade direction extraction from static 1D linear probes to non-linear Multi-Layer Perceptrons (MLPs) and multi-directional ensemble networks that capture complex conceptual manifolds.
+- [ ] **M3.2** Introduce adversarial training during the profiling phase: perturb activation states using gradient-based noise optimization to train the detection probes to be robust against activation-space evasion vectors.
+- [ ] **M3.3** Implement real-time anomaly detection inside the residual stream to flag suspicious, out-of-distribution (OOD) activation structures that suggest intentional safety obfuscation.
+
+### Milestone 4: Decentralized Standalone Fallback Engine (Resolves Longbow Pre-1.0 Dependency Risk)
+* **Problem**: Longbow is a pre-1.0 rolling release, posing a significant dependency risk. If a Longbow node or distributed mesh goes offline, the scoring engine collapses.
+- [ ] **M4.1** Implement a robust local-storage backup pipeline using the existing standalone SQLite ledger for profile metadata and calibration thresholds.
+- **M4.2** Integrate an optimized Gonum-based local math backend for cosine and dot-product calculations that serves as a seamless fallback if the Longbow service is unreachable.
+- [ ] **M4.3** Establish automatic, zero-downtime hot-swapping between Longbow Flight connections and local math fallbacks.
+
+### Milestone 5: Closed-Loop Coherence & Dynamic Steering Scale (Resolves Capability Loss & Lobotomy Effect)
+* **Problem**: Actively injecting or rotating high-dimensional vectors (ActAdd/Angular Steering) shifts intermediate states out of training distribution, causing grammatical collapse, loss of logical coherence, and severe capability loss.
+- [ ] **M5.1** Implement real-time, token-level perplexity tracking and output coherence checkers directly inside the model generation loop to monitor early signs of activation collapse.
+- [ ] **M5.2** Develop an adaptive feedback loop that automatically scales down steering strength ($\alpha$) or dynamically shifts selected layers if logical degradation is detected in consecutive output tokens.
+- [ ] **M5.3** Conduct automated regression tests against standardized capability suites (GSM8k, MMLU) during live steering interventions to optimize individual layer steering bounds.
+
