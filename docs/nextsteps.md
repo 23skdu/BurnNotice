@@ -122,4 +122,3 @@ This section details the concrete, actionable roadmap to address the systemic fl
 - [x] **M5.1** Implement real-time, token-level perplexity tracking and output coherence checkers directly inside the model generation loop to monitor early signs of activation collapse.
 - [x] **M5.2** Develop an adaptive feedback loop that automatically scales down steering strength ($\alpha$) or dynamically shifts selected layers if logical degradation is detected in consecutive output tokens.
 - [x] **M5.3** Conduct automated regression tests against standardized capability suites (GSM8k, MMLU) during live steering interventions to optimize individual layer steering bounds.
-
