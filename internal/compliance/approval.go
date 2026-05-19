@@ -3,6 +3,7 @@ package compliance
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -82,12 +83,15 @@ func (aw *ApprovalWorkflow) checkTimeouts() {
 	}
 }
 
+var reqCounter uint64
+
 // RequestApproval creates a new approval request.
 func (aw *ApprovalWorkflow) RequestApproval(sessionID, reason string) string {
 	aw.mu.Lock()
 	defer aw.mu.Unlock()
 
-	id := fmt.Sprintf("approval-%d", time.Now().UnixNano())
+	count := atomic.AddUint64(&reqCounter, 1)
+	id := fmt.Sprintf("approval-%d-%d", time.Now().UnixNano(), count)
 	aw.requests[id] = &ApprovalRequest{
 		ID:        id,
 		SessionID: sessionID,
