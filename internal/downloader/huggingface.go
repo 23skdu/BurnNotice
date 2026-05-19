@@ -101,12 +101,26 @@ func (d *HuggingFaceDownloader) listModelFiles(modelID string) ([]hfFile, error)
 
 func (d *HuggingFaceDownloader) downloadFile(modelID, filePath, outputDir string) error {
 	url := d.baseURL + "/" + modelID + "/resolve/main/" + filePath
+	dest := filepath.Join(outputDir, filePath)
+
+	if err := os.MkdirAll(filepath.Dir(dest), 0750); err != nil {
+		return err
+	}
+
+	var startOffset int64
+	if info, err := os.Stat(dest); err == nil {
+		startOffset = info.Size()
+	}
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return err
 	}
 	if d.token != "" {
 		req.Header.Set("Authorization", "Bearer "+d.token)
+	}
+	if startOffset > 0 {
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", startOffset))
 	}
 
 	resp, err := d.client.Do(req)
@@ -115,17 +129,12 @@ func (d *HuggingFaceDownloader) downloadFile(modelID, filePath, outputDir string
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
 		return fmt.Errorf("download returned %d", resp.StatusCode)
 	}
 
-	dest := filepath.Join(outputDir, filePath)
-	if err := os.MkdirAll(filepath.Dir(dest), 0750); err != nil {
-		return err
-	}
-
 	// #nosec G304 -- output dir is controlled by CLI flag
-	out, err := os.Create(dest)
+	out, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 	if err != nil {
 		return err
 	}

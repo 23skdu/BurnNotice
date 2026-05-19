@@ -246,8 +246,8 @@ func FuzzONNXConverter(f *testing.F) {
 			return
 		}
 
-		if _, err := os.Stat(filepath.Join(output, "model.onnx.meta")); err != nil {
-			t.Error("meta file not created")
+		if _, err := os.Stat(filepath.Join(output, "model.onnx")); err != nil {
+			t.Error("onnx file not created")
 		}
 	})
 }

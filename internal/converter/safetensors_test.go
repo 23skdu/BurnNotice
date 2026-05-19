@@ -269,8 +269,8 @@ func TestONNXConverter_Convert_Success(t *testing.T) {
 		t.Fatalf("Convert error: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(output, "model.onnx.meta")); err != nil {
-		t.Error("meta file not created")
+	if _, err := os.Stat(filepath.Join(output, "model.onnx")); err != nil {
+		t.Error("onnx file not created")
 	}
 }
 
@@ -300,7 +300,12 @@ func TestValidateONNX_FileNotFound(t *testing.T) {
 func TestValidateONNX_Exists(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "model.onnx")
-	os.WriteFile(path, []byte("fake onnx"), 0644)
+	data := []byte("ONNX")
+	data = append(data, 0, 0, 0, 17)
+	data = append(data, 1)
+	data = append(data, 0, 0, 0, 1)
+	data = append(data, []byte("ENDM")...)
+	os.WriteFile(path, data, 0644)
 
 	err := ValidateONNX(path)
 	if err != nil {

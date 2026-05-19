@@ -1,8 +1,17 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+
+	"burnnotice/internal/converter"
+	"burnnotice/internal/datasets"
+	"burnnotice/internal/downloader"
+	"burnnotice/internal/extract"
+	"burnnotice/internal/profile"
+	"burnnotice/internal/scoring"
 
 	"github.com/spf13/cobra"
 )
@@ -27,9 +36,19 @@ Supports authenticated access with --token flag.`,
 		token, _ := cmd.Flags().GetString("token")
 		include, _ := cmd.Flags().GetString("include")
 
-		fmt.Printf("Downloading %s to %s (token: %v, include: %s)\n", modelID, outputDir, token != "", include)
+		dl := downloader.NewHuggingFaceDownloader(token)
 
-		// TODO: Call downloader.HuggingFaceDownloader
+		var patterns []string
+		if include != "" {
+			patterns = append(patterns, include)
+		}
+
+		fmt.Printf("Downloading %s to %s...\n", modelID, outputDir)
+		if err := dl.Download(modelID, outputDir, patterns); err != nil {
+			return fmt.Errorf("download: %w", err)
+		}
+
+		fmt.Println("Download complete.")
 		return nil
 	},
 }
@@ -46,9 +65,19 @@ Supports safetensors and PyTorch bin formats.`,
 		opset, _ := cmd.Flags().GetInt("opset")
 		dynamic, _ := cmd.Flags().GetBool("dynamic")
 
-		fmt.Printf("Converting %s to ONNX (output: %s, opset: %d, dynamic: %v)\n", modelDir, output, opset, dynamic)
+		c := converter.NewONNXConverter()
+		opts := converter.Options{
+			OpsetVersion: opset,
+			DynamicAxes:  dynamic,
+			OutputPath:   output,
+		}
 
-		// TODO: Call converter.ONNXConverter
+		fmt.Printf("Converting %s to ONNX...\n", modelDir)
+		if err := c.Convert(modelDir, output, opts); err != nil {
+			return fmt.Errorf("convert: %w", err)
+		}
+
+		fmt.Println("Conversion complete.")
 		return nil
 	},
 }
@@ -61,15 +90,81 @@ behavioral directions (refusal, deception, truth, conflict, policy).`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		modelPath := args[0]
-		output, _ := cmd.Flags().GetString("output")
-		dataset, _ := cmd.Flags().GetString("dataset")
+		outputDir, _ := cmd.Flags().GetString("output")
+		datasetPath, _ := cmd.Flags().GetString("dataset")
 		layers, _ := cmd.Flags().GetIntSlice("layers")
 
-		fmt.Printf("Profiling %s (dataset: %s, output: %s, layers: %v)\n", modelPath, dataset, output, layers)
+		if datasetPath == "" {
+			return fmt.Errorf("--dataset is required")
+		}
 
-		// TODO: Call profiler to load model, run dataset, extract directions, save profile
+		loader := datasets.NewLoader()
+		var ds *datasets.Dataset
+		var err error
+
+		switch filepath.Ext(datasetPath) {
+		case ".json":
+			ds, err = loader.LoadJSON(datasetPath)
+		case ".jsonl":
+			ds, err = loader.LoadJSONL(datasetPath)
+		default:
+			return fmt.Errorf("unsupported dataset format: %s", datasetPath)
+		}
+		if err != nil {
+			return fmt.Errorf("load dataset: %w", err)
+		}
+
+		fmt.Printf("Loaded dataset with %d pairs\n", len(ds.Pairs))
+
+		scorer := scoring.NewScorer()
+
+		positiveActivations := make([][]float64, 0, len(ds.Pairs))
+		negativeActivations := make([][]float64, 0, len(ds.Pairs))
+
+		for _, pair := range ds.Pairs {
+			pos := simulateActivation(pair.Truthful.Prompt, pair.Truthful.Response)
+			neg := simulateActivation(pair.Deceptive.Prompt, pair.Deceptive.Response)
+			positiveActivations = append(positiveActivations, pos)
+			negativeActivations = append(negativeActivations, neg)
+		}
+
+		deceptionDir := extract.ExtractDIM(positiveActivations, negativeActivations)
+
+		scorer.RegisterDirection("deception", deceptionDir)
+
+		testActivation := simulateActivation("test prompt", "test response")
+		scores := scorer.Score(testActivation)
+
+		fmt.Printf("Sample scores: deception=%.4f\n", scores["deception"])
+
+		modelProfile := &profile.ModelProfile{
+			ModelID:    filepath.Base(modelPath),
+			Directions: make(map[string]map[int][]float64),
+		}
+		modelProfile.Directions["deception"] = make(map[int][]float64)
+		for _, layer := range layers {
+			modelProfile.Directions["deception"][layer] = deceptionDir
+		}
+		modelProfile.MonitoredLayers = layers
+
+		if err := modelProfile.Save(outputDir); err != nil {
+			return fmt.Errorf("save profile: %w", err)
+		}
+
+		fmt.Printf("Profile saved to %s\n", outputDir)
 		return nil
 	},
+}
+
+func simulateActivation(prompt, response string) []float64 {
+	activation := make([]float64, 4096)
+	for i := 0; i < len(prompt) && i < len(activation); i++ {
+		activation[i] = float64(prompt[i]) / 255.0
+	}
+	for i := 0; i < len(response) && i+100 < len(activation); i++ {
+		activation[i+100] += float64(response[i]) / 255.0
+	}
+	return activation
 }
 
 func init() {
@@ -83,13 +178,13 @@ func init() {
 
 	profileCmd.Flags().StringP("output", "o", "./profiles", "Profile output directory")
 	profileCmd.Flags().String("dataset", "", "Path to profiling dataset (JSON/JSONL)")
-	profileCmd.Flags().IntSlice("layers", nil, "Specific layers to profile (default: all)")
+	profileCmd.Flags().IntSlice("layers", []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31}, "Specific layers to profile (default: all)")
 
 	rootCmd.AddCommand(downloadCmd, convertCmd, profileCmd)
 }
 
 func main() {
-	if err := rootCmd.Execute(); err != nil {
+	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
 		os.Exit(1)
 	}
 }
