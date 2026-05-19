@@ -69,12 +69,14 @@ All orchestration, scoring, steering logic, policy enforcement, model inference,
 Abliteration identifies a behavioral direction (e.g., refusal) by computing the difference-in-means between activations on contrasting prompt pairs, then removes it via:
 
 **Inference-time ablation**:
-```
+
+```go
 h' = h - (h · r̂)r̂
 ```
 
 **Weight orthogonalization** (permanent):
-```
+
+```text
 W' = W - (W · r̂)r̂
 ```
 
@@ -83,7 +85,7 @@ BurnNotice uses the same direction-finding machinery but applies it as a **detec
 ### 3.2 Key Activation-Space Constructs
 
 | Concept | Description | Detection Method |
-|---------|-------------|-----------------|
+| --- | --- | --- |
 | **Refusal Direction** | Single vector encoding refusal behavior | Difference-in-means (harmful vs harmless prompts) |
 | **Deception Direction** | Axis separating truthful from deceptive activations | Contrastive pairs + PCA / LAT |
 | **Truth Subspace** | Region encoding truthful, grounded responses | Linear probes on residual stream |
@@ -96,6 +98,7 @@ BurnNotice uses the same direction-finding machinery but applies it as a **detec
 ### 3.3 The Linear Representation Hypothesis
 
 The foundational assumption: concepts are represented as approximately linear directions in transformer activation spaces. This enables:
+
 - **Detection**: Project activations onto known directions to get scalar scores
 - **Steering**: Add/subtract scaled direction vectors to influence behavior
 - **Visualization**: Map high-dimensional activations to interpretable 2D/3D subspaces
@@ -117,7 +120,7 @@ BurnNotice is implemented as a long-running Go application with four primary com
 
 The CLI tool (`burnnotice`) handles model acquisition from HuggingFace, ONNX conversion, and profile generation.
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                            BurnNotice Framework                              │
 │                                                                              │
@@ -173,12 +176,14 @@ The CLI tool (`burnnotice`) handles model acquisition from HuggingFace, ONNX con
 Manages long-running model profiling jobs. Each job profiles one model for its specific behavioral directions and subspaces.
 
 **Inputs**:
+
 - Model identifier (HuggingFace repo path or local ONNX path)
 - Contrastive prompt pairs: (truthful prompt, deceptive prompt) for the same factual content
 - Policy-compliant vs policy-violating prompt pairs
 - Aligned vs misaligned instruction pairs
 
 **Process**:
+
 1. Loads the ONNX model and installs activation hooks
 2. Queues contrastive prompt batches for parallel processing
 3. Receives streamed activations
@@ -188,6 +193,7 @@ Manages long-running model profiling jobs. Each job profiles one model for its s
 7. Persists extracted directions and profiles to disk (gob or protobuf format)
 
 **Outputs**:
+
 - Per-layer direction vectors (refusal, deception, truth, conflict, policy)
 - SAE feature importance rankings
 - Truth neuron indices (via integrated gradients)
@@ -199,7 +205,7 @@ Manages long-running model profiling jobs. Each job profiles one model for its s
 Multiple algorithms for identifying behavioral directions, all implemented in Go operating on activation tensors.
 
 | Method | Use Case | Directions |
-|--------|----------|------------|
+| --- | --- | --- |
 | Difference-in-Means (DIM) | Single dominant direction (refusal, deception) | 1 |
 | PCA / SVD | Multi-directional subspaces | Top-k |
 | Linear Artificial Tomography (LAT) | Unsupervised direction extraction | 1 |
@@ -209,6 +215,7 @@ Multiple algorithms for identifying behavioral directions, all implemented in Go
 | Whitened SVD | Covariance-normalized subspace | Top-k |
 
 **Layer Selection Strategy**:
+
 - Rank layers by mean absolute projection value (strongest signal first)
 - Use discriminative layer selection: only steer layers where truth/deception exhibit opposite-signed projections
 - Focus on mid-layers (40-60% depth) where deception signals peak
@@ -218,13 +225,15 @@ Multiple algorithms for identifying behavioral directions, all implemented in Go
 Receives real-time activation streams from the inference engine during agent inference. Activations are stored in Longbow's Arrow RecordBatch format for zero-copy access.
 
 **Activation Storage** (via Longbow):
+
 - Activations streamed as Arrow RecordBatches into Longbow's vector store
 - SlabArena off-heap allocation bypasses Go GC for billion-scale activation matrices
 - COW publication enables lock-free concurrent scoring across goroutines
 - HNSW index provides fast nearest-neighbor lookups on activation centroids
 
 **Real-Time Scoring** (per token):
-```
+
+```go
 deceptionScore[l][t] = Sigmoid(Dot(h[l][t], vDeception[l]))
 conflictScore[l][t] = DistanceToConflictCentroid(h[l][t])
 policyOODScore[l][t] = Norm(Whitened(h[l][t]))
@@ -235,6 +244,7 @@ hallucinationEnergy[l][t] = Sum(SAFeatureActivations^2)
 Distance calculations use Longbow's SIMD-optimized kernels (AVX2/AVX-512/NEON) for cosine, euclidean, and dot product operations.
 
 **Aggregation**:
+
 - Per-token scores → per-response scores (mean, max, or area-under-curve)
 - Layer-wise scores → composite alignment score (weighted by layer importance)
 - Temporal patterns: detect score spikes before deceptive text is generated (early warning)
@@ -244,7 +254,7 @@ Distance calculations use Longbow's SIMD-optimized kernels (AVX2/AVX-512/NEON) f
 Combines individual scores into actionable governance metrics:
 
 | Metric | Formula | Threshold | Action |
-|--------|---------|-----------|--------|
+| --- | --- | --- | --- |
 | **Deception Risk** | `max(deception_score)` across layers/tokens | > 0.7 | Alert + steer |
 | **Conflict Intensity** | `mean(conflict_score)` in conflict layers | > 0.6 | Monitor closely |
 | **Policy Compliance** | `1 / (1 + policy_ood_score)` | < 0.5 | Block response |
@@ -257,32 +267,40 @@ Combines individual scores into actionable governance metrics:
 Active intervention when scores exceed thresholds. Four steering methods are available:
 
 **Addition Steering** (ActAdd):
-```
+
+```go
 h' = h + α · v
 ```
+
 - Analog control: scale α to adjust intervention strength
 - Use negative α to suppress deception, positive to promote truth
 
 **Angular Steering** (norm-preserving rotation):
-```
+
+```go
 h' = cos(θ)·h + sin(θ)·(v × h)
 ```
+
 - Preserves activation norm, avoiding distribution shift
 - Only effective in models > 7B parameters
 
 **Selective Steering** (recommended):
+
 - Apply norm-preserving rotation only to discriminative layers
 - Guarantees norm preservation and avoids cascading LayerNorm drift
 - Combines direction extraction with layer-wise gating
 
 **Ablation Steering** (binary):
-```
+
+```go
 h' = h - (h · r̂)r̂
 ```
+
 - Completely removes the deception/conflict direction
 - Use as last-resort intervention when other methods fail
 
 **Weight Orthogonalization** (permanent, offline):
+
 - For agents that need permanent behavioral modification
 - Computes the orthogonalization matrix and applies it to model weights
 - Zero inference overhead after edit
@@ -344,90 +362,91 @@ See [`docs/architecture.md`](architecture.md) for detailed component diagrams an
 - **Real-Time Dashboard**: Templ + HTMX with SSE for live score streaming
 
 **Go Activation Monitor**:
+
 ```go
 package monitor
 
 import (
-	"context"
-	"math"
-	"sync"
+    "context"
+    "math"
+    "sync"
 )
 
 type ActivationMonitor struct {
-	mu         sync.RWMutex
-	layers     []int
-	directions map[string]map[int][]float64 // direction_name -> layer_idx -> vector
-	scores     map[string]map[int]float64   // score_name -> layer_idx -> value
-	hooks      []ActivationHook
-	streams    map[string]context.CancelFunc // session_id -> cancel
+    mu         sync.RWMutex
+    layers     []int
+    directions map[string]map[int][]float64 // direction_name -> layer_idx -> vector
+    scores     map[string]map[int]float64   // score_name -> layer_idx -> value
+    hooks      []ActivationHook
+    streams    map[string]context.CancelFunc // session_id -> cancel
 }
 
 type ActivationHook interface {
-	OnActivation(layerIdx, tokenIdx int, activation []float64)
+    OnActivation(layerIdx, tokenIdx int, activation []float64)
 }
 
 func NewActivationMonitor(layers []int) *ActivationMonitor {
-	return &ActivationMonitor{
-		layers:     layers,
-		directions: make(map[string]map[int][]float64),
-		scores:     make(map[string]map[int]float64),
-		streams:    make(map[string]context.CancelFunc),
-	}
+    return &ActivationMonitor{
+        layers:     layers,
+        directions: make(map[string]map[int][]float64),
+        scores:     make(map[string]map[int]float64),
+        streams:    make(map[string]context.CancelFunc),
+    }
 }
 
 func (m *ActivationMonitor) RegisterDirection(name string, layerIdx int, vector []float64) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.directions[name] == nil {
-		m.directions[name] = make(map[int][]float64)
-	}
-	m.directions[name][layerIdx] = vector
+    m.mu.Lock()
+    defer m.mu.Unlock()
+    if m.directions[name] == nil {
+        m.directions[name] = make(map[int][]float64)
+    }
+    m.directions[name][layerIdx] = vector
 }
 
 func (m *ActivationMonitor) OnActivation(layerIdx, tokenIdx int, activation []float64) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+    m.mu.RLock()
+    defer m.mu.RUnlock()
 
-	for name, layerDirs := range m.directions {
-		dir, ok := layerDirs[layerIdx]
-		if !ok {
-			continue
-		}
-		score := Sigmoid(Dot(activation, dir))
-		if m.scores[name] == nil {
-			m.scores[name] = make(map[int]float64)
-		}
-		m.scores[name][layerIdx] = score
-	}
+    for name, layerDirs := range m.directions {
+        dir, ok := layerDirs[layerIdx]
+        if !ok {
+            continue
+        }
+        score := Sigmoid(Dot(activation, dir))
+        if m.scores[name] == nil {
+            m.scores[name] = make(map[int]float64)
+        }
+        m.scores[name][layerIdx] = score
+    }
 }
 
 func (m *ActivationMonitor) GetScore(name string, layerIdx int) float64 {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	if scores, ok := m.scores[name]; ok {
-		return scores[layerIdx]
-	}
-	return 0.0
+    m.mu.RLock()
+    defer m.mu.RUnlock()
+    if scores, ok := m.scores[name]; ok {
+        return scores[layerIdx]
+    }
+    return 0.0
 }
 
 func Dot(a, b []float64) float64 {
-	var sum float64
-	for i := range a {
-		sum += a[i] * b[i]
-	}
-	return sum
+    var sum float64
+    for i := range a {
+        sum += a[i] * b[i]
+    }
+    return sum
 }
 
 func Sigmoid(x float64) float64 {
-	return 1.0 / (1.0 + math.Exp(-x))
+    return 1.0 / (1.0 + math.Exp(-x))
 }
 
 func Norm(v []float64) float64 {
-	var sum float64
-	for _, x := range v {
-		sum += x * x
-	}
-	return math.Sqrt(sum)
+    var sum float64
+    for _, x := range v {
+        sum += x * x
+    }
+    return math.Sqrt(sum)
 }
 ```
 
@@ -439,178 +458,178 @@ All direction extraction runs in Go on activation tensors received from the Pyth
 package extract
 
 import (
-	"math"
+    "math"
 
-	"gonum.org/v1/gonum/mat"
-	"gonum.org/v1/gonum/stat"
+    "gonum.org/v1/gonum/mat"
+    "gonum.org/v1/gonum/stat"
 )
 
 type DirectionExtractor struct{}
 
 func (e *DirectionExtractor) ExtractDIM(positiveActivations, negativeActivations [][]float64) []float64 {
-	posMean := columnMean(positiveActivations)
-	negMean := columnMean(negativeActivations)
+    posMean := columnMean(positiveActivations)
+    negMean := columnMean(negativeActivations)
 
-	direction := make([]float64, len(posMean))
-	for i := range posMean {
-		direction[i] = posMean[i] - negMean[i]
-	}
+    direction := make([]float64, len(posMean))
+    for i := range posMean {
+        direction[i] = posMean[i] - negMean[i]
+    }
 
-	return normalize(direction)
+    return normalize(direction)
 }
 
 func (e *DirectionExtractor) ExtractSVDDirections(positiveActivations, negativeActivations [][]float64, k int) (directions [][]float64, singularValues []float64) {
-	negMean := columnMean(negativeActivations)
+    negMean := columnMean(negativeActivations)
 
-	// Build difference matrix: each row = positive_activation - neg_mean
-	rows := len(positiveActivations)
-	cols := len(positiveActivations[0])
-	diff := mat.NewDense(rows, cols, nil)
-	for i := range positiveActivations {
-		for j := range positiveActivations[i] {
-			diff.Set(i, j, positiveActivations[i][j]-negMean[j])
-		}
-	}
+    // Build difference matrix: each row = positive_activation - neg_mean
+    rows := len(positiveActivations)
+    cols := len(positiveActivations[0])
+    diff := mat.NewDense(rows, cols, nil)
+    for i := range positiveActivations {
+        for j := range positiveActivations[i] {
+            diff.Set(i, j, positiveActivations[i][j]-negMean[j])
+        }
+    }
 
-	// Thin SVD
-	var svd mat.SVD
-	if !svd.Factorize(diff, mat.SVDThin) {
-		return nil, nil
-	}
+    // Thin SVD
+    var svd mat.SVD
+    if !svd.Factorize(diff, mat.SVDThin) {
+        return nil, nil
+    }
 
-	vt := mat.NewDense(k, cols, nil)
-	svd.VTo(vt)
+    vt := mat.NewDense(k, cols, nil)
+    svd.VTo(vt)
 
-	singularValues = make([]float64, k)
-	for i := range singularValues {
-		singularValues[i] = svd.Values(nil)[i]
-	}
+    singularValues = make([]float64, k)
+    for i := range singularValues {
+        singularValues[i] = svd.Values(nil)[i]
+    }
 
-	directions = make([][]float64, k)
-	for i := range directions {
-		directions[i] = mat.Row(nil, i, vt)
-		directions[i] = normalize(directions[i])
-	}
+    directions = make([][]float64, k)
+    for i := range directions {
+        directions[i] = mat.Row(nil, i, vt)
+        directions[i] = normalize(directions[i])
+    }
 
-	return directions, singularValues
+    return directions, singularValues
 }
 
 func (e *DirectionExtractor) ExtractINLPDirections(positiveActivations, negativeActivations [][]float64, maxIter int) [][]float64 {
-	// Combine activations and labels
-	allAct := append(positiveActivations, negativeActivations...)
-	labels := make([]float64, len(allAct))
-	for i := range positiveActivations {
-		labels[i] = 1.0
-	}
+    // Combine activations and labels
+    allAct := append(positiveActivations, negativeActivations...)
+    labels := make([]float64, len(allAct))
+    for i := range positiveActivations {
+        labels[i] = 1.0
+    }
 
-	var directions [][]float64
-	X := copyMatrix(allAct)
+    var directions [][]float64
+    X := copyMatrix(allAct)
 
-	for iter := 0; iter < maxIter; iter++ {
-		// Train logistic regression probe
-		weights := logisticRegression(X, labels)
+    for iter := 0; iter < maxIter; iter++ {
+        // Train logistic regression probe
+        weights := logisticRegression(X, labels)
 
-		if norm(weights) < 1e-6 {
-			break
-		}
+        if norm(weights) < 1e-6 {
+            break
+        }
 
-		direction := normalize(weights)
-		directions = append(directions, direction)
+        direction := normalize(weights)
+        directions = append(directions, direction)
 
-		// Project out direction from all activations
-		for i := range X {
-			proj := dotProduct(X[i], direction)
-			for j := range X[i] {
-				X[i][j] -= proj * direction[j]
-			}
-		}
-	}
+        // Project out direction from all activations
+        for i := range X {
+            proj := dotProduct(X[i], direction)
+            for j := range X[i] {
+                X[i][j] -= proj * direction[j]
+            }
+        }
+    }
 
-	return directions
+    return directions
 }
 
 func columnMean(matrix [][]float64) []float64 {
-	if len(matrix) == 0 {
-		return nil
-	}
-	cols := len(matrix[0])
-	mean := make([]float64, cols)
-	for _, row := range matrix {
-		for j := range row {
-			mean[j] += row[j]
-		}
-	}
-	n := float64(len(matrix))
-	for j := range mean {
-		mean[j] /= n
-	}
-	return mean
+    if len(matrix) == 0 {
+        return nil
+    }
+    cols := len(matrix[0])
+    mean := make([]float64, cols)
+    for _, row := range matrix {
+        for j := range row {
+            mean[j] += row[j]
+        }
+    }
+    n := float64(len(matrix))
+    for j := range mean {
+        mean[j] /= n
+    }
+    return mean
 }
 
 func normalize(v []float64) []float64 {
-	n := norm(v)
-	if n == 0 {
-		return v
-	}
-	result := make([]float64, len(v))
-	for i := range v {
-		result[i] = v[i] / n
-	}
-	return result
+    n := norm(v)
+    if n == 0 {
+        return v
+    }
+    result := make([]float64, len(v))
+    for i := range v {
+        result[i] = v[i] / n
+    }
+    return result
 }
 
 func norm(v []float64) float64 {
-	var sum float64
-	for _, x := range v {
-		sum += x * x
-	}
-	return math.Sqrt(sum)
+    var sum float64
+    for _, x := range v {
+        sum += x * x
+    }
+    return math.Sqrt(sum)
 }
 
 func dotProduct(a, b []float64) float64 {
-	var sum float64
-	for i := range a {
-		sum += a[i] * b[i]
-	}
-	return sum
+    var sum float64
+    for i := range a {
+        sum += a[i] * b[i]
+    }
+    return sum
 }
 
 func copyMatrix(m [][]float64) [][]float64 {
-	result := make([][]float64, len(m))
-	for i := range m {
-		result[i] = make([]float64, len(m[i]))
-		copy(result[i], m[i])
-	}
-	return result
+    result := make([][]float64, len(m))
+    for i := range m {
+        result[i] = make([]float64, len(m[i]))
+        copy(result[i], m[i])
+    }
+    return result
 }
 
 func logisticRegression(X [][]float64, y []float64) []float64 {
-	// Simplified logistic regression via gradient descent
-	// In production, use gonum/optimize or a dedicated ML library
-	dims := len(X[0])
-	weights := make([]float64, dims)
-	lr := 0.01
-	epochs := 100
+    // Simplified logistic regression via gradient descent
+    // In production, use gonum/optimize or a dedicated ML library
+    dims := len(X[0])
+    weights := make([]float64, dims)
+    lr := 0.01
+    epochs := 100
 
-	for epoch := 0; epoch < epochs; epoch++ {
-		grad := make([]float64, dims)
-		for i := range X {
-			pred := sigmoid(dotProduct(X[i], weights))
-			err := pred - y[i]
-			for j := range grad {
-				grad[j] += err * X[i][j]
-			}
-		}
-		for j := range weights {
-			weights[j] -= lr * grad[j] / float64(len(X))
-		}
-	}
+    for epoch := 0; epoch < epochs; epoch++ {
+        grad := make([]float64, dims)
+        for i := range X {
+            pred := sigmoid(dotProduct(X[i], weights))
+            err := pred - y[i]
+            for j := range grad {
+                grad[j] += err * X[i][j]
+            }
+        }
+        for j := range weights {
+            weights[j] -= lr * grad[j] / float64(len(X))
+        }
+    }
 
-	return weights
+    return weights
 }
 
 func sigmoid(x float64) float64 {
-	return 1.0 / (1.0 + math.Exp(-x))
+    return 1.0 / (1.0 + math.Exp(-x))
 }
 ```
 
@@ -622,160 +641,160 @@ Go computes the steering transformation and sends it to the Python bridge for ap
 package steer
 
 import (
-	"math"
+    "math"
 )
 
 type SteeringMethod string
 
 const (
-	MethodAddition   SteeringMethod = "addition"
-	MethodAngular    SteeringMethod = "angular"
-	MethodSelective  SteeringMethod = "selective"
-	MethodAblation   SteeringMethod = "ablation"
+    MethodAddition   SteeringMethod = "addition"
+    MethodAngular    SteeringMethod = "angular"
+    MethodSelective  SteeringMethod = "selective"
+    MethodAblation   SteeringMethod = "ablation"
 )
 
 type SteeringCommand struct {
-	SessionID string
-	LayerIdx  int
-	TokenIdx  int
-	Vector    []float64
-	Strength  float64
-	Method    SteeringMethod
+    SessionID string
+    LayerIdx  int
+    TokenIdx  int
+    Vector    []float64
+    Strength  float64
+    Method    SteeringMethod
 }
 
 type SelectiveSteerer struct {
-	truthDir      map[int][]float64
-	deceptionDir  map[int][]float64
-	layers        map[int]bool
+    truthDir      map[int][]float64
+    deceptionDir  map[int][]float64
+    layers        map[int]bool
 }
 
 func NewSelectiveSteerer(truthDir, deceptionDir map[int][]float64, layers []int) *SelectiveSteerer {
-	layerSet := make(map[int]bool, len(layers))
-	for _, l := range layers {
-		layerSet[l] = true
-	}
-	return &SelectiveSteerer{
-		truthDir:     truthDir,
-		deceptionDir: deceptionDir,
-		layers:       layerSet,
-	}
+    layerSet := make(map[int]bool, len(layers))
+    for _, l := range layers {
+        layerSet[l] = true
+    }
+    return &SelectiveSteerer{
+        truthDir:     truthDir,
+        deceptionDir: deceptionDir,
+        layers:       layerSet,
+    }
 }
 
 func (s *SelectiveSteerer) IsDiscriminative(layerIdx int, activation []float64) bool {
-	truthProj := dotProduct(activation, s.truthDir[layerIdx])
-	deceptionProj := dotProduct(activation, s.deceptionDir[layerIdx])
-	return truthProj*deceptionProj < 0
+    truthProj := dotProduct(activation, s.truthDir[layerIdx])
+    deceptionProj := dotProduct(activation, s.deceptionDir[layerIdx])
+    return truthProj*deceptionProj < 0
 }
 
 func (s *SelectiveSteerer) ComputeSteering(layerIdx int, activation []float64, strength float64) *SteeringCommand {
-	if !s.layers[layerIdx] {
-		return nil
-	}
+    if !s.layers[layerIdx] {
+        return nil
+    }
 
-	if !s.IsDiscriminative(layerIdx, activation) {
-		return nil
-	}
+    if !s.IsDiscriminative(layerIdx, activation) {
+        return nil
+    }
 
-	truth := s.truthDir[layerIdx]
-	deception := s.deceptionDir[layerIdx]
+    truth := s.truthDir[layerIdx]
+    deception := s.deceptionDir[layerIdx]
 
-	// Combined steering vector: truth - deception
-	v := make([]float64, len(truth))
-	for i := range v {
-		v[i] = truth[i] - deception[i]
-	}
-	v = normalize(v)
+    // Combined steering vector: truth - deception
+    v := make([]float64, len(truth))
+    for i := range v {
+        v[i] = truth[i] - deception[i]
+    }
+    v = normalize(v)
 
-	proj := dotProduct(activation, v)
+    proj := dotProduct(activation, v)
 
-	// Only steer if activation is deception-leaning (negative projection onto truth direction)
-	if proj < 0 {
-		clamped := proj
-		if clamped < -1 {
-			clamped = -1
-		}
-		if clamped > 1 {
-			clamped = 1
-		}
-		theta := strength * math.Asin(-clamped)
+    // Only steer if activation is deception-leaning (negative projection onto truth direction)
+    if proj < 0 {
+        clamped := proj
+        if clamped < -1 {
+            clamped = -1
+        }
+        if clamped > 1 {
+            clamped = 1
+        }
+        theta := strength * math.Asin(-clamped)
 
-		// Norm-preserving rotation in 2D subspace
-		steered := rotate2D(activation, v, theta)
-		return &SteeringCommand{
-			Vector:   steered,
-			Strength: strength,
-			Method:   MethodSelective,
-		}
-	}
+        // Norm-preserving rotation in 2D subspace
+        steered := rotate2D(activation, v, theta)
+        return &SteeringCommand{
+            Vector:   steered,
+            Strength: strength,
+            Method:   MethodSelective,
+        }
+    }
 
-	return nil
+    return nil
 }
 
 func (s *SelectiveSteerer) ComputeAdditionSteering(layerIdx int, strength float64) *SteeringCommand {
-	truth := s.truthDir[layerIdx]
-	return &SteeringCommand{
-		Vector:   truth,
-		Strength: strength,
-		Method:   MethodAddition,
-	}
+    truth := s.truthDir[layerIdx]
+    return &SteeringCommand{
+        Vector:   truth,
+        Strength: strength,
+        Method:   MethodAddition,
+    }
 }
 
 func (s *SelectiveSteerer) ComputeAblationSteering(layerIdx int) *SteeringCommand {
-	deception := s.deceptionDir[layerIdx]
-	return &SteeringCommand{
-		Vector:   deception,
-		Strength: 1.0,
-		Method:   MethodAblation,
-	}
+    deception := s.deceptionDir[layerIdx]
+    return &SteeringCommand{
+        Vector:   deception,
+        Strength: 1.0,
+        Method:   MethodAblation,
+    }
 }
 
 func rotate2D(h, v []float64, theta float64) []float64 {
-	proj := dotProduct(h, v)
-	orthogonal := make([]float64, len(h))
-	for i := range h {
-		orthogonal[i] = h[i] - proj*v[i]
-	}
-	orthNorm := norm(orthogonal)
-	if orthNorm < 1e-10 {
-		return h
-	}
+    proj := dotProduct(h, v)
+    orthogonal := make([]float64, len(h))
+    for i := range h {
+        orthogonal[i] = h[i] - proj*v[i]
+    }
+    orthNorm := norm(orthogonal)
+    if orthNorm < 1e-10 {
+        return h
+    }
 
-	cosT := math.Cos(theta)
-	sinT := math.Sin(theta)
+    cosT := math.Cos(theta)
+    sinT := math.Sin(theta)
 
-	result := make([]float64, len(h))
-	for i := range h {
-		result[i] = cosT*h[i] + sinT*(orthNorm*v[i] - proj*orthogonal[i]/orthNorm)
-	}
-	return result
+    result := make([]float64, len(h))
+    for i := range h {
+        result[i] = cosT*h[i] + sinT*(orthNorm*v[i] - proj*orthogonal[i]/orthNorm)
+    }
+    return result
 }
 
 func dotProduct(a, b []float64) float64 {
-	var sum float64
-	for i := range a {
-		sum += a[i] * b[i]
-	}
-	return sum
+    var sum float64
+    for i := range a {
+        sum += a[i] * b[i]
+    }
+    return sum
 }
 
 func normalize(v []float64) []float64 {
-	n := norm(v)
-	if n == 0 {
-		return v
-	}
-	result := make([]float64, len(v))
-	for i := range v {
-		result[i] = v[i] / n
-	}
-	return result
+    n := norm(v)
+    if n == 0 {
+        return v
+    }
+    result := make([]float64, len(v))
+    for i := range v {
+        result[i] = v[i] / n
+    }
+    return result
 }
 
 func norm(v []float64) float64 {
-	var sum float64
-	for _, x := range v {
-		sum += x * x
-	}
-	return math.Sqrt(sum)
+    var sum float64
+    for _, x := range v {
+        sum += x * x
+    }
+    return math.Sqrt(sum)
 }
 ```
 
@@ -785,107 +804,107 @@ func norm(v []float64) float64 {
 package policydetect
 
 import (
-	"math"
+    "math"
 
-	"gonum.org/v1/gonum/mat"
-	"gonum.org/v1/gonum/stat"
+    "gonum.org/v1/gonum/mat"
+    "gonum.org/v1/gonum/stat"
 )
 
 type PolicyViolationDetector struct {
-	mean            []float64
-	whiteningMatrix *mat.Dense
+    mean            []float64
+    whiteningMatrix *mat.Dense
 }
 
 func NewPolicyViolationDetector(compliantActivations, violatingActivations [][]float64) *PolicyViolationDetector {
-	// Combine all activations
-	allAct := append(compliantActivations, violatingActivations...)
+    // Combine all activations
+    allAct := append(compliantActivations, violatingActivations...)
 
-	// Compute mean
-	mean := columnMean(allAct)
+    // Compute mean
+    mean := columnMean(allAct)
 
-	// Center activations
-	centered := make([][]float64, len(allAct))
-	cols := len(allAct[0])
-	for i := range allAct {
-		centered[i] = make([]float64, cols)
-		for j := range allAct[i] {
-			centered[i][j] = allAct[i][j] - mean[j]
-		}
-	}
+    // Center activations
+    centered := make([][]float64, len(allAct))
+    cols := len(allAct[0])
+    for i := range allAct {
+        centered[i] = make([]float64, cols)
+        for j := range allAct[i] {
+            centered[i][j] = allAct[i][j] - mean[j]
+        }
+    }
 
-	// Compute covariance matrix
-	cov := stat.CovarianceMatrix(nil, mat.NewDense(len(centered), cols, flatten(centered)))
+    // Compute covariance matrix
+    cov := stat.CovarianceMatrix(nil, mat.NewDense(len(centered), cols, flatten(centered)))
 
-	// Eigen-decomposition for whitening
-	var eig mat.EigenSym
-	if !eig.Factorize(cov, true) {
-		return nil
-	}
+    // Eigen-decomposition for whitening
+    var eig mat.EigenSym
+    if !eig.Factorize(cov, true) {
+        return nil
+    }
 
-	eigenvalues := eig.Values(nil)
-	var eigVecs mat.Dense
-	eig.VectorsTo(&eigVecs)
+    eigenvalues := eig.Values(nil)
+    var eigVecs mat.Dense
+    eig.VectorsTo(&eigVecs)
 
-	// Build whitening matrix: V * diag(1/sqrt(λ + ε)) * V^T
-	d := len(eigenvalues)
-	invSqrt := mat.NewDiagDense(d, nil)
-	for i := range eigenvalues {
-		invSqrt.SetDiag(i, 1.0/math.Sqrt(eigenvalues.At(i, 0)+1e-5))
-	}
+    // Build whitening matrix: V * diag(1/sqrt(λ + ε)) * V^T
+    d := len(eigenvalues)
+    invSqrt := mat.NewDiagDense(d, nil)
+    for i := range eigenvalues {
+        invSqrt.SetDiag(i, 1.0/math.Sqrt(eigenvalues.At(i, 0)+1e-5))
+    }
 
-	var tmp mat.Dense
-	tmp.Mul(&eigVecs, invSqrt)
+    var tmp mat.Dense
+    tmp.Mul(&eigVecs, invSqrt)
 
-	whitening := mat.NewDense(d, d, nil)
-	whitening.Mul(tmp, eigVecs.T())
+    whitening := mat.NewDense(d, d, nil)
+    whitening.Mul(tmp, eigVecs.T())
 
-	return &PolicyViolationDetector{
-		mean:            mean,
-		whiteningMatrix: whitening,
-	}
+    return &PolicyViolationDetector{
+        mean:            mean,
+        whiteningMatrix: whitening,
+    }
 }
 
 func (d *PolicyViolationDetector) Detect(activation []float64) float64 {
-	// Center
-	centered := make([]float64, len(activation))
-	for i := range activation {
-		centered[i] = activation[i] - d.mean[i]
-	}
+    // Center
+    centered := make([]float64, len(activation))
+    for i := range activation {
+        centered[i] = activation[i] - d.mean[i]
+    }
 
-	// Whiten
-	centeredVec := mat.NewVecDense(len(centered), centered)
-	var whitened mat.VecDense
-	whitened.MulVec(d.whiteningMatrix, centeredVec)
+    // Whiten
+    centeredVec := mat.NewVecDense(len(centered), centered)
+    var whitened mat.VecDense
+    whitened.MulVec(d.whiteningMatrix, centeredVec)
 
-	// Compliance score: 1 / (1 + ||whitened||)
-	norm := whitened.Norm(2)
-	return 1.0 / (1.0 + norm)
+    // Compliance score: 1 / (1 + ||whitened||)
+    norm := whitened.Norm(2)
+    return 1.0 / (1.0 + norm)
 }
 
 func columnMean(matrix [][]float64) []float64 {
-	if len(matrix) == 0 {
-		return nil
-	}
-	cols := len(matrix[0])
-	mean := make([]float64, cols)
-	for _, row := range matrix {
-		for j := range row {
-			mean[j] += row[j]
-		}
-	}
-	n := float64(len(matrix))
-	for j := range mean {
-		mean[j] /= n
-	}
-	return mean
+    if len(matrix) == 0 {
+        return nil
+    }
+    cols := len(matrix[0])
+    mean := make([]float64, cols)
+    for _, row := range matrix {
+        for j := range row {
+            mean[j] += row[j]
+        }
+    }
+    n := float64(len(matrix))
+    for j := range mean {
+        mean[j] /= n
+    }
+    return mean
 }
 
 func flatten(matrix [][]float64) []float64 {
-	result := make([]float64, 0, len(matrix)*len(matrix[0]))
-	for _, row := range matrix {
-		result = append(result, row...)
-	}
-	return result
+    result := make([]float64, 0, len(matrix)*len(matrix[0]))
+    for _, row := range matrix {
+        result = append(result, row...)
+    }
+    return result
 }
 ```
 
@@ -897,350 +916,353 @@ Manages long-running profiling jobs with checkpointing and a goroutine worker po
 package profile
 
 import (
-	"context"
-	"encoding/gob"
-	"fmt"
-	"os"
-	"path/filepath"
-	"sync"
+    "context"
+    "encoding/gob"
+    "fmt"
+    "os"
+    "path/filepath"
+    "sync"
 )
 
 type ProfileManager struct {
-	mu          sync.RWMutex
-	profiles    map[string]*ModelProfile
-	jobs        chan *ProfileJob
-	workers     int
-	profileDir  string
+    mu          sync.RWMutex
+    profiles    map[string]*ModelProfile
+    jobs        chan *ProfileJob
+    workers     int
+    profileDir  string
 }
 
 type ModelProfile struct {
-	ModelID        string
-	Directions     map[string][][]float64 // direction_name -> [layer][vector]
-	LayerScores    map[string][]float64   // direction_name -> [layer]score
-	SAFeatures     map[string][]int       // direction_name -> [feature_indices]
-	TruthNeurons   []int
-	MonitoredLayers []int
+    ModelID        string
+    Directions     map[string][][]float64 // direction_name -> [layer][vector]
+    LayerScores    map[string][]float64   // direction_name -> [layer]score
+    SAFeatures     map[string][]int       // direction_name -> [feature_indices]
+    TruthNeurons   []int
+    MonitoredLayers []int
 }
 
 type ProfileJob struct {
-	ModelID     string
-	Status      string // "queued", "running", "complete", "failed", "checkpointed"
-	Progress    float64
-	Error       string
-	Checkpoint  *JobCheckpoint
-	ctx         context.Context
-	cancel      context.CancelFunc
+    ModelID     string
+    Status      string // "queued", "running", "complete", "failed", "checkpointed"
+    Progress    float64
+    Error       string
+    Checkpoint  *JobCheckpoint
+    ctx         context.Context
+    cancel      context.CancelFunc
 }
 
 type JobCheckpoint struct {
-	CurrentBatch    int
-	TotalBatches    int
-	CollectedActs   map[int][][]float64 // layer_idx -> activations
+    CurrentBatch    int
+    TotalBatches    int
+    CollectedActs   map[int][][]float64 // layer_idx -> activations
 }
 
 func NewProfileManager(workers int, profileDir string) *ProfileManager {
-	pm := &ProfileManager{
-		profiles:   make(map[string]*ModelProfile),
-		jobs:       make(chan *ProfileJob, 100),
-		workers:    workers,
-		profileDir: profileDir,
-	}
-	return pm
+    pm := &ProfileManager{
+        profiles:   make(map[string]*ModelProfile),
+        jobs:       make(chan *ProfileJob, 100),
+        workers:    workers,
+        profileDir: profileDir,
+    }
+    return pm
 }
 
 func (pm *ProfileManager) Start() {
-	for i := 0; i < pm.workers; i++ {
-		go pm.worker(i)
-	}
+    for i := 0; i < pm.workers; i++ {
+        go pm.worker(i)
+    }
 }
 
 func (pm *ProfileManager) worker(id int) {
-	for job := range pm.jobs {
-		pm.runJob(id, job)
-	}
+    for job := range pm.jobs {
+        pm.runJob(id, job)
+    }
 }
 
 func (pm *ProfileManager) runJob(workerID int, job *ProfileJob) {
-	job.ctx, job.cancel = context.CancelCauseFunc(context.Background())
-	defer job.cancel(nil)
+    job.ctx, job.cancel = context.CancelCauseFunc(context.Background())
+    defer job.cancel(nil)
 
-	job.Status = "running"
+    job.Status = "running"
 
-	// If resuming from checkpoint, restore state
-	var collectedActs map[int][][]float64
-	startBatch := 0
-	if job.Checkpoint != nil {
-		collectedActs = job.Checkpoint.CollectedActs
-		startBatch = job.Checkpoint.CurrentBatch
-	} else {
-		collectedActs = make(map[int][][]float64)
-	}
+    // If resuming from checkpoint, restore state
+    var collectedActs map[int][][]float64
+    startBatch := 0
+    if job.Checkpoint != nil {
+        collectedActs = job.Checkpoint.CollectedActs
+        startBatch = job.Checkpoint.CurrentBatch
+    } else {
+        collectedActs = make(map[int][][]float64)
+    }
 
-	// Process batches
-	for batch := startBatch; batch < job.Checkpoint.TotalBatches; batch++ {
-		select {
-		case <-job.ctx.Done():
-			job.Status = "checkpointed"
-			job.Checkpoint.CurrentBatch = batch
-			job.Checkpoint.CollectedActs = collectedActs
-			pm.saveCheckpoint(job)
-			return
-		default:
-		}
+    // Process batches
+    for batch := startBatch; batch < job.Checkpoint.TotalBatches; batch++ {
+        select {
+        case <-job.ctx.Done():
+            job.Status = "checkpointed"
+            job.Checkpoint.CurrentBatch = batch
+            job.Checkpoint.CollectedActs = collectedActs
+            pm.saveCheckpoint(job)
+            return
+        default:
+        }
 
-		// In production: send batch to Python bridge, receive activations
-		// For now: placeholder
-		job.Progress = float64(batch+1) / float64(job.Checkpoint.TotalBatches)
+        // In production: send batch to Python bridge, receive activations
+        // For now: placeholder
+        job.Progress = float64(batch+1) / float64(job.Checkpoint.TotalBatches)
 
-		// Merge activations
-		// collectedActs[layer] = append(collectedActs[layer], newActivations...)
-	}
+        // Merge activations
+        // collectedActs[layer] = append(collectedActs[layer], newActivations...)
+    }
 
-	// Extract directions from collected activations
-	profile := &ModelProfile{
-		ModelID:     job.ModelID,
-		Directions:  make(map[string][][]float64),
-		LayerScores: make(map[string][]float64),
-	}
+    // Extract directions from collected activations
+    profile := &ModelProfile{
+        ModelID:     job.ModelID,
+        Directions:  make(map[string][][]float64),
+        LayerScores: make(map[string][]float64),
+    }
 
-	// Run DIM, PCA, etc. on collectedActs
-	// profile.Directions["deception"] = extractor.ExtractDIM(...)
+    // Run DIM, PCA, etc. on collectedActs
+    // profile.Directions["deception"] = extractor.ExtractDIM(...)
 
-	pm.mu.Lock()
-	pm.profiles[job.ModelID] = profile
-	pm.mu.Unlock()
+    pm.mu.Lock()
+    pm.profiles[job.ModelID] = profile
+    pm.mu.Unlock()
 
-	// Persist profile
-	pm.saveProfile(profile)
+    // Persist profile
+    pm.saveProfile(profile)
 
-	job.Status = "complete"
-	job.Progress = 1.0
+    job.Status = "complete"
+    job.Progress = 1.0
 }
 
 func (pm *ProfileManager) saveProfile(profile *ModelProfile) error {
-	dir := filepath.Join(pm.profileDir, profile.ModelID)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
-	}
+    dir := filepath.Join(pm.profileDir, profile.ModelID)
+    if err := os.MkdirAll(dir, 0755); err != nil {
+        return err
+    }
 
-	f, err := os.Create(filepath.Join(dir, "profile.gob"))
-	if err != nil {
-		return err
-	}
-	defer f.Close()
+    f, err := os.Create(filepath.Join(dir, "profile.gob"))
+    if err != nil {
+        return err
+    }
+    defer f.Close()
 
-	enc := gob.NewEncoder(f)
-	return enc.Encode(profile)
+    enc := gob.NewEncoder(f)
+    return enc.Encode(profile)
 }
 
 func (pm *ProfileManager) saveCheckpoint(job *ProfileJob) {
-	dir := filepath.Join(pm.profileDir, job.ModelID)
-	os.MkdirAll(dir, 0755)
+    dir := filepath.Join(pm.profileDir, job.ModelID)
+    os.MkdirAll(dir, 0755)
 
-	f, err := os.Create(filepath.Join(dir, "checkpoint.gob"))
-	if err != nil {
-		return
-	}
-	defer f.Close()
+    f, err := os.Create(filepath.Join(dir, "checkpoint.gob"))
+    if err != nil {
+        return
+    }
+    defer f.Close()
 
-	enc := gob.NewEncoder(f)
-	enc.Encode(job.Checkpoint)
+    enc := gob.NewEncoder(f)
+    enc.Encode(job.Checkpoint)
 }
 
 func (pm *ProfileManager) LoadProfile(modelID string) (*ModelProfile, error) {
-	pm.mu.RLock()
-	if profile, ok := pm.profiles[modelID]; ok {
-		defer pm.mu.RUnlock()
-		return profile, nil
-	}
-	pm.mu.RUnlock()
+    pm.mu.RLock()
+    if profile, ok := pm.profiles[modelID]; ok {
+        defer pm.mu.RUnlock()
+        return profile, nil
+    }
+    pm.mu.RUnlock()
 
-	// Try loading from disk
-	dir := filepath.Join(pm.profileDir, modelID)
-	f, err := os.Open(filepath.Join(dir, "profile.gob"))
-	if err != nil {
-		return nil, fmt.Errorf("profile not found for %s: %w", modelID, err)
-	}
-	defer f.Close()
+    // Try loading from disk
+    dir := filepath.Join(pm.profileDir, modelID)
+    f, err := os.Open(filepath.Join(dir, "profile.gob"))
+    if err != nil {
+        return nil, fmt.Errorf("profile not found for %s: %w", modelID, err)
+    }
+    defer f.Close()
 
-	var profile ModelProfile
-	if err := gob.NewDecoder(f).Decode(&profile); err != nil {
-		return nil, err
-	}
+    var profile ModelProfile
+    if err := gob.NewDecoder(f).Decode(&profile); err != nil {
+        return nil, err
+    }
 
-	pm.mu.Lock()
-	pm.profiles[modelID] = &profile
-	pm.mu.Unlock()
+    pm.mu.Lock()
+    pm.profiles[modelID] = &profile
+    pm.mu.Unlock()
 
-	return &profile, nil
+    return &profile, nil
 }
 ```
 
 ### 6.6 Web Dashboard (Go + Templ + HTMX)
 
 **Server setup** (`cmd/dashboard/main.go`):
+
 ```go
 package main
 
 import (
-	"log"
-	"net/http"
+    "log"
+    "net/http"
 
-	"burnnotice/internal/web"
-	"burnnotice/internal/monitor"
-	"burnnotice/internal/profile"
+    "burnnotice/internal/web"
+    "burnnotice/internal/monitor"
+    "burnnotice/internal/profile"
 )
 
 func main() {
-	pm := profile.NewProfileManager(4, "profiles")
-	pm.Start()
+    pm := profile.NewProfileManager(4, "profiles")
+    pm.Start()
 
-	mon := monitor.NewActivationMonitor([]int{8, 9, 10, 11, 12})
+    mon := monitor.NewActivationMonitor([]int{8, 9, 10, 11, 12})
 
-	hub := web.NewSSEHub()
-	go hub.Run()
+    hub := web.NewSSEHub()
+    go hub.Run()
 
-	h := web.NewHandler(pm, mon, hub)
+    h := web.NewHandler(pm, mon, hub)
 
-	mux := http.NewServeMux()
-	mux.Handle("GET /{$}", h.Dashboard())
-	mux.Handle("GET /profiler", h.Profiler())
-	mux.Handle("GET /model/{id}", h.ModelProfile())
-	mux.Handle("GET /monitor/{session}", h.Monitor())
-	mux.Handle("GET /sse", h.SSE())
-	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+    mux := http.NewServeMux()
+    mux.Handle("GET /{$}", h.Dashboard())
+    mux.Handle("GET /profiler", h.Profiler())
+    mux.Handle("GET /model/{id}", h.ModelProfile())
+    mux.Handle("GET /monitor/{session}", h.Monitor())
+    mux.Handle("GET /sse", h.SSE())
+    mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
-	log.Println("Dashboard listening on :8080")
-	log.Fatal(http.ListenAndServe(":8080", mux))
+    log.Println("Dashboard listening on :8080")
+    log.Fatal(http.ListenAndServe(":8080", mux))
 }
 ```
 
 **SSE Hub** (`internal/web/sse.go`):
+
 ```go
 package web
 
 import (
-	"fmt"
-	"net/http"
-	"sync"
+    "fmt"
+    "net/http"
+    "sync"
 )
 
 type SSEHub struct {
-	mu      sync.RWMutex
-	clients map[chan string]bool
+    mu      sync.RWMutex
+    clients map[chan string]bool
 }
 
 func NewSSEHub() *SSEHub {
-	return &SSEHub{
-		clients: make(map[chan string]bool),
-	}
+    return &SSEHub{
+        clients: make(map[chan string]bool),
+    }
 }
 
 func (h *SSEHub) Run() {
-	// Cleanup closed channels periodically
-	// In production: use a ticker and range over clients
+    // Cleanup closed channels periodically
+    // In production: use a ticker and range over clients
 }
 
 func (h *SSEHub) AddClient() chan string {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	ch := make(chan string, 16)
-	h.clients[ch] = true
-	return ch
+    h.mu.Lock()
+    defer h.mu.Unlock()
+    ch := make(chan string, 16)
+    h.clients[ch] = true
+    return ch
 }
 
 func (h *SSEHub) RemoveClient(ch chan string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	delete(h.clients, ch)
-	close(ch)
+    h.mu.Lock()
+    defer h.mu.Unlock()
+    delete(h.clients, ch)
+    close(ch)
 }
 
 func (h *SSEHub) Broadcast(event, data string) {
-	msg := fmt.Sprintf("event: %s\ndata: %s\n\n", event, data)
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	for ch := range h.clients {
-		select {
-		case ch <- msg:
-		default:
-			// Client buffer full, skip
-		}
-	}
+    msg := fmt.Sprintf("event: %s\ndata: %s\n\n", event, data)
+    h.mu.RLock()
+    defer h.mu.RUnlock()
+    for ch := range h.clients {
+        select {
+        case ch <- msg:
+        default:
+            // Client buffer full, skip
+        }
+    }
 }
 
 func (h *SSEHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "streaming not supported", http.StatusInternalServerError)
-		return
-	}
+    flusher, ok := w.(http.Flusher)
+    if !ok {
+        http.Error(w, "streaming not supported", http.StatusInternalServerError)
+        return
+    }
 
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
+    w.Header().Set("Content-Type", "text/event-stream")
+    w.Header().Set("Cache-Control", "no-cache")
+    w.Header().Set("Connection", "keep-alive")
 
-	ch := h.AddClient()
-	defer h.RemoveClient(ch)
+    ch := h.AddClient()
+    defer h.RemoveClient(ch)
 
-	for {
-		select {
-		case <-r.Context().Done():
-			return
-		case msg := <-ch:
-			fmt.Fprint(w, msg)
-			flusher.Flush()
-		}
-	}
+    for {
+        select {
+        case <-r.Context().Done():
+            return
+        case msg := <-ch:
+            fmt.Fprint(w, msg)
+            flusher.Flush()
+        }
+    }
 }
 ```
 
 **Templ template example** (`templates/monitor.templ`):
+
 ```templ
 package templates
 
 import "burnnotice/internal/monitor"
 
 templ MonitorPage(sessionID string, scores map[string]map[int]float64) {
-	<div class="container mx-auto p-4">
-		<h1 class="text-2xl font-bold mb-4">Live Monitor: { sessionID }</h1>
+    <div class="container mx-auto p-4">
+        <h1 class="text-2xl font-bold mb-4">Live Monitor: { sessionID }</h1>
 
-		<div id="scores"
-		     hx-ext="sse"
-		     sse-connect="/sse"
-		     sse-swap="score-update">
-			<div class="grid grid-cols-4 gap-4">
-				for metric, layerScores := range scores {
-					<div class="bg-white rounded-lg shadow p-4">
-						<h3 class="text-lg font-semibold">{ metric }</h3>
-						for layer, score := range layerScores {
-							<div class="flex justify-between mt-2">
-								<span>Layer { fmt.Sprint(layer) }</span>
-								<span class="font-mono">{ fmt.Sprintf("%.3f", score) }</span>
-							</div>
-							<div class="w-full bg-gray-200 rounded-full h-2 mt-1">
-								<div class={ scoreColor(score) } style={ fmt.Sprintf("width: %.0f%%", score*100) }></div>
-							</div>
-						}
-					</div>
-				}
-			</div>
-		</div>
+        <div id="scores"
+             hx-ext="sse"
+             sse-connect="/sse"
+             sse-swap="score-update">
+            <div class="grid grid-cols-4 gap-4">
+                for metric, layerScores := range scores {
+                    <div class="bg-white rounded-lg shadow p-4">
+                        <h3 class="text-lg font-semibold">{ metric }</h3>
+                        for layer, score := range layerScores {
+                            <div class="flex justify-between mt-2">
+                                <span>Layer { fmt.Sprint(layer) }</span>
+                                <span class="font-mono">{ fmt.Sprintf("%.3f", score) }</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2 mt-1">
+                                <div class={ scoreColor(score) } style={ fmt.Sprintf("width: %.0f%%", score*100) }></div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
 
-		<div id="heatmap" class="mt-8">
-			<!-- Heatmap rendered as SVG, updated via HTMX OOB swap -->
-		</div>
-	}
+        <div id="heatmap" class="mt-8">
+            <!-- Heatmap rendered as SVG, updated via HTMX OOB swap -->
+        </div>
+    }
 }
 
 func scoreColor(score float64) string {
-	if score > 0.7 {
-		return "bg-red-500 h-2 rounded-full transition-all"
-	}
-	if score > 0.4 {
-		return "bg-yellow-500 h-2 rounded-full transition-all"
-	}
-	return "bg-green-500 h-2 rounded-full transition-all"
+    if score > 0.7 {
+        return "bg-red-500 h-2 rounded-full transition-all"
+    }
+    if score > 0.4 {
+        return "bg-yellow-500 h-2 rounded-full transition-all"
+    }
+    return "bg-green-500 h-2 rounded-full transition-all"
 }
 ```
 
@@ -1251,7 +1273,7 @@ func scoreColor(score float64) string {
 ### 7.1 Contrastive Datasets
 
 | Dataset | Purpose | Size | Source |
-|---------|---------|------|--------|
+| --- | --- | --- | --- |
 | TruthfulQA | Truth neuron identification | 817 Q&A | Benchmark |
 | common_claim_true_false | Deception direction extraction | ~500 pairs | Research datasets |
 | counterfact_true_false | Uncurated deception detection | ~500 pairs | Research datasets |
@@ -1289,7 +1311,7 @@ func scoreColor(score float64) string {
 ### 8.1 Supported Architectures
 
 | Architecture | Support Level | Notes |
-|-------------|---------------|-------|
+| --- | --- | --- |
 | Llama 3.x | Full | Best-documented behavior |
 | Gemma 3.x | Full | SAE features available via Gemma Scope |
 | Qwen 3.x | Full | Abliterated variants exist |
@@ -1301,6 +1323,7 @@ func scoreColor(score float64) string {
 ### 8.2 Proxy Analyzer Mode
 
 For closed models (GPT-4, Claude), BurnNotice can operate in proxy mode:
+
 - Route agent outputs through a small open-weight model (Qwen2.5-0.5B, Gemma-2-2B)
 - Read the proxy model's internal activations on the generated text
 - Detect hallucination/deception via proxy's activation patterns
@@ -1313,7 +1336,7 @@ For closed models (GPT-4, Claude), BurnNotice can operate in proxy mode:
 ### 9.1 Inference Overhead
 
 | Operation | Overhead | Notes |
-|-----------|----------|-------|
+| --- | --- | --- |
 | Activation hooks (monitoring only) | ~5-10% | Hook registration + tensor copy |
 | Scoring (per token) | ~1-2% | Dot products, lightweight |
 | Addition steering | ~2-3% | Vector addition per layer |
@@ -1341,7 +1364,7 @@ For closed models (GPT-4, Claude), BurnNotice can operate in proxy mode:
 ### 10.1 Threat Model
 
 | Threat | BurnNotice Mitigation |
-|--------|----------------------|
+| --- | --- |
 | Jailbreak via activation manipulation | Multi-direction monitoring; conflict subspace detection catches novel attacks |
 | Alignment faking (compliant under monitoring) | Detect oversight-sensitivity direction; monitor for representational shifts between monitored/unmonitored states |
 | Safety geometry collapse from fine-tuning | Monitor CKA and Fisher score as safety health indicators; alert on geometric degradation |
@@ -1362,7 +1385,7 @@ For closed models (GPT-4, Claude), BurnNotice can operate in proxy mode:
 ### 11.1 Detection Accuracy
 
 | Metric | Target | Measurement |
-|--------|--------|-------------|
+| --- | --- | --- |
 | Deception detection AUROC | > 0.95 | Linear probe on held-out deception dataset |
 | False positive rate on benign chat | < 1% | Evaluation on Alpaca/ShareGPT |
 | Policy violation detection F1 | > 0.90 | Custom policy benchmark |
@@ -1372,7 +1395,7 @@ For closed models (GPT-4, Claude), BurnNotice can operate in proxy mode:
 ### 11.2 Steering Effectiveness
 
 | Metric | Target | Measurement |
-|--------|--------|-------------|
+| --- | --- | --- |
 | Honesty improvement (steered vs baseline) | +40 percentage points | Controlled deception prompts |
 | Capability preservation (MMLU, code) | < 5% degradation | Standard benchmarks |
 | Steering specificity (no effect on unrelated tasks) | < 2% change | Non-deception task suite |
@@ -1380,7 +1403,7 @@ For closed models (GPT-4, Claude), BurnNotice can operate in proxy mode:
 ### 11.3 System Performance
 
 | Metric | Target | Measurement |
-|--------|--------|-------------|
+| --- | --- | --- |
 | Monitoring latency overhead | < 10% | End-to-end generation time |
 | Dashboard update latency | < 500ms | SSE round-trip |
 | Memory overhead (Go engine) | < 500MB | Peak RSS during monitoring |
@@ -1451,7 +1474,7 @@ To move BurnNotice from a proof-of-concept into a highly hardened, production-gr
 
 ### 13.1 Adaptive Model-Specific Calibration
 
-Fixed threshold values are highly vulnerable to False Positives under out-of-distribution (OOD) agent environments, and False Negatives under subtle, slow-drift deception prompts. 
+Fixed threshold values are highly vulnerable to False Positives under out-of-distribution (OOD) agent environments, and False Negatives under subtle, slow-drift deception prompts.
 
 #### Mathematical Formulation
 
@@ -1464,8 +1487,9 @@ We optimize the classification threshold $T^*$ dynamically using the F1-score me
 $$T^* = \arg\max_{T} F_1(T) = \arg\max_{T} \frac{2 \cdot \text{Precision}(T) \cdot \text{Recall}(T)}{\text{Precision}(T) + \text{Recall}(T)}$$
 
 Where:
-*   $\text{Precision}(T) = \frac{TP(T)}{TP(T) + FP(T)}$
-*   $\text{Recall}(T) = \frac{TP(T)}{TP(T) + FN(T)}$
+
+- $\text{Precision}(T) = \frac{TP(T)}{TP(T) + FP(T)}$
+- $\text{Recall}(T) = \frac{TP(T)}{TP(T) + FN(T)}$
 
 #### Implementation Details
 
@@ -1493,7 +1517,8 @@ Activations are vulnerable to high-precision adversarial prompt injection attack
 2.  **Steering Gradient Masking**: The steering engine hides its latent projection vectors from being inferred by black-box probe queries. If a client attempts back-to-back probes with high-cosine similarity inputs, the monitor restricts prompt tracing and generates decoy activation distributions.
 3.  **Latent Noise Injection**: Add a low-amplitude Gaussian perturbation $\eta \sim \mathcal{N}(0, \sigma_{\text{noise}}^2)$ directly to the projected activations before evaluating similarity:
     $$S_{\text{robust}}(a) = S(a + \eta)$$
-    *   This defeats high-precision target optimization attacks by making the local loss geometry highly non-differentiable and noisy.
+
+    - This defeats high-precision target optimization attacks by making the local loss geometry highly non-differentiable and noisy.
 
 ---
 
@@ -1512,8 +1537,10 @@ $$v_{\text{quant}} = s_{\text{calib}} \cdot v_{\text{FP16}}$$
 #### Direction Robustness Checks
 
 To verify direction stability post-quantization:
+
 1.  **Cosine Parity Check**: Ensure the projection angle satisfies:
     $$\text{CosineSimilarity}(v_{\text{quant}}, v_{\text{FP16}}) \ge 0.98$$
+
 2.  **Clipping Bound Enforcement**: Dynamically clip the steering rotation amplitudes inside the selective steering solver to prevent over-steering overflows in integer representation layers.
 
 ---
@@ -1527,10 +1554,11 @@ A single direction represents a highly simplified linear probe. Real deceptive p
 1.  **Top-K SVD Subspace**: Rather than extracting one PCA vector, we extract the top-k right singular columns of the contrastive difference matrix $X_{\text{diff}}$:
     $$X_{\text{diff}} = U \Sigma V^T$$
     We build a $k$-dimensional orthonormal basis $B = [v_1, v_2, \dots, v_k]$ from the columns of $V$ corresponding to the largest singular values in $\Sigma$.
+
 2.  **Iterative Nullspace Projection (INLP)**:
-    *   Trains a linear probe to classify deception.
-    *   Projects all activations onto the nullspace of this probe.
-    *   Iteratively trains new probes on the projected activations to identify secondary and tertiary orthogonal deceptive pathways.
+    - Trains a linear probe to classify deception.
+    - Projects all activations onto the nullspace of this probe.
+    - Iteratively trains new probes on the projected activations to identify secondary and tertiary orthogonal deceptive pathways.
 3.  **Aggregate Energy Projection**: The scoring engine evaluates the subspace energy projection:
     $$E_{\text{subspace}}(a) = \sqrt{\sum_{i=1}^k (a \cdot v_i)^2}$$
 
@@ -1545,8 +1573,9 @@ Strategic deception is rarely a single-token event; it manifests as a sustained 
 We track deception trajectories using an Exponential Moving Average (EMA) of token-level projection scores across a sequence window:
 $$EMA_t = \alpha \cdot S(a_t) + (1 - \alpha) \cdot EMA_{t-1}$$
 Where:
-*   $\alpha \in [0.05, 0.2]$ is the temporal decay factor.
-*   $S(a_t)$ is the projection score at token index $t$.
+
+- $\alpha \in [0.05, 0.2]$ is the temporal decay factor.
+- $S(a_t)$ is the projection score at token index $t$.
 
 #### Temporal Policy Violation
 
@@ -1564,6 +1593,7 @@ Applying norm-preserving steering can inadvertently warp neighboring semantic di
 1.  **Norm-Clamping Safety Envelope**:
     $$v_{\text{steered}} = \text{AngularRotation}(a, v, \theta)$$
     We clamp the maximum rotation angle $\theta \le \theta_{\text{max}}$ (typically $15^{\circ}$) to restrict latent space distortion.
+
 2.  **Capability Health Ratio**: An automated benchmark pipeline evaluates baseline task intelligence models against steered instances:
     $$\mathcal{R}_{\text{cap}} = \frac{\text{Accuracy}_{\text{steered}}(\text{GSM8k})}{\text{Accuracy}_{\text{baseline}}(\text{GSM8k})} \ge 0.98$$
     If the capability health ratio drops below $98\%$, the selective steerer automatically scales down the steering strength coefficient.
@@ -1585,7 +1615,7 @@ Integrating real-time latent governance directly into production token generatio
 ## 14. Glossary
 
 | Term | Definition |
-|------|-----------|
+| --- | --- |
 | **Abliteration** | Portmanteau of "ablation" + "obliterate"; removing behavioral directions from LLM weights |
 | **Activation Steering** | Modifying internal activations at inference time to influence behavior |
 | **Conflict Subspace** | Region in activation space where competing objectives are resolved |

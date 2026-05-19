@@ -121,7 +121,7 @@ graph TB
 All activation scoring (cosine similarity, euclidean distance, dot product) uses Longbow's hand-optimized SIMD kernels instead of gonum:
 
 | Architecture | Optimization | Throughput Gain |
-|-------------|-------------|----------------|
+| --- | --- | --- |
 | AVX2 (x86) | 256-bit vectorized dot product | 3-4x |
 | AVX-512 (x86) | 512-bit vectorized + softmax kernels | 5-8x |
 | NEON (ARM64) | 128-bit vectorized for Apple Silicon/Graviton | 3-4x |
@@ -130,6 +130,7 @@ All activation scoring (cosine similarity, euclidean distance, dot product) uses
 ### HNSW Index for Centroid Lookup
 
 The HNSW index enables fast nearest-neighbor lookups on activation centroids, used for:
+
 - Conflict subspace detection (find nearest conflict centroid)
 - Policy violation detection (find nearest policy-violating cluster)
 - Truth direction validation (verify activation proximity to truth subspace)
@@ -402,7 +403,7 @@ sequenceDiagram
 ## Technology Stack
 
 | Component | Technology | Purpose |
-|-----------|------------|---------|
+| --- | --- | --- |
 | **Primary Language** | Go | Concurrency, memory efficiency, single binary |
 | **Model Inference** | ONNX Runtime | Portable model execution across CPU/GPU |
 | **Fallback Inference** | WASM (wazero) | Pure Go execution, no native dependencies |
@@ -506,8 +507,8 @@ sequenceDiagram
     end
 ```
 
-*   **Lock-Free Ring Buffer**: Replaces simple blocking channels to guarantee low-allocation, sub-microsecond queue/dequeue performance.
-*   **Emergency Synchronous Bypass**: A latch circuit monitors queue depth and processing latency. If latency exceeds a threshold, it automatically falls back to synchronous evaluation on high-risk prompt layers to prevent undetected deception leakages.
+- **Lock-Free Ring Buffer**: Replaces simple blocking channels to guarantee low-allocation, sub-microsecond queue/dequeue performance.
+- **Emergency Synchronous Bypass**: A latch circuit monitors queue depth and processing latency. If latency exceeds a threshold, it automatically falls back to synchronous evaluation on high-risk prompt layers to prevent undetected deception leakages.
 
 ### Quantization & Direction Transfer Architecture
 
@@ -533,8 +534,8 @@ graph TD
     ClipBound --> V_INT8
 ```
 
-*   **Scale Calibration Layer**: Standardizes different numerical representations by matching the standard deviation of activations between FP16 baselines and INT8/FP8 quantized paths.
-*   **Direction Mapping Engine**: Mathematically projects extracted baseline steering direction matrices onto quantized layers, validating that multi-dimensional geometric structures remain invariant under low-precision representation formats.
+- **Scale Calibration Layer**: Standardizes different numerical representations by matching the standard deviation of activations between FP16 baselines and INT8/FP8 quantized paths.
+- **Direction Mapping Engine**: Mathematically projects extracted baseline steering direction matrices onto quantized layers, validating that multi-dimensional geometric structures remain invariant under low-precision representation formats.
 
 ### Multi-Direction Subspace Extraction & INLP
 
@@ -549,10 +550,10 @@ graph LR
     Subspace --> Projection["Subspace Projection Scorer"]
 ```
 
-*   **Top-K SVD Subspace**: Extract the top-k right singular columns of the activation difference matrices using Gonum, building an orthonormal basis for safety governance.
-*   **Iterative Nullspace Projection (INLP)**: Progressively removes features matching known deception styles by projecting activations onto the nullspace of linear deception probes, revealing orthogonal safety directions.
+- **Top-K SVD Subspace**: Extract the top-k right singular columns of the activation difference matrices using Gonum, building an orthonormal basis for safety governance.
+- **Iterative Nullspace Projection (INLP)**: Progressively removes features matching known deception styles by projecting activations onto the nullspace of linear deception probes, revealing orthogonal safety directions.
 
 ### Temporal Sequence Scoring & Adaptive Calibration
 
-*   **Adaptive Calibration Subsystem**: Regularly updates safety thresholds based on held-out validation databases. Runs ROC/F1 analysis on background workers to select dynamic, model-specific threshold metrics.
-*   **Temporal Sequence Aggregator**: Computes sequence-level exponential moving averages (EMA) of token-level similarity scores. Tracks long-term drift trajectories across multi-agent chat logs to detect sustained deception or jailbreak attempts.
+- **Adaptive Calibration Subsystem**: Regularly updates safety thresholds based on held-out validation databases. Runs ROC/F1 analysis on background workers to select dynamic, model-specific threshold metrics.
+- **Temporal Sequence Aggregator**: Computes sequence-level exponential moving averages (EMA) of token-level similarity scores. Tracks long-term drift trajectories across multi-agent chat logs to detect sustained deception or jailbreak attempts.
