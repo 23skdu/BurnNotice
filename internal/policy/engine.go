@@ -17,9 +17,10 @@ type PolicyViolation struct {
 
 // Engine evaluates scores against registered policies.
 type Engine struct {
-	mu       sync.RWMutex
-	policies []Policy
+	mu         sync.RWMutex
+	policies   []Policy
 	violations map[string]int // policy_name -> violation count
+	killSwitch *KillSwitch
 }
 
 // NewEngine creates a policy engine with the given policies.
@@ -28,6 +29,13 @@ func NewEngine(policies []Policy) *Engine {
 		policies:   policies,
 		violations: make(map[string]int),
 	}
+}
+
+// RegisterKillSwitch registers an emergency kill switch with the engine.
+func (e *Engine) RegisterKillSwitch(ks *KillSwitch) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.killSwitch = ks
 }
 
 // Evaluate checks all policies against the provided scores and returns violations.
@@ -57,6 +65,9 @@ func (e *Engine) Evaluate(scores map[string]float64) []PolicyViolation {
 				Action:     p.Action,
 				Timestamp:  time.Now(),
 			})
+			if p.Action == ActionTerminate && e.killSwitch != nil {
+				e.killSwitch.Trigger(p.Name + " violation: emergency terminate triggered")
+			}
 		}
 	}
 	return violations

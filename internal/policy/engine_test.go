@@ -294,6 +294,34 @@ func TestEngine_Evaluate_LessOperator(t *testing.T) {
 	}
 }
 
+func TestEngine_Evaluate_ActionTerminate_KillSwitch(t *testing.T) {
+	policies := []Policy{
+		{Name: "critical_deception", Metric: "deception_score", Threshold: 0.9, Action: ActionTerminate},
+	}
+	engine := NewEngine(policies)
+
+	var alertReason string
+	ks, _ := NewKillSwitch(func(reason string) {
+		alertReason = reason
+	})
+	engine.RegisterKillSwitch(ks)
+
+	// Below threshold - should not terminate
+	engine.Evaluate(map[string]float64{"deception_score": 0.5})
+	if !ks.IsArmed() {
+		t.Error("kill switch should remain armed when score is below threshold")
+	}
+
+	// Above threshold - should trigger terminate & disarm kill switch
+	engine.Evaluate(map[string]float64{"deception_score": 0.95})
+	if ks.IsArmed() {
+		t.Error("kill switch should be disarmed after ActionTerminate evaluation")
+	}
+	if alertReason == "" {
+		t.Error("expected alert callback with reason, got empty string")
+	}
+}
+
 func writeTempFile(t *testing.T, content string) string {
 	t.Helper()
 	tmp := filepath.Join(t.TempDir(), "policies.yaml")
