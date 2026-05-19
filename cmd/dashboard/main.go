@@ -3,29 +3,34 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 	"time"
+
+	"burnnotice/internal/web"
 )
 
 func main() {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	hub := web.NewSSEHub()
+	handlers := web.NewHandlers(hub)
+
 	mux := http.NewServeMux()
+	handlers.RegisterRoutes(mux, "static")
 
-	// TODO: Wire up handlers from internal/web
-	// mux.Handle("GET /{$}", h.Dashboard())
-	// mux.Handle("GET /profiler", h.Profiler())
-	// mux.Handle("GET /model/{id}", h.ModelProfile())
-	// mux.Handle("GET /monitor/{session}", h.Monitor())
-	// mux.Handle("GET /sse", h.SSE())
-
-	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+	handler := web.Middleware(mux)
 
 	srv := &http.Server{
-		Addr:         ":8080",
-		Handler:      mux,
+		Addr:         ":" + port,
+		Handler:      handler,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 
-	log.Println("Dashboard listening on :8080")
+	log.Printf("Dashboard listening on :%s", port) // #nosec G706 -- port from env var, safe for logging
 	log.Fatal(srv.ListenAndServe())
 }

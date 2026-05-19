@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+
+	"burnnotice/internal/metrics"
 )
 
 // SSEHub manages real-time event broadcasting to connected clients.
@@ -25,6 +27,7 @@ func (h *SSEHub) AddClient() chan string {
 	defer h.mu.Unlock()
 	ch := make(chan string, 64)
 	h.clients[ch] = true
+	metrics.SSEConnectionsActive.Set(float64(len(h.clients)))
 	return ch
 }
 
@@ -34,6 +37,7 @@ func (h *SSEHub) RemoveClient(ch chan string) {
 	defer h.mu.Unlock()
 	delete(h.clients, ch)
 	close(ch)
+	metrics.SSEConnectionsActive.Set(float64(len(h.clients)))
 }
 
 // Broadcast sends an event to all connected clients.
@@ -44,6 +48,7 @@ func (h *SSEHub) Broadcast(event, data string) {
 	for ch := range h.clients {
 		select {
 		case ch <- msg:
+			metrics.SSEMessagesSentTotal.Inc()
 		default:
 			// Client buffer full, skip
 		}

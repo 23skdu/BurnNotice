@@ -193,4 +193,35 @@ var (
 		},
 		[]string{"method"},
 	)
+
+	HTTPRequestDuration = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "burnnotice_http_request_duration_seconds",
+			Help:    "Duration of HTTP requests",
+			Buckets: prometheus.ExponentialBuckets(0.001, 2, 12),
+		},
+		[]string{"method", "path", "status"},
+	)
+
+	SSEConnectionsActive = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "burnnotice_sse_connections_active",
+			Help: "Number of active SSE connections",
+		},
+	)
+
+	SSEMessagesSentTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "burnnotice_sse_messages_sent_total",
+			Help: "Total number of SSE messages sent to clients",
+		},
+	)
+
+	DashboardPageViewsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "burnnotice_dashboard_page_views_total",
+			Help: "Total number of dashboard page views",
+		},
+		[]string{"page"},
+	)
 )
