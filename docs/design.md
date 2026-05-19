@@ -44,7 +44,7 @@ Recent mechanistic interpretability research has established that:
 5. **Hallucination manifests as phase transitions** in latent potential energy, detectable via SAE features (HalluSAE, 2026)
 6. **Policy violations** can be detected via activation-space whitening without training (2025)
 
-Abliteration demonstrated that these directions can be permanently removed via weight orthogonalization. BurnNotice inverts this approach: instead of removing directions, we **monitor** them in real time and **steer** away from misalignment when detected.
+Abliteration demonstrated that these directions can be permanently removed via weight orthogonalization. BurnNotice inverts this approach: instead of removing directions, we **monitor** them in real time and **steer** away from misalignment when detected or terminate the agent (BurnNotice)
 
 ### 2.3 Why Go
 
