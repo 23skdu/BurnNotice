@@ -2,6 +2,7 @@ package scoring
 
 import (
 	"math"
+	"math/rand"
 	"sync"
 )
 
@@ -10,6 +11,10 @@ type Scorer struct {
 	mu         sync.RWMutex
 	directions map[string][]float64
 	scores     map[string]float64
+
+	// Robustness parameters
+	NoiseScale float64 // Sigma for Gaussian noise injection S(a + eta)
+	SkipRatio  float64 // Probability of skipping a layer per step (gradient masking)
 }
 
 // NewScorer creates a new activation scorer.
@@ -34,16 +39,34 @@ func (s *Scorer) Score(activation []float64) map[string]float64 {
 	for k, v := range s.directions {
 		dirs[k] = v
 	}
+	noiseScale := s.NoiseScale
+	skipRatio := s.SkipRatio
 	s.mu.RUnlock()
 
-	actNorm := vecNorm(activation)
+	var workingAct []float64
+	if noiseScale > 0 {
+		workingAct = make([]float64, len(activation))
+		for i, val := range activation {
+			noise := rand.NormFloat64() * noiseScale
+			workingAct[i] = val + noise
+		}
+	} else {
+		workingAct = activation
+	}
+
+	actNorm := vecNorm(workingAct)
 	if actNorm < 1e-10 {
 		return nil
 	}
 
 	scores := make(map[string]float64, len(dirs))
 	for name, dir := range dirs {
-		dot := vecDot(activation, dir)
+		if skipRatio > 0 && rand.Float64() < skipRatio {
+			scores[name] = 0.5 // Masked baseline score
+			continue
+		}
+
+		dot := vecDot(workingAct, dir)
 		dirNorm := vecNorm(dir)
 		if dirNorm < 1e-10 {
 			scores[name] = 0.0

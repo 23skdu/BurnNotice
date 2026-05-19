@@ -90,6 +90,62 @@ func (a *Aggregator) Compute() ResponseMetrics {
 	return metrics
 }
 
+// ComputeEMA calculates Exponential Moving Average (EMA) of scores.
+func (a *Aggregator) ComputeEMA(name string, alpha float64) []float64 {
+	if len(a.tokenScores) == 0 {
+		return nil
+	}
+	if alpha <= 0 || alpha > 1 {
+		alpha = 0.2 // Default EMA alpha
+	}
+
+	var emaValues []float64
+	var current float64
+	initialized := false
+
+	for _, ts := range a.tokenScores {
+		v, ok := ts.Scores[name]
+		if !ok {
+			continue
+		}
+		if !initialized {
+			current = v
+			initialized = true
+		} else {
+			current = alpha*v + (1-alpha)*current
+		}
+		emaValues = append(emaValues, current)
+	}
+
+	return emaValues
+}
+
+// DetectDriftTrajectory returns true if the score stays consistently high for consecutive tokens.
+func (a *Aggregator) DetectDriftTrajectory(name string, threshold float64, consecutiveSteps int) bool {
+	if len(a.tokenScores) < consecutiveSteps || consecutiveSteps <= 0 {
+		return false
+	}
+
+	consecutiveCount := 0
+	for _, ts := range a.tokenScores {
+		v, ok := ts.Scores[name]
+		if !ok {
+			consecutiveCount = 0
+			continue
+		}
+		if v > threshold {
+			consecutiveCount++
+			if consecutiveCount >= consecutiveSteps {
+				return true
+			}
+		} else {
+			consecutiveCount = 0
+		}
+	}
+
+	return false
+}
+
 // Reset clears all token scores.
 func (a *Aggregator) Reset() {
 	a.tokenScores = a.tokenScores[:0]

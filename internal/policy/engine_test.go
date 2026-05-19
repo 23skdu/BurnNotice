@@ -322,6 +322,28 @@ func TestEngine_Evaluate_ActionTerminate_KillSwitch(t *testing.T) {
 	}
 }
 
+func TestEngine_DynamicThresholds(t *testing.T) {
+	policies := []Policy{
+		{Name: "test", Metric: "deception_score", Threshold: 0.7, Action: ActionLog},
+	}
+	engine := NewEngine(policies)
+
+	// Test UpdateThresholds
+	engine.UpdateThresholds(map[string]float64{"deception_score": 0.85})
+	violations := engine.Evaluate(map[string]float64{"deception_score": 0.8})
+	if len(violations) != 0 {
+		t.Errorf("expected no violation with updated threshold 0.85, got %d", len(violations))
+	}
+
+	// Test AdjustThresholdsForDrift
+	engine.AdjustThresholdsForDrift(map[string]float64{"deception_score": -0.1})
+	violations2 := engine.Evaluate(map[string]float64{"deception_score": 0.8})
+	if len(violations2) != 1 {
+		t.Errorf("expected 1 violation after threshold drift adjustment, got %d", len(violations2))
+	}
+}
+
+
 func writeTempFile(t *testing.T, content string) string {
 	t.Helper()
 	tmp := filepath.Join(t.TempDir(), "policies.yaml")

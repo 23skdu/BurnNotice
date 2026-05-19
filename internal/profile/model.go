@@ -9,11 +9,12 @@ import (
 
 // ModelProfile stores extracted behavioral directions for a specific model.
 type ModelProfile struct {
-	ModelID         string
-	Directions      map[string]map[int][]float64 // direction_name -> layer_idx -> vector
-	LayerScores     map[string][]float64         // direction_name -> layer scores
-	TruthNeurons    []int
-	MonitoredLayers []int
+	ModelID           string
+	Directions        map[string]map[int][]float64 // direction_name -> layer_idx -> vector
+	LayerScores       map[string][]float64         // direction_name -> layer scores
+	TruthNeurons      []int
+	MonitoredLayers   []int
+	OptimalThresholds map[string]float64           // metric -> threshold
 }
 
 // Save persists the profile to disk using gob serialization.

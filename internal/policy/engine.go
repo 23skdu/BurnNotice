@@ -106,3 +106,25 @@ func (e *Engine) UpdatePolicies(policies []Policy) {
 	defer e.mu.Unlock()
 	e.policies = policies
 }
+
+// UpdateThresholds dynamically updates policy thresholds.
+func (e *Engine) UpdateThresholds(thresholds map[string]float64) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for i, p := range e.policies {
+		if t, ok := thresholds[p.Metric]; ok {
+			e.policies[i].Threshold = t
+		}
+	}
+}
+
+// AdjustThresholdsForDrift offsets policy thresholds to counter activation drifts.
+func (e *Engine) AdjustThresholdsForDrift(drifts map[string]float64) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for i, p := range e.policies {
+		if drift, ok := drifts[p.Metric]; ok {
+			e.policies[i].Threshold += drift
+		}
+	}
+}
