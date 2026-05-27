@@ -1,6 +1,9 @@
 package extract
 
-import "gonum.org/v1/gonum/mat"
+import (
+	burnmath "burnnotice/internal/math"
+	"gonum.org/v1/gonum/mat"
+)
 
 // ExtractPCA computes the top-k principal directions from activation differences.
 // Uses thin SVD on the difference matrix (positive activations minus negative mean).
@@ -8,6 +11,9 @@ func ExtractPCA(positive, negative [][]float64, k int) (directions [][]float64, 
 	if len(positive) == 0 || len(negative) == 0 {
 		return nil, nil
 	}
+
+	burnmath.WinsorizeMatrixInPlace(positive, 0.005, 0.995)
+	burnmath.WinsorizeMatrixInPlace(negative, 0.005, 0.995)
 
 	negMean := columnMean(negative)
 

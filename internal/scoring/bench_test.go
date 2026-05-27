@@ -34,8 +34,7 @@ func BenchmarkScorer_SubspaceScore(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		s.Score(activation)
-		_ = basis
+		s.ScoreSubspace(activation, basis)
 	}
 }
 

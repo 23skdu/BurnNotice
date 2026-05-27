@@ -1,6 +1,10 @@
 package extract
 
-import "math"
+import (
+	"math"
+
+	burnmath "burnnotice/internal/math"
+)
 
 // ExtractDIM computes the Difference-in-Means direction between positive and negative activation sets.
 // Returns a normalized direction vector.
@@ -8,6 +12,9 @@ func ExtractDIM(positive, negative [][]float64) []float64 {
 	if len(positive) == 0 || len(negative) == 0 {
 		return nil
 	}
+
+	burnmath.WinsorizeMatrixInPlace(positive, 0.005, 0.995)
+	burnmath.WinsorizeMatrixInPlace(negative, 0.005, 0.995)
 
 	posMean := columnMean(positive)
 	negMean := columnMean(negative)

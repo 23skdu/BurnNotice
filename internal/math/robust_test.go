@@ -84,11 +84,11 @@ func TestClampToFloat64(t *testing.T) {
 	if result[1] != 0 {
 		t.Errorf("NaN clamped to %f, want 0", result[1])
 	}
-	if result[2] != math.MaxFloat64 {
-		t.Errorf("+Inf clamped to %f, want MaxFloat64", result[2])
+	if result[2] != maxFloat64 {
+		t.Errorf("+Inf clamped to %f, want maxFloat64", result[2])
 	}
-	if result[3] != -math.MaxFloat64 {
-		t.Errorf("-Inf clamped to %f, want -MaxFloat64", result[3])
+	if result[3] != -maxFloat64 {
+		t.Errorf("-Inf clamped to %f, want -maxFloat64", result[3])
 	}
 	if result[4] != -2 {
 		t.Errorf("result[4] = %f, want -2", result[4])

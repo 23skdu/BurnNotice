@@ -139,6 +139,64 @@ func TestClient_LocalFallbackFlow(t *testing.T) {
 	}
 }
 
+func TestNewClient_SQLiteBackend(t *testing.T) {
+	c := NewClient(Config{Dim: 128, Backend: "sqlite"})
+	if c.db == nil {
+		t.Fatal("expected sqlite backend to be initialized")
+	}
+	if c.IsFallbackActive() {
+		t.Error("expected sqlite backend without fallback")
+	}
+}
+
+func TestIngest_Query_Search_SQLite(t *testing.T) {
+	c := NewClient(Config{Dim: 3, Backend: "sqlite"})
+	defer c.Close()
+
+	ctx := context.Background()
+	acts := [][]float32{
+		{1.0, 0.0, 0.0},
+		{0.0, 1.0, 0.0},
+		{0.0, 0.0, 1.0},
+	}
+	ids := []uint64{10, 20, 30}
+
+	err := c.Ingest(ctx, acts, ids)
+	if err != nil {
+		t.Fatalf("Ingest failed: %v", err)
+	}
+
+	// Query by IDs
+	found, err := c.Query(ctx, []uint64{20, 10})
+	if err != nil {
+		t.Fatalf("Query failed: %v", err)
+	}
+	if len(found) != 2 {
+		t.Fatalf("got %d vectors, want 2", len(found))
+	}
+	if found[0][0] != 0 || found[0][1] != 1 || found[0][2] != 0 {
+		t.Errorf("unexpected first vector: %v", found[0])
+	}
+	if found[1][0] != 1 || found[1][1] != 0 || found[1][2] != 0 {
+		t.Errorf("unexpected second vector: %v", found[1])
+	}
+
+	// Search nearest to (0, 0.99, 0.01) → closest is (0,1,0) id=20
+	matchedIDs, dists, err := c.Search(ctx, []float32{0.0, 0.99, 0.01}, 2)
+	if err != nil {
+		t.Fatalf("Search failed: %v", err)
+	}
+	if len(matchedIDs) != 2 {
+		t.Fatalf("got %d matches, want 2", len(matchedIDs))
+	}
+	if dists[0] >= dists[1] {
+		t.Errorf("expected closer match first: %f >= %f", dists[0], dists[1])
+	}
+	if matchedIDs[0] != 20 {
+		t.Errorf("got closest ID %d, want 20", matchedIDs[0])
+	}
+}
+
 func TestClient_ZeroDowntimeHotSwap(t *testing.T) {
 	c := NewClient(Config{
 		Addr:   "localhost:9099",

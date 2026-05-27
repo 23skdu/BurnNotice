@@ -20,4 +20,4 @@ func isInf(f float64) bool {
 	return math.IsInf(f, 0)
 }
 
-const maxFloat64 = math.MaxFloat64
+const maxFloat64 = 1e10

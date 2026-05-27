@@ -2,6 +2,8 @@ package longbow
 
 import (
 	"context"
+	"database/sql"
+	"encoding/binary"
 	"fmt"
 	"math"
 	"sort"
@@ -14,9 +16,11 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/flight"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	_ "modernc.org/sqlite"
 )
 
-// Client wraps Longbow's Arrow Flight client for activation vector storage and retrieval.
+// Client wraps a backend for activation vector storage and retrieval.
+// Supports Longbow (Arrow Flight) and SQLite backends.
 type Client struct {
 	addr       string
 	dim        int
@@ -25,25 +29,30 @@ type Client struct {
 	efConstr   int
 
 	sc *longbowclient.SmartClient
+	db *sql.DB
 
 	// Standalone Fallback Math Backend
-	fallbackMode int32 // 0 = standard Longbow, 1 = local fallback active
+	fallbackMode int32 // 0 = standard operation, 1 = local fallback active
 	fallbackMu   sync.RWMutex
 	localVectors [][]float32
 	localIDs     []uint64
 }
 
-// Config holds Longbow client configuration.
+// Config holds client configuration.
 type Config struct {
 	Addr     string
 	Dim      int
 	Metric   string
 	M        int
 	EFConstr int
+	Backend  string // "longbow" (default) or "sqlite"
 }
 
-// NewClient creates a new Longbow client for activation storage.
+// NewClient creates a new client for activation storage.
 func NewClient(cfg Config) *Client {
+	if cfg.Backend == "" {
+		cfg.Backend = "longbow"
+	}
 	if cfg.Metric == "" {
 		cfg.Metric = "cosine"
 	}
@@ -54,24 +63,70 @@ func NewClient(cfg Config) *Client {
 		cfg.EFConstr = 100
 	}
 
-	sc, err := longbowclient.NewSmartClient(cfg.Addr)
-	
 	c := &Client{
 		addr:         cfg.Addr,
 		dim:          cfg.Dim,
 		metric:       cfg.Metric,
 		m:            cfg.M,
 		efConstr:     cfg.EFConstr,
-		sc:           sc,
 		localVectors: make([][]float32, 0),
 		localIDs:     make([]uint64, 0),
 	}
 
-	if err != nil {
-		c.SetFallbackMode(true)
+	switch cfg.Backend {
+	case "sqlite":
+		db, err := initSQLite(cfg.Addr)
+		if err != nil {
+			c.SetFallbackMode(true)
+		} else {
+			c.db = db
+		}
+	default:
+		sc, err := longbowclient.NewSmartClient(cfg.Addr)
+		if err != nil {
+			c.SetFallbackMode(true)
+		} else {
+			c.sc = sc
+		}
 	}
 
 	return c
+}
+
+func initSQLite(dsn string) (*sql.DB, error) {
+	if dsn == "" {
+		dsn = "file:vectors.db?_journal_mode=WAL"
+	}
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open sqlite: %w", err)
+	}
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS vectors (
+		id INTEGER PRIMARY KEY,
+		vector BLOB NOT NULL,
+		dim INTEGER NOT NULL
+	)`)
+	if err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("create vectors table: %w", err)
+	}
+	return db, nil
+}
+
+func serializeFloats(v []float32) []byte {
+	b := make([]byte, len(v)*4)
+	for i, f := range v {
+		binary.LittleEndian.PutUint32(b[i*4:], math.Float32bits(f))
+	}
+	return b
+}
+
+func deserializeFloats(b []byte) []float32 {
+	v := make([]float32, len(b)/4)
+	for i := range v {
+		v[i] = math.Float32frombits(binary.LittleEndian.Uint32(b[i*4:]))
+	}
+	return v
 }
 
 func (c *Client) SetFallbackMode(active bool) {
@@ -92,6 +147,10 @@ func (c *Client) Ingest(ctx context.Context, activations [][]float32, ids []uint
 	}
 	if len(activations) == 0 {
 		return nil
+	}
+
+	if c.db != nil {
+		return c.ingestSQLite(ctx, activations, ids)
 	}
 
 	if c.IsFallbackActive() {
@@ -156,9 +215,35 @@ func (c *Client) Ingest(ctx context.Context, activations [][]float32, ids []uint
 	return nil
 }
 
+func (c *Client) ingestSQLite(ctx context.Context, activations [][]float32, ids []uint64) error {
+	tx, err := c.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.PrepareContext(ctx, `INSERT OR REPLACE INTO vectors (id, vector, dim) VALUES (?, ?, ?)`)
+	if err != nil {
+		return fmt.Errorf("prepare: %w", err)
+	}
+	defer stmt.Close()
+
+	for i, act := range activations {
+		if _, err := stmt.ExecContext(ctx, ids[i], serializeFloats(act), len(act)); err != nil {
+			return fmt.Errorf("insert id %d: %w", ids[i], err)
+		}
+	}
+
+	return tx.Commit()
+}
+
 func (c *Client) Query(ctx context.Context, ids []uint64) ([][]float32, error) {
 	if len(ids) == 0 {
 		return nil, nil
+	}
+
+	if c.db != nil {
+		return c.querySQLite(ctx, ids)
 	}
 
 	if c.IsFallbackActive() {
@@ -183,9 +268,42 @@ func (c *Client) Query(ctx context.Context, ids []uint64) ([][]float32, error) {
 	return nil, fmt.Errorf("not implemented for flight")
 }
 
+func (c *Client) querySQLite(ctx context.Context, ids []uint64) ([][]float32, error) {
+	rows, err := c.db.QueryContext(ctx, `SELECT id, vector FROM vectors WHERE id IN (`+placeholders(len(ids))+`)`, toAnySlice(ids)...) // #nosec G202 — placeholders generate only ?, characters, values are parameterized
+	if err != nil {
+		return nil, fmt.Errorf("query: %w", err)
+	}
+	defer rows.Close()
+
+	idMap := make(map[uint64][]float32, len(ids))
+	for rows.Next() {
+		var rowID uint64
+		var blob []byte
+		if err := rows.Scan(&rowID, &blob); err != nil {
+			return nil, fmt.Errorf("scan: %w", err)
+		}
+		idMap[rowID] = deserializeFloats(blob)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	found := make([][]float32, 0, len(ids))
+	for _, id := range ids {
+		if v, ok := idMap[id]; ok {
+			found = append(found, v)
+		}
+	}
+	return found, nil
+}
+
 func (c *Client) Search(ctx context.Context, query []float32, k int) ([]uint64, []float32, error) {
 	if len(query) != c.dim {
 		return nil, nil, fmt.Errorf("query dimension %d != store dimension %d", len(query), c.dim)
+	}
+
+	if c.db != nil {
+		return c.searchSQLite(ctx, query, k)
 	}
 
 	if c.IsFallbackActive() {
@@ -236,10 +354,87 @@ func (c *Client) Search(ctx context.Context, query []float32, k int) ([]uint64, 
 }
 
 func (c *Client) Close() error {
+	if c.db != nil {
+		return c.db.Close()
+	}
 	if c.sc != nil {
 		return c.sc.Close()
 	}
 	return nil
+}
+
+func (c *Client) searchSQLite(ctx context.Context, query []float32, k int) ([]uint64, []float32, error) {
+	rows, err := c.db.QueryContext(ctx, `SELECT id, vector FROM vectors`)
+	if err != nil {
+		return nil, nil, fmt.Errorf("query: %w", err)
+	}
+	defer rows.Close()
+
+	type neighbor struct {
+		id   uint64
+		dist float32
+	}
+
+	var list []neighbor
+	for rows.Next() {
+		var rowID uint64
+		var blob []byte
+		if err := rows.Scan(&rowID, &blob); err != nil {
+			return nil, nil, fmt.Errorf("scan: %w", err)
+		}
+		vec := deserializeFloats(blob)
+		sim := cosineSimilarity32(query, vec)
+		var dist float32
+		if c.metric == "cosine" {
+			dist = 1.0 - sim
+		} else {
+			dist = euclideanDistance32(query, vec)
+		}
+		list = append(list, neighbor{id: rowID, dist: dist})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+
+	sort.Slice(list, func(i, j int) bool {
+		return list[i].dist < list[j].dist
+	})
+
+	limit := k
+	if len(list) < limit {
+		limit = len(list)
+	}
+
+	retIDs := make([]uint64, limit)
+	retDists := make([]float32, limit)
+	for i := 0; i < limit; i++ {
+		retIDs[i] = list[i].id
+		retDists[i] = list[i].dist
+	}
+
+	return retIDs, retDists, nil
+}
+
+func placeholders(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	b := make([]byte, 0, n*2-1)
+	for i := 0; i < n; i++ {
+		if i > 0 {
+			b = append(b, ',')
+		}
+		b = append(b, '?')
+	}
+	return string(b)
+}
+
+func toAnySlice[T any](s []T) []any {
+	r := make([]any, len(s))
+	for i, v := range s {
+		r[i] = v
+	}
+	return r
 }
 
 func cosineSimilarity32(a, b []float32) float32 {

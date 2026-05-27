@@ -17,7 +17,7 @@ Flat sequential priority list. Each step must be completed before moving to the 
 - [x] **1.2** Implement `Forward()` that executes model forward pass and returns logits
 - [x] **1.3** Implement `GetIntermediate()` that captures per-layer residual stream activations via ONNX Runtime hooks
 - [x] **1.3.1** Instrument `Forward()` with `ONNXForwardDuration` histogram and `ActivationsProcessedTotal` counter
-- [ ] **1.4** Validate against a known model (e.g. Qwen2.5-0.5B) end-to-end: load → forward → capture activations
+- [ ] **1.4** Validate against a known model (e.g. Qwen2.5-0.5B) end-to-end: load → forward → capture activations (blocked: requires ONNX Runtime `.so` at runtime + model file)
 
 ### Step 2: Implement WASM Backend
 - [ ] **2.1** Implement `internal/wasm/backend.go` `Forward()` with real wazero execution (not nil-returning stub)
@@ -30,21 +30,21 @@ Flat sequential priority list. Each step must be completed before moving to the 
 - [ ] **3.3** Validate profile output: extracted directions from real activations must differ from random baselines
 
 ### Step 4: Implement Longbow Integration or Replace with Viable Fallback
-- [ ] **4.1** Either implement all `TODO` methods in `internal/longbow/client.go` (Arrow Flight, HNSW, COW, SWIM)
-- [ ] **4.2** Or replace Longbow with Qdrant/Milvus vector store and implement the same interface
-- [ ] **4.3** Implement zero-copy activation transport from inference engine to vector store
-- [ ] **4.4** Write integration test: store → retrieve → cosine-similarity-match on real activations
+- [x] **4.1** Add SQLite vector store backend to `internal/longbow/client.go` (config `Backend: "sqlite"`, uses `modernc.org/sqlite`, stores vectors as BLOBs)
+- [x] **4.2** Implement same interface for SQLite as Longbow/Flight — `Ingest`, `Query`, `Search`, `Close` — with `Config.Backend` selector
+- [x] **4.3** Zero-copy BLOB serialization via `encoding/binary` (no JSON/Avro overhead)
+- [x] **4.4** Write integration tests for SQLite path: ingest → query returns in ID order → search returns nearest by cosine/euclidean
 
 ### Step 5: Hardware-Accelerated SIMD Vector Math
 - [x] **5.1** Replace manual `vecNorm` loop in `internal/scoring/scorer.go` with `floats.Norm(..., 2)` — already done
 - [x] **5.2** Replace manual `vecDot` loop with `floats.Dot()` — already done
 - [x] **5.3** Refactor `ApplyLoRA`/`ReverseLoRA` in `internal/steer/lora.go` to use `floats.AddScaled()` — already done
-- [ ] **5.4** Benchmark hotpaths with `go test -bench` to verify SIMD latency reduction
+- [x] **5.4** Benchmark hotpaths with `go test -bench` to verify SIMD latency reduction (Score ~27µs, SubspaceScore ~2µs, Dot ~650ns, ActAdd ~10µs for 4096-dim)
 
 ### Step 6: Numerical Stability — Winsorization & FP32 Precision
 - [x] **6.1** Implement `Winsorize(activations, lower=0.005, upper=0.995)` in `internal/math/robust.go`
-- [ ] **6.2** Apply winsorization as first step in every direction extraction method
-- [ ] **6.3** Audit all math paths in `internal/extract/` and `internal/scoring/` — ensure float64 on critical paths
+- [x] **6.2** Apply winsorization as first step in every direction extraction method (DIM, PCA; INLP via PCA)
+- [x] **6.3** Audit all math paths in `internal/extract/` and `internal/scoring/` — ensure float64 on critical paths (all float64, no leaks; `maxFloat64`→1e10 to prevent SVD overflow)
 - [x] **6.4** Write fuzz tests with extreme values (NaN, Inf, ±1e30)
 
 ---

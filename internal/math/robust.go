@@ -91,6 +91,26 @@ func WinsorizeInPlace(activations []float64, lower, upper float64) {
 	}
 }
 
+// WinsorizeMatrixInPlace winsorizes each column of a matrix independently.
+// data is a row-major matrix where each row is a sample and each column is a feature.
+func WinsorizeMatrixInPlace(data [][]float64, lower, upper float64) {
+	if len(data) == 0 {
+		return
+	}
+	cols := len(data[0])
+	rows := len(data)
+	for c := 0; c < cols; c++ {
+		col := make([]float64, rows)
+		for r := 0; r < rows; r++ {
+			col[r] = data[r][c]
+		}
+		WinsorizeInPlace(col, lower, upper)
+		for r := 0; r < rows; r++ {
+			data[r][c] = col[r]
+		}
+	}
+}
+
 // IsStable returns false if any value is NaN or Inf.
 func IsStable(v []float64) bool {
 	for _, x := range v {
