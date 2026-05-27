@@ -13,9 +13,10 @@ Flat sequential priority list. Each step must be completed before moving to the 
 ## Tier 1 — Infrastructure Foundation (Prerequisites for All Downstream Work)
 
 ### Step 1: Implement ONNX Inference Engine
-- [ ] **1.1** Implement `internal/engine/onnx.go` `Load()` with real ONNX Runtime model loading (not file-existence stub)
-- [ ] **1.2** Implement `Forward()` that executes model forward pass and returns logits
-- [ ] **1.3** Implement `GetIntermediate()` that captures per-layer residual stream activations via ONNX Runtime hooks
+- [x] **1.1** Implement `internal/engine/onnx.go` `Load()` with real ONNX Runtime model loading (not file-existence stub)
+- [x] **1.2** Implement `Forward()` that executes model forward pass and returns logits
+- [x] **1.3** Implement `GetIntermediate()` that captures per-layer residual stream activations via ONNX Runtime hooks
+- [x] **1.3.1** Instrument `Forward()` with `ONNXForwardDuration` histogram and `ActivationsProcessedTotal` counter
 - [ ] **1.4** Validate against a known model (e.g. Qwen2.5-0.5B) end-to-end: load → forward → capture activations
 
 ### Step 2: Implement WASM Backend
@@ -24,8 +25,8 @@ Flat sequential priority list. Each step must be completed before moving to the 
 - [ ] **2.3** Write integration test running the same input through ONNX and WASM backends, verifying identical outputs
 
 ### Step 3: Replace Simulated Activations with Real Model Inference
-- [ ] **3.1** Remove `simulateActivation()` ASCII-byte path in `cmd/burnnotice/main.go:159-168`
-- [ ] **3.2** Wire the profile CLI to load a real model via ONNX/WASM engine and collect actual activations
+- [x] **3.1** Remove `simulateActivation()` ASCII-byte path in `cmd/burnnotice/main.go:159-168` — CLI now uses internal engine via `LoadONNXModel`
+- [x] **3.2** Wire the profile CLI to load a real model via ONNX/WASM engine and collect actual activations
 - [ ] **3.3** Validate profile output: extracted directions from real activations must differ from random baselines
 
 ### Step 4: Implement Longbow Integration or Replace with Viable Fallback
@@ -35,16 +36,16 @@ Flat sequential priority list. Each step must be completed before moving to the 
 - [ ] **4.4** Write integration test: store → retrieve → cosine-similarity-match on real activations
 
 ### Step 5: Hardware-Accelerated SIMD Vector Math
-- [ ] **5.1** Replace manual `vecNorm` loop in `internal/scoring/scorer.go` with `floats.Norm(..., 2)`
-- [ ] **5.2** Replace manual `vecDot` loop with `floats.Dot()`
-- [ ] **5.3** Refactor `ApplyLoRA`/`ReverseLoRA` in `internal/steer/lora.go` to use `floats.AddScaled()`
+- [x] **5.1** Replace manual `vecNorm` loop in `internal/scoring/scorer.go` with `floats.Norm(..., 2)` — already done
+- [x] **5.2** Replace manual `vecDot` loop with `floats.Dot()` — already done
+- [x] **5.3** Refactor `ApplyLoRA`/`ReverseLoRA` in `internal/steer/lora.go` to use `floats.AddScaled()` — already done
 - [ ] **5.4** Benchmark hotpaths with `go test -bench` to verify SIMD latency reduction
 
 ### Step 6: Numerical Stability — Winsorization & FP32 Precision
-- [ ] **6.1** Implement `Winsorize(activations, lower=0.005, upper=0.995)` in `internal/math/robust.go`
+- [x] **6.1** Implement `Winsorize(activations, lower=0.005, upper=0.995)` in `internal/math/robust.go`
 - [ ] **6.2** Apply winsorization as first step in every direction extraction method
 - [ ] **6.3** Audit all math paths in `internal/extract/` and `internal/scoring/` — ensure float64 on critical paths
-- [ ] **6.4** Write fuzz tests with extreme values (NaN, Inf, ±1e30)
+- [x] **6.4** Write fuzz tests with extreme values (NaN, Inf, ±1e30)
 
 ---
 
@@ -219,6 +220,7 @@ Flat sequential priority list. Each step must be completed before moving to the 
 ## Tier 6 — Community & Telemetry
 
 ### Step 31: Anonymous Telemetry Infrastructure
+- [x] **31.0** Prometheus `/metrics` endpoint added via `internal/metrics/handler.go` — serves 50+ metric instruments, scrapable by OTel Collector
 - [ ] **31.1** Design telemetry schema: model architecture, model size, steering method, refusal rate, KL divergence, hardware, timestamp. Never prompts, outputs, IPs, or identity
 - [ ] **31.2** Implement submission in `internal/telemetry/reporter.go` (HTTPS POST or local save + PR)
 - [ ] **31.3** Build `burnnotice aggregate` CLI command: summarize contributed results

@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"time"
 
+	"burnnotice/internal/metrics"
 	"github.com/yalue/onnxruntime_go"
 )
 
@@ -92,6 +94,11 @@ func (e *ONNXEngine) Forward(input []int64, shape []int64) ([]float32, error) {
 		return nil, fmt.Errorf("model not loaded")
 	}
 
+	start := time.Now()
+	defer func() {
+		metrics.ONNXForwardDuration.WithLabelValues(e.modelPath).Observe(time.Since(start).Seconds())
+	}()
+
 	inputTensor, err := onnxruntime_go.NewTensor(shape, input)
 	if err != nil {
 		return nil, fmt.Errorf("create input tensor: %w", err)
@@ -122,6 +129,8 @@ func (e *ONNXEngine) Forward(input []int64, shape []int64) ([]float32, error) {
 		return nil, fmt.Errorf("run session: %w", err)
 	}
 
+	metrics.ActivationsProcessedTotal.WithLabelValues(e.modelPath, "forward").Add(float64(shape[0]))
+
 	return outputData, nil
 }
 
@@ -140,6 +149,8 @@ func (e *ONNXEngine) GetIntermediate(layerName string, input []int64, shape []in
 		return nil, fmt.Errorf("create input tensor: %w", err)
 	}
 	defer inputTensor.Destroy()
+
+	metrics.ActivationsProcessedTotal.WithLabelValues(e.modelPath, layerName).Add(float64(shape[0]))
 
 	seqLen := int64(1)
 	if len(shape) > 1 {
