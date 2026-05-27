@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
+	"burnnotice/internal/engine"
 	"burnnotice/internal/converter"
 	"burnnotice/internal/datasets"
 	"burnnotice/internal/downloader"
@@ -15,6 +17,8 @@ import (
 
 	"github.com/spf13/cobra"
 )
+
+const recommendedModel = "Qwen/Qwen2.5-0.5B"
 
 var rootCmd = &cobra.Command{
 	Use:   "burnnotice",
@@ -28,7 +32,11 @@ var downloadCmd = &cobra.Command{
 	Use:   "download [model-id]",
 	Short: "Download a model from HuggingFace",
 	Long: `Download model files from HuggingFace Hub for ONNX conversion.
-Supports authenticated access with --token flag.`,
+Supports authenticated access with --token flag or HF_TOKEN env var.
+
+Recommended model for testing: ` + "`" + recommendedModel + "`" + `
+  burnnotice download ` + recommendedModel + `
+  burnnotice download ` + recommendedModel + ` --include "*.safetensors;*.json"`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		modelID := args[0]
@@ -36,11 +44,20 @@ Supports authenticated access with --token flag.`,
 		token, _ := cmd.Flags().GetString("token")
 		include, _ := cmd.Flags().GetString("include")
 
+		if token == "" {
+			token = os.Getenv("HF_TOKEN")
+		}
+
 		dl := downloader.NewHuggingFaceDownloader(token)
 
 		var patterns []string
 		if include != "" {
-			patterns = append(patterns, include)
+			for _, p := range strings.Split(include, ";") {
+				p = strings.TrimSpace(p)
+				if p != "" {
+					patterns = append(patterns, p)
+				}
+			}
 		}
 
 		fmt.Printf("Downloading %s to %s...\n", modelID, outputDir)
@@ -57,7 +74,11 @@ var convertCmd = &cobra.Command{
 	Use:   "convert [model-dir]",
 	Short: "Convert a model to ONNX format",
 	Long: `Convert HuggingFace model files to ONNX format for inference.
-Supports safetensors and PyTorch bin formats.`,
+Supports safetensors and PyTorch bin formats.
+
+For a runnable ONNX model (with compute graph), use optimum-cli:
+  pip install optimum
+  optimum-cli export onnx --model ` + "`" + recommendedModel + "`" + ` ./onnx/`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		modelDir := args[0]
@@ -168,10 +189,87 @@ behavioral directions (refusal, deception, truth, conflict, policy).`,
 	},
 }
 
+var recommendCmd = &cobra.Command{
+	Use:   "recommend",
+	Short: "Print recommended model and export instructions",
+	Long: `Prints the recommended model for testing BurnNotice and step-by-step
+instructions to export it to ONNX format using optimum-cli.`,
+	Args: cobra.NoArgs,
+	RunE: func(_ *cobra.Command, _ []string) error {
+		fmt.Printf(`Recommended Model: %s
+
+This is the smallest model in the Qwen2.5 family (0.5B parameters).
+It is suitable for:
+  • Quick ONNX export testing
+  • BurnNotice profiling validation
+  • CI/CD pipeline integration
+
+Step-by-step export:
+  1. Install optimum + torch:
+     pip install optimum[onnxruntime] torch --quiet
+
+  2. Export to ONNX:
+     optimum-cli export onnx --model %s ./onnx/qwen2.5-0.5b
+
+  3. Profile with BurnNotice:
+     burnnotice profile ./onnx/qwen2.5-0.5b/model.onnx --dataset ./data/deception_pairs.json
+
+Requirements:
+  • Python 3.10+
+  • 2 GB free disk space
+  • 4 GB RAM
+`, recommendedModel, recommendedModel)
+		return nil
+	},
+}
+
+var validateCmd = &cobra.Command{
+	Use:   "validate [onnx-model]",
+	Short: "Validate an ONNX model loads and runs inference",
+	Long: `Loads an ONNX model and runs a forward pass with synthetic token
+input to verify the engine functions correctly end-to-end.`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		modelPath := args[0]
+		hiddenDim, _ := cmd.Flags().GetInt("hidden-dim")
+
+		cfg := engine.ModelConfig{
+			HiddenDim:  hiddenDim,
+			InputNames: []string{"input_ids"},
+			OutputNames: []string{"hidden_states"},
+		}
+		eng := engine.NewONNXEngine(modelPath, cfg)
+		if err := eng.Load(); err != nil {
+			return fmt.Errorf("engine load failed: %w", err)
+		}
+		defer eng.Close()
+
+		fmt.Printf("Engine loaded: %s\n", modelPath)
+		fmt.Printf("Output count: %d\n", eng.NumOutputs())
+
+		// Run forward pass with synthetic tokens
+		syntheticTokens := []int64{1, 2, 3, 4, 5}
+		output, err := eng.Forward(syntheticTokens, []int64{1, 5})
+		if err != nil {
+			return fmt.Errorf("forward pass failed: %w", err)
+		}
+
+		expectedSize := 1 * 5 * hiddenDim
+		if len(output) != expectedSize {
+			return fmt.Errorf("output size = %d, want %d", len(output), expectedSize)
+		}
+
+		fmt.Printf("Forward pass OK: output tensor %d elements [%d x %d x %d]\n",
+			len(output), 1, 5, hiddenDim)
+		fmt.Println("Validation PASSED")
+		return nil
+	},
+}
+
 func init() {
-	downloadCmd.Flags().StringP("output", "o", "./models", "Output directory")
-	downloadCmd.Flags().StringP("token", "t", "", "HuggingFace API token")
-	downloadCmd.Flags().String("include", "*.safetensors;*.json", "File pattern filter")
+	downloadCmd.Flags().StringP("output", "o", "./models", "Output directory for downloaded files")
+	downloadCmd.Flags().StringP("token", "t", "", "HuggingFace API token (or $HF_TOKEN)")
+	downloadCmd.Flags().String("include", "*.safetensors;*.json", "Semicolon-separated file extensions to download")
 
 	convertCmd.Flags().StringP("output", "o", "./onnx", "ONNX output directory")
 	convertCmd.Flags().Int("opset", 17, "ONNX opset version")
@@ -181,7 +279,9 @@ func init() {
 	profileCmd.Flags().String("dataset", "", "Path to profiling dataset (JSON/JSONL)")
 	profileCmd.Flags().IntSlice("layers", []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31}, "Specific layers to profile (default: all)")
 
-	rootCmd.AddCommand(downloadCmd, convertCmd, profileCmd)
+	validateCmd.Flags().Int("hidden-dim", 4096, "Model hidden dimension")
+
+	rootCmd.AddCommand(downloadCmd, convertCmd, profileCmd, recommendCmd, validateCmd)
 }
 
 func main() {

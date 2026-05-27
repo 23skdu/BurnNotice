@@ -231,6 +231,7 @@ bin/
 profiles/
 *_templ.go
 /burnnotice
+opencode.json
 e2e/node_modules/
 e2e/test-results/
 e2e/playwright-report/

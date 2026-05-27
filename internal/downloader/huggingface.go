@@ -150,7 +150,12 @@ func shouldDownload(path string, patterns []string) bool {
 	}
 	ext := filepath.Ext(path)
 	for _, p := range patterns {
-		if ext == p {
+		match := p
+		// Support both glob ("*.safetensors") and extension (".safetensors") formats
+		if len(match) > 0 && match[0] == '*' {
+			match = match[1:]
+		}
+		if ext == match {
 			return true
 		}
 	}

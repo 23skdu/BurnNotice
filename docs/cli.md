@@ -1,31 +1,35 @@
 # BurnNotice CLI Reference
 
-> **Version**: 0.1.0
-> **Updated**: 2026-05-18
+> **Version**: 0.2.0
+> **Updated**: 2026-05-27
 
 ## Overview
 
-The `burnnotice` CLI tool provides three primary commands for managing the model lifecycle:
+The `burnnotice` CLI tool provides five commands for managing the model lifecycle:
 
-1. **`download`** — Fetch models from HuggingFace Hub
-2. **`convert`** — Convert HuggingFace models to ONNX format
-3. **`profile`** — Generate behavioral direction profiles for deception detection
+| Command       | Description |
+|---------------|-------------|
+| **`download`** | Fetch models from HuggingFace Hub |
+| **`convert`**  | Convert HuggingFace models to ONNX format |
+| **`profile`**  | Generate behavioral direction profiles for deception detection |
+| **`validate`** | Load an ONNX model and run a forward pass to verify the engine |
+| **`recommend`** | Print the recommended test model and export instructions |
 
 ## Installation
 
 ```bash
 # Build from source
-git clone https://github.com/anomalyco/BurnNotice.git
+git clone https://github.com/23skdu/BurnNotice.git
 cd BurnNotice
-make build
+go build -o burnnotice ./cmd/burnnotice/
 
 # Binary available at
-./bin/burnnotice
+./burnnotice
 ```
 
 ## Global Usage
 
-```
+```text
 burnnotice [command] [flags]
 ```
 
@@ -44,62 +48,60 @@ burnnotice [command] [flags]
 Download model files from HuggingFace Hub for ONNX conversion.
 
 **Usage:**
-```
+
+```text
 burnnotice download [model-id] [flags]
 ```
 
 **Arguments:**
-| Argument | Required | Description |
-|----------|----------|-------------|
-| `model-id` | Yes | HuggingFace model repository ID (e.g., `meta-llama/Llama-3.1-8B`) |
+
+| Argument   | Required | Description |
+|------------|----------|-------------|
+| `model-id` | Yes      | HuggingFace model repository ID (e.g., `Qwen/Qwen2.5-0.5B`) |
 
 **Flags:**
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--output` | `-o` | `./models` | Output directory for downloaded files |
-| `--token` | `-t` | *(empty)* | HuggingFace API token for authenticated/gated model access |
-| `--include` | | `*.safetensors;*.json` | File pattern filter (semicolon-separated extensions) |
+| `--token` | `-t` | *(empty)* | HuggingFace API token (or `$HF_TOKEN`) |
+| `--include` | | `*.safetensors;*.json` | Semicolon-separated file extensions to download |
 
 **Examples:**
 
 ```bash
-# Download a public model
-burnnotice download meta-llama/Llama-3.1-8B
+# Download recommended test model
+burnnotice download Qwen/Qwen2.5-0.5B
 
 # Download to a custom directory
-burnnotice download mistralai/Mistral-7B-v0.3 -o /data/models/mistral
+burnnotice download Qwen/Qwen2.5-0.5B -o /data/models/qwen
 
 # Download with authentication (for gated models)
-burnnotice download meta-llama/Llama-3.1-70B -t hf_abc123def456
+burnnotice download meta-llama/Llama-3.1-8B -t hf_abc123def456
 
 # Download only safetensors files
 burnnotice download Qwen/Qwen2.5-7B --include "*.safetensors"
 
 # Download safetensors and config files
-burnnotice download google/gemma-2-9b --include "*.safetensors;*.json"
+burnnotice download Qwen/Qwen2.5-7B --include "*.safetensors;*.json"
 ```
-
-**Downloaded File Types:**
-
-By default, the downloader fetches files with these extensions:
-- `.safetensors` — Model weights (safe tensor format)
-- `.bin` — Model weights (PyTorch format)
-- `.json` — Configuration files (config.json, tokenizer.json, etc.)
-- `.model` — Tokenizer model files
-
-Files like `README.md`, `.gitattributes`, and other non-model files are excluded by default.
 
 **Authentication:**
 
-For gated models (e.g., Meta Llama, Google Gemma), you must provide a HuggingFace API token:
-1. Generate a token at https://huggingface.co/settings/tokens
+For gated models (e.g., Meta Llama, Google Gemma), you must provide a
+HuggingFace API token:
+
+1. Generate a token at `https://huggingface.co/settings/tokens`
 2. Accept the model's license agreement on HuggingFace
 3. Pass the token via `--token` or set the `HF_TOKEN` environment variable
 
+The `HF_TOKEN` env var is checked automatically if `--token` is not provided.
+
 **Parallel Downloads:**
 
-The downloader fetches files in parallel using a goroutine pool. Large models with many shard files will download significantly faster than sequential downloads.
+The downloader fetches files in parallel using a goroutine pool. Large models
+with many shard files download significantly faster than sequential downloads.
+Downloads support resume via HTTP Range headers.
 
 ---
 
@@ -108,13 +110,15 @@ The downloader fetches files in parallel using a goroutine pool. Large models wi
 Convert HuggingFace model files to ONNX format for inference.
 
 **Usage:**
-```
+
+```text
 burnnotice convert [model-dir] [flags]
 ```
 
 **Arguments:**
-| Argument | Required | Description |
-|----------|----------|-------------|
+
+| Argument   | Required | Description |
+|------------|----------|-------------|
 | `model-dir` | Yes | Path to directory containing HuggingFace model files |
 
 **Flags:**
@@ -129,38 +133,18 @@ burnnotice convert [model-dir] [flags]
 
 ```bash
 # Convert with defaults
-burnnotice convert ./models/Llama-3.1-8B
+burnnotice convert ./models/Qwen2.5-0.5B
 
 # Convert to a specific output directory
-burnnotice convert ./models/Mistral-7B -o /data/onnx/mistral
+burnnotice convert ./models/Qwen2.5-0.5B -o /data/onnx/qwen
 
 # Use a specific ONNX opset
 burnnotice convert ./models/Qwen2.5-7B --opset 18
-
-# Disable dynamic axes (fixed batch=1, sequence=2048)
-burnnotice convert ./models/gemma-2-9b --dynamic=false
 ```
 
-**ONNX Opset Versions:**
-
-| Opset | Compatibility | Notes |
-|-------|--------------|-------|
-| 14 | ONNX Runtime 1.10+ | Minimum supported |
-| 15 | ONNX Runtime 1.11+ | |
-| 16 | ONNX Runtime 1.13+ | |
-| 17 | ONNX Runtime 1.14+ | **Default**, recommended |
-| 18 | ONNX Runtime 1.16+ | Latest features |
-
-**Dynamic Axes:**
-
-When `--dynamic=true` (default), the ONNX model accepts variable batch sizes and sequence lengths. This is recommended for most use cases.
-
-When `--dynamic=false`, the model is compiled with fixed dimensions, which may enable additional optimizations but requires input to match the expected shape exactly.
-
-**Supported Input Formats:**
-
-- `.safetensors` — Preferred format, parsed natively without PyTorch
-- `.bin` — PyTorch weight files (supported via safetensors conversion)
+> **Note**: The built-in converter produces a weight-only ONNX file (tensor
+> initializers, no computation graph). For a runnable ONNX model with a compute
+> graph, use `optimum-cli` (see `burnnotice recommend`).
 
 ---
 
@@ -169,13 +153,15 @@ When `--dynamic=false`, the model is compiled with fixed dimensions, which may e
 Generate a model profile for deception detection by running contrastive prompt batches through the model.
 
 **Usage:**
-```
+
+```text
 burnnotice profile [onnx-model] [flags]
 ```
 
 **Arguments:**
-| Argument | Required | Description |
-|----------|----------|-------------|
+
+| Argument    | Required | Description |
+|-------------|----------|-------------|
 | `onnx-model` | Yes | Path to ONNX model file |
 
 **Flags:**
@@ -183,15 +169,12 @@ burnnotice profile [onnx-model] [flags]
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--output` | `-o` | `./profiles` | Profile output directory |
-| `--dataset` | | *(empty)* | Path to profiling dataset (JSON or JSONL format) |
-| `--layers` | | *(all layers)* | Specific layers to profile (comma-separated indices) |
+| `--dataset` | | *(required)* | Path to profiling dataset (JSON or JSONL format) |
+| `--layers` | | *(all 0-31)* | Specific layers to profile (comma-separated indices) |
 
 **Examples:**
 
 ```bash
-# Profile with default dataset
-burnnotice profile ./onnx/model.onnx
-
 # Profile with custom dataset
 burnnotice profile ./onnx/model.onnx --dataset ./data/deception_pairs.json
 
@@ -240,19 +223,23 @@ The profiling dataset should contain contrastive prompt pairs:
 ```
 
 JSONL format (one pair per line) is also supported:
+
 ```jsonl
-{"truthful":{"prompt":"...","response":"..."},"deceptive":{"prompt":"...","response":"..."}}
 {"truthful":{"prompt":"...","response":"..."},"deceptive":{"prompt":"...","response":"..."}}
 ```
 
 **Layer Selection:**
 
-- **All layers** (default): Profiles every layer in the model. Most thorough but slowest and most memory-intensive.
-- **Specific layers**: Use `--layers` to profile only the most discriminative layers. For most models, mid-layers (40-60% depth) carry the strongest deception signals.
+- **All layers** (default): Profiles every layer in the model. Most thorough
+  but slowest and most memory-intensive.
+- **Specific layers**: Use `--layers` to profile only the most discriminative
+  layers. For most models, mid-layers (40-60% depth) carry the strongest
+  deception signals.
 
 **Profile Output:**
 
 Profiles are saved as gob-serialized files containing:
+
 - Per-layer direction vectors (refusal, deception, truth, conflict, policy)
 - Layer importance scores
 - Truth neuron indices
@@ -261,9 +248,112 @@ Profiles are saved as gob-serialized files containing:
 
 ---
 
-## Typical Workflow
+### `validate`
 
-### End-to-End Pipeline
+Load an ONNX model and run a forward pass with synthetic tokens to verify the engine works end-to-end.
+
+**Usage:**
+
+```text
+burnnotice validate [onnx-model] [flags]
+```
+
+**Arguments:**
+
+| Argument    | Required | Description |
+|-------------|----------|-------------|
+| `onnx-model` | Yes | Path to ONNX model file (must have a computation graph) |
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--hidden-dim` | | `4096` | Model hidden dimension |
+
+**Examples:**
+
+```bash
+# Validate an optimum-exported ONNX model
+burnnotice validate ./onnx/qwen2.5-0.5b/model.onnx --hidden-dim 1024
+
+# Validate with Qwen2.5-7B hidden dim
+burnnotice validate ./onnx/qwen2.5-7b/model.onnx --hidden-dim 3584
+```
+
+**Validation checks:**
+
+1. ONNX file exists and is parseable
+2. Engine initializes an ONNX Runtime session
+3. Forward pass with 5 synthetic tokens produces correct-shaped output
+4. Engine resources are released cleanly
+
+The recommended hidden dimensions for common models are:
+
+| Model | Hidden Dim |
+|-------|------------|
+| Qwen2.5-0.5B | 1024 |
+| Qwen2.5-1.5B | 1536 |
+| Qwen2.5-7B | 3584 |
+| Qwen2.5-14B | 5120 |
+| Qwen2.5-32B | 5120 |
+| Qwen2.5-72B | 8192 |
+| Llama-3.2-1B | 2048 |
+| Llama-3.1-8B | 4096 |
+| Llama-3.1-70B | 8192 |
+
+---
+
+### `recommend`
+
+Print the recommended model for testing BurnNotice and step-by-step instructions to export it to ONNX using `optimum-cli`.
+
+**Usage:**
+
+```text
+burnnotice recommend
+```
+
+**Example output:**
+
+```text
+Recommended Model: Qwen/Qwen2.5-0.5B
+
+This is the smallest model in the Qwen2.5 family (0.5B parameters).
+It is suitable for:
+  - Quick ONNX export testing
+  - BurnNotice profiling validation
+  - CI/CD pipeline integration
+
+Step-by-step export:
+  1. pip install optimum[onnxruntime] torch
+  2. optimum-cli export onnx --model Qwen/Qwen2.5-0.5B ./onnx/qwen2.5-0.5b
+  3. burnnotice profile ./onnx/qwen2.5-0.5b/model.onnx --dataset ./data/deception_pairs.json
+```
+
+---
+
+## End-to-End Pipeline
+
+### Quick Start with Recommended Model
+
+```bash
+# 1. See recommended model and install requirements
+burnnotice recommend
+
+# 2. Export to ONNX (requires optimum-cli)
+pip install optimum[onnxruntime] torch --quiet
+optimum-cli export onnx --model Qwen/Qwen2.5-0.5B ./onnx/qwen2.5-0.5b
+
+# 3. Validate the exported model loads and runs
+burnnotice validate ./onnx/qwen2.5-0.5b/model.onnx --hidden-dim 1024
+
+# 4. Generate deception detection profile
+burnnotice profile ./onnx/qwen2.5-0.5b/model.onnx \
+  --dataset ./data/deception_pairs.json \
+  -o ./profiles/qwen2.5-0.5b
+```
+
+### Full Pipeline with a Larger Model
 
 ```bash
 # 1. Download model from HuggingFace
@@ -283,14 +373,6 @@ burnnotice profile ./onnx/llama3/model.onnx \
   -o ./profiles/llama3
 ```
 
-### Quick Start with Defaults
-
-```bash
-burnnotice download Qwen/Qwen2.5-7B
-burnnotice convert ./models/Qwen2.5-7B
-burnnotice profile ./onnx/model.onnx
-```
-
 ---
 
 ## Environment Variables
@@ -298,8 +380,8 @@ burnnotice profile ./onnx/model.onnx
 | Variable | Description |
 |----------|-------------|
 | `HF_TOKEN` | HuggingFace API token (alternative to `--token`) |
-| `LOG_LEVEL` | Log level: `debug`, `info`, `warn`, `error` (default: `info`) |
-| `LOG_FORMAT` | Log format: `json`, `text` (default: `text`) |
+| `ONNX_RUNTIME_LIB` | Path to ONNX Runtime shared library (e.g., `/usr/lib/libonnxruntime.so`) |
+| `BURNNOTICE_MODEL_DIR` | Default model directory (overrides `--output` defaults) |
 
 ---
 
@@ -309,7 +391,6 @@ burnnotice profile ./onnx/model.onnx
 |------|-------------|
 | `0` | Success |
 | `1` | General error (invalid arguments, file not found, API error) |
-| `2` | Invalid flag or argument |
 
 ---
 
@@ -317,20 +398,30 @@ burnnotice profile ./onnx/model.onnx
 
 ### "API returned 401" during download
 
-Your HuggingFace token is invalid or expired. Generate a new token at https://huggingface.co/settings/tokens.
+Your HuggingFace token is invalid or expired. Generate a new token at `https://huggingface.co/settings/tokens`.
 
 ### "API returned 403" during download
 
 You haven't accepted the model's license agreement. Visit the model page on HuggingFace and accept the terms.
 
-### "ONNX model file not found" during convert
+### "ONNX model file not found" during profile/validate
 
-The model directory doesn't contain valid weight files. Verify the download completed successfully and check for `.safetensors` or `.bin` files.
+The ONNX file does not exist at the specified path. Verify the path and check that the model was exported successfully.
 
-### "profile not found" after profiling
+### "engine load failed" during validate
 
-Ensure the ONNX model path is correct and the model loads successfully. Check logs for ONNX Runtime errors.
+The ONNX Runtime could not load the model. Common causes:
 
-### Out of memory during profiling
+- The ONNX file is weight-only (exported by the built-in converter) — use `optimum-cli` instead
+- The `ONNX_RUNTIME_LIB` environment variable points to a missing or incompatible library
+- The model uses operators not supported by your ONNX Runtime version
+
+### Profile dimensions mismatch
+
+If you see `output size = X, want Y` during validation, the `--hidden-dim`
+flag does not match the model's actual hidden dimension. Refer to the table in
+the `validate` section for recommended values.
+
+### "out of memory" during profiling
 
 Use `--layers` to profile fewer layers at a time. Start with mid-layers (e.g., `--layers 8,9,10,11,12` for a 32-layer model).
