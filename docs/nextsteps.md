@@ -1,130 +1,317 @@
-# BurnNotice: Technical Implementation Roadmap
+# BurnNotice: Prioritized Implementation Roadmap
 
-> **Status**: Draft
-> **Date**: 2026-05-18
-> **Version**: 0.2
-
----
-
-## P0 Blockers: Production-Ready Enhancements
-
-The following features represent high-priority (P0) engineering requirements for production-readiness, hardening the real-time latent governance engine against adversarial attacks, performance degradation, and model drift.
-
-### P0.0 Hardware-Accelerated SIMD Vector Math
-- [ ] **P0.0.1** Replace manual `for` loops computing vector norms in `internal/scoring/scorer.go` (`vecNorm`) and `internal/engine/moe.go` with hardware-optimized `floats.Norm(..., 2)`.
-- [ ] **P0.0.2** Replace manual `for` loops computing dot products in `internal/scoring/scorer.go` (`vecDot`) with `floats.Dot()`.
-- [ ] **P0.0.3** Refactor `ApplyLoRA` and `ReverseLoRA` matrix multiplications in `internal/steer/lora.go` to use AVX/AVX-512 Fused-Multiply-Add via `floats.AddScaled()`.
-- [ ] **P0.0.4** Benchmark the hotpaths using `go test -bench` to ensure `gonum/floats` assembly routines provide the expected SIMD latency reductions.
-
-### P0.1 Adaptive, Model-Specific Threshold Calibration
-
-- [x] **P0.1.1** Implement an automated calibration pipeline that ingests a held-out contrastive validation dataset and performs ROC curve analysis to select optimal detection thresholds.
-- [x] **P0.1.2** Develop an optimization routine to automatically balance precision and recall, setting model-specific thresholds that maximize the F1-score for deception and safety metrics.
-- [x] **P0.1.3** Implement dynamic threshold updating inside `internal/policy/engine.go` to adapt active policies based on real-time baseline activation drifts.
-- [x] **P0.1.4** Write comprehensive unit and fuzz tests simulating extreme validation datasets (e.g. all-positive, all-negative, high-variance scores) and verifying calibration safety invariants.
-- [x] **P0.1.5** **UI/UX Update**: Add a calibration section to the model profile dashboard showing ROC curves, precision-recall graphs, and a single-click "Recalibrate" trigger.
-- [x] **P0.1.6** **e2e Update**: Create an end-to-end integration test running a full model profile dataset pipeline, verifying calibration values are written to `profile.gob` and immediately loaded by the policy engine.
-
-### P0.2 Adversarial Robustness & Defense-in-Depth
-
-- [x] **P0.2.1** Integrate an input-level sanitization layer inside the agent SDK to filter out token patterns typical of activation-space adversarial suffix attacks.
-- [x] **P0.2.2** Implement gradient-masking strategies at the latent layer during active steering, preventing attackers from using white-box gradients to construct jailbreak suffixes.
-- [x] **P0.2.3** Add a low-amplitude noise injection layer (random Gaussian perturbations) to the extracted activations prior to scoring to defend against high-precision vector projection attacks.
-- [x] **P0.2.4** Write fuzz tests injecting adversarial and high-frequency noise inputs to the scorer, ensuring similarity metrics and classification labels remain stable.
-- [x] **P0.2.5** **UI/UX Update**: Add an "Adversarial Shield" panel on the dashboard displaying the live adversarial perturbation rates, blocked jailbreak attempts, and dynamic gradient masking metrics.
-- [x] **P0.2.6** **e2e Update**: Run end-to-end safety evaluation benchmarks under simulated adversarial attacks, verifying the agent remains fully governed even under direct projection steering manipulation.
-
-### P0.3 Multi-Format Quantization & Direction Transfer
-
-- [x] **P0.3.1** Implement quantization loaders for Turboquant, SQ8, and PQ formats inside `internal/engine/onnx.go`, enabling low-precision execution of models.
-- [x] **P0.3.2** Design a mathematical scale-factor calibration mechanism to align activation magnitude variations between FP16 and INT8/FP8 model versions.
-- [x] **P0.3.3** Implement direction vector transfer validation: ensure deception and alignment steering vectors extracted from an FP16 baseline map onto the quantized model layers without loss of cosine similarity.
-- [x] **P0.3.4** Write unit and fuzz tests verifying the mathematical projection vectors and steering effectiveness under various quantization widths (FP16, FP8, INT8).
-- [x] **P0.3.5** **UI/UX Update**: Add a "Quantization Compatibility" chart in the dashboard profiling layer weight and activation scaling metrics under different formats.
-- [x] **P0.3.6** **e2e Update**: Write a complete end-to-end test converting a model to INT8, transferring baseline direction vectors, and executing steering to verify identical behavioral outputs.
-
-### P0.4 Multi-Direction Subspace Extraction
-
-- [x] **P0.4.1** Implement multi-direction subspace extraction as the default inside `internal/extract/pca.go` using top-k right singular SVD vectors instead of single-direction vectors.
-- [x] **P0.4.2** Integrate Iterative Nullspace Projection (INLP) to find multiple orthogonal safety directions, capturing complex multi-dimensional alignment concepts.
-- [x] **P0.4.3** Update `internal/scoring/scorer.go` to perform subspace projections (using `ScoreSubspace`) as the primary metric, evaluating overall projection energy.
-- [x] **P0.4.4** Write robust unit tests verifying SVD orthogonal bases recover complex synthetic high-dimensional subspaces, and INLP successfully projects out deception vectors.
-- [x] **P0.4.5** **UI/UX Update**: Overhaul the dashboard visualization to render a 3D scatter plot of the multi-dimensional activation projections using uPlot.
-- [x] **P0.4.6** **e2e Update**: Build an end-to-end integration test verifying that multi-direction steering successfully suppresses deception even when the model attempts evasive representational shifts.
-
-### P0.5 Temporal Deception Sequence Scoring
-
-- [x] **P0.5.1** Implement a temporal scoring pipeline that computes exponential moving averages (EMA) of metric scores across the last $N$ tokens to track sequence-level deception signals.
-- [x] **P0.5.2** Integrate sliding window sequence monitoring to identify slow-drift deception patterns that do not trigger single-token safety thresholds.
-- [x] **P0.5.3** Update the policy engine to support sequence-level temporal operators (e.g. cumulative safety thresholds or sustained violations over time).
-- [x] **P0.5.4** Write unit and fuzz tests simulating variable token sequence speeds, verifying temporal decay and activation energy aggregation formulas remain numerically stable.
-- [x] **P0.5.5** **UI/UX Update**: Add a real-time temporal sequence chart to the web monitor showing the cumulative deception trend line and sliding threshold envelopes.
-- [x] **P0.5.6** **e2e Update**: Implement an end-to-end test feeding a sequence of increasingly deceptive prompt tokens, verifying the temporal policy triggers preemptive intervention prior to completion.
-
-### P0.6 Capability Preservation & Steering Side-Effect Benchmarks
-
-- [x] **P0.6.1** Integrate an automated evaluation harness in the steering tests that measures the model's core intelligence metrics (e.g. logic, reasoning, code generation) under dynamic steering.
-- [x] **P0.6.2** Compute and report capability degradation scores comparing baseline MMLU, GSM8k, and HumanEval performance against steered states.
-- [x] **P0.6.3** Implement safe steering clamping in `internal/steer/selective.go` to prevent excessive activation distortion and preserve model performance.
-- [x] **P0.6.4** Write unit tests checking that clamping and norm-preservation limits are strictly enforced, rejecting steering scaling coefficients that trigger high distortion.
-- [x] **P0.6.5** **UI/UX Update**: Add a "Capability Health" gauge on the dashboard, displaying the live MMLU/GSM8k score retention and layer-wise distortion statistics.
-- [x] **P0.6.6** **e2e Update**: Create a full end-to-end benchmark test running standard reasoning tasks under maximum steering strength, asserting capability preservation remains above 98%.
-
-### P0.7 Asynchronous Non-Blocking Scoring Engine
-
-- [x] **P0.7.1** Decouple ONNX/WASM inference from the scoring and policy evaluation pipeline using asynchronous Go channels and highly efficient ring buffers.
-- [x] **P0.7.2** Implement a zero-copy activation queue to hand off intermediate tensors to a background worker pool, preventing inference pipeline blocking.
-- [x] **P0.7.3** Integrate emergency sync bypass triggers: if queue saturation occurs or latency thresholds are breached, temporarily switch back to synchronous blocking evaluation for high-risk prompts.
-- [x] **P0.7.4** Write exhaustive concurrency and race tests running high-throughput inference under parallel scoring loads, verifying zero race conditions or memory leaks.
-- [x] **P0.7.5** **UI/UX Update**: Add a system latency panel on the dashboard showing the exact queue depth, asynchronous worker pool saturation, and engine processing delay metrics.
-- [x] **P0.7.6** **e2e Update**: Run an end-to-end throughput benchmark under high parallel agent requests, asserting scoring pipeline introduces zero overhead to core token generation latency.
+> **Status**: Active
+> **Date**: 2026-05-27
+> **Version**: 0.4
 
 ---
 
-## Improvement Plan: Addressing Architectural, Performance, and Adversarial Flaws
+Flat sequential priority list. Each step must be completed before moving to the next within its tier. Checkmarks indicate completion.
 
-This section details the concrete, actionable roadmap to address the systemic flaws identified in `docs/analysis.md`, `docs/analysis2.md`, `docs/analysis3.md`, and `docs/comparison.md`.
+---
 
-### Milestone 1: GPU-Native Inference & Enterprise Engine Pivot (Resolves Latency Bottleneck & ONNX Limitations)
+## Tier 1 — Infrastructure Foundation (Prerequisites for All Downstream Work)
 
-- **Problem**: Extracting intermediate activations from GPU memory to CPU Host memory at every token/layer introduces unacceptable latency and breaks continuous batching optimizations. ONNX Runtime lacks the memory scheduling capabilities (like PagedAttention) of modern production serving stacks.
+### Step 1: Implement ONNX Inference Engine
+- [ ] **1.1** Implement `internal/engine/onnx.go` `Load()` with real ONNX Runtime model loading (not file-existence stub)
+- [ ] **1.2** Implement `Forward()` that executes model forward pass and returns logits
+- [ ] **1.3** Implement `GetIntermediate()` that captures per-layer residual stream activations via ONNX Runtime hooks
+- [ ] **1.4** Validate against a known model (e.g. Qwen2.5-0.5B) end-to-end: load → forward → capture activations
 
-- [x] **M1.1** Implement direct integration plugins for high-performance serving backends like **vLLM** and **TensorRT-LLM**.
-- [x] **M1.2** Move intermediate activation vector operations (e.g., cosine similarity and orthogonal projections) directly into custom GPU/CUDA tensor kernels.
-- [x] **M1.3** Retain all per-token critical calculations inside GPU VRAM, reserving the CPU Go/Longbow layer exclusively for asynchronous reporting, policy updates, and ledger tracking.
-- [x] **M1.4** Support advanced key-value (KV) cache hook storage to capture multi-turn contextual activation trajectories efficiently without redundant computations.
-- [x] **M1.5** Write custom **Metal Shading Language (MSL)** kernels and Objective-C dispatch bindings to accelerate activation metric scoring directly on Apple Silicon GPUs (darwin/arm64).
-- [x] **M1.6** Develop high-performance **C++/CUDA** kernels executing parallel activation projections and dynamic rotations directly on NVIDIA V100/A100/H100 Tensor Cores (linux/amd64).
-- [x] **M1.7** Construct PyTorch/C++ custom extension wrappers linking the native Metal and CUDA kernels to enable inline, zero-latency activation steering inside the **vLLM** execution graph.
+### Step 2: Implement WASM Backend
+- [ ] **2.1** Implement `internal/wasm/backend.go` `Forward()` with real wazero execution (not nil-returning stub)
+- [ ] **2.2** Implement `GetIntermediate()` for per-layer activation capture from WASM runtime
+- [ ] **2.3** Write integration test running the same input through ONNX and WASM backends, verifying identical outputs
 
-### Milestone 2: Context-Aware Semantic Intent Gating (Resolves Semantic Ambiguity & False Positives)
+### Step 3: Replace Simulated Activations with Real Model Inference
+- [ ] **3.1** Remove `simulateActivation()` ASCII-byte path in `cmd/burnnotice/main.go:159-168`
+- [ ] **3.2** Wire the profile CLI to load a real model via ONNX/WASM engine and collect actual activations
+- [ ] **3.3** Validate profile output: extracted directions from real activations must differ from random baselines
 
-- **Problem**: Deception is highly contextual; static linear directions will trigger false positives when the agent simulates fictional characters, discusses deception academically, or performs roleplay, leading to unwarranted capability degradation.
+### Step 4: Implement Longbow Integration or Replace with Viable Fallback
+- [ ] **4.1** Either implement all `TODO` methods in `internal/longbow/client.go` (Arrow Flight, HNSW, COW, SWIM)
+- [ ] **4.2** Or replace Longbow with Qdrant/Milvus vector store and implement the same interface
+- [ ] **4.3** Implement zero-copy activation transport from inference engine to vector store
+- [ ] **4.4** Write integration test: store → retrieve → cosine-similarity-match on real activations
 
-- [x] **M2.1** Integrate a lightweight, fast text-based semantic pre-classifier (e.g., Llama Guard or specialized distillation models) running in parallel with prompt tokenization.
-- [x] **M2.2** Implement dynamic gating logic: disable specific steering vectors (such as `deception_direction`) if the user prompt is classified under creative writing, academic analysis, or safe fictional roleplay.
-- [x] **M2.3** Formulate class-specific confidence weights that scale the active intervention metrics dynamically based on conversational context.
+### Step 5: Hardware-Accelerated SIMD Vector Math
+- [ ] **5.1** Replace manual `vecNorm` loop in `internal/scoring/scorer.go` with `floats.Norm(..., 2)`
+- [ ] **5.2** Replace manual `vecDot` loop with `floats.Dot()`
+- [ ] **5.3** Refactor `ApplyLoRA`/`ReverseLoRA` in `internal/steer/lora.go` to use `floats.AddScaled()`
+- [ ] **5.4** Benchmark hotpaths with `go test -bench` to verify SIMD latency reduction
 
-### Milestone 3: Obfuscation-Resilient Probe Training (Resolves Bailey et al. Evasion Vulnerability)
+### Step 6: Numerical Stability — Winsorization & FP32 Precision
+- [ ] **6.1** Implement `Winsorize(activations, lower=0.005, upper=0.995)` in `internal/math/robust.go`
+- [ ] **6.2** Apply winsorization as first step in every direction extraction method
+- [ ] **6.3** Audit all math paths in `internal/extract/` and `internal/scoring/` — ensure float64 on critical paths
+- [ ] **6.4** Write fuzz tests with extreme values (NaN, Inf, ±1e30)
 
-- **Problem**: Advanced models or malicious prompt crafters can generate activation-space obfuscation perturbations (e.g., Bailey et al. ICLR 2026) that bypass static linear probes entirely while maintaining harmful outputs.
+---
 
-- [x] **M3.1** Upgrade direction extraction from static 1D linear probes to non-linear Multi-Layer Perceptrons (MLPs) and multi-directional ensemble networks that capture complex conceptual manifolds.
-- [x] **M3.2** Introduce adversarial training during the profiling phase: perturb activation states using gradient-based noise optimization to train the detection probes to be robust against activation-space evasion vectors.
-- [x] **M3.3** Implement real-time anomaly detection inside the residual stream to flag suspicious, out-of-distribution (OOD) activation structures that suggest intentional safety obfuscation.
+## Tier 2 — Core Direction Extraction Pipeline
 
-### Milestone 4: Decentralized Standalone Fallback Engine (Resolves Longbow Pre-1.0 Dependency Risk)
+### Step 7: Whitened SVD Extraction
+- [ ] **7.1** Implement covariance estimation on collected activations (shrinkage estimator for small-sample rank safety)
+- [ ] **7.2** Implement ZCA whitening transform `X_white = X · cov^{-1/2}`
+- [ ] **7.3** Perform SVD on whitened difference matrix, transform directions back: `V_orig = cov^{1/2} · V_white`
+- [ ] **7.4** Add `--whitened-svd` flag to profile CLI (default true for models > 7B)
+- [ ] **7.5** Compare singular-value decay rate: raw SVD vs whitened SVD
 
-- **Problem**: Longbow is a pre-1.0 rolling release, posing a significant dependency risk. If a Longbow node or distributed mesh goes offline, the scoring engine collapses.
+### Step 8: Concept Cone Geometry Analysis
+- [ ] **8.1** Build `ConceptConeAnalyzer` in `internal/analysis/cone.go` collecting activations across N harm categories
+- [ ] **8.2** Compute pairwise cosine similarity of direction vectors between categories
+- [ ] **8.3** Estimate intrinsic dimensionality via PCA scree plot on the direction matrix
+- [ ] **8.4** Add `--cone-analysis` flag to profile CLI
+- [ ] **8.5** Integrate cone dimensionality into threshold calibration (higher-D cones need more INLP iterations)
 
-- [x] **M4.1** Implement a robust local-storage backup pipeline using the existing standalone SQLite ledger for profile metadata and calibration thresholds.
-- [x] **M4.2** Integrate an optimized Gonum-based local math backend for cosine and dot-product calculations that serves as a seamless fallback if the Longbow service is unreachable.
-- [x] **M4.3** Establish automatic, zero-downtime hot-swapping between Longbow Flight connections and local math fallbacks.
+### Step 9: Multi-Direction Subspace Extraction (Default)
+- [ ] **9.1** Default to top-k SVD extraction (k=5) in `internal/extract/pca.go` instead of single-direction DIM
+- [ ] **9.2** Implement Iterative Nullspace Projection (INLP) for orthogonal safety directions
+- [ ] **9.3** Add subspace energy scoring: `E_subspace(a) = sqrt(sum((a · v_i)^2))`
+- [ ] **9.4** Write unit tests: SVD recovers known synthetic subspaces; INLP projects out known directions
+- [ ] **9.5** UI: 3D scatter plot of multi-dimensional activation projections
 
-### Milestone 5: Closed-Loop Coherence & Dynamic Steering Scale (Resolves Capability Loss & Lobotomy Effect)
+### Step 10: Ridge-Regularized Subspace Projection (Gabliteration)
+- [ ] **10.1** Add `RegularizationAlpha` field to `SteeringCommand` and `DirectionExtractor` config
+- [ ] **10.2** Implement `RidgeRegularizedProjection(W, V_k, alpha)` in `internal/math/projection.go`
+- [ ] **10.3** Implement dynamic alpha scheduling: start high (soft), decay to 0 (exact) over passes
+- [ ] **10.4** Unit tests comparing KL divergence: regularized vs exact projection
 
-- **Problem**: Actively injecting or rotating high-dimensional vectors (ActAdd/Angular Steering) shifts intermediate states out of training distribution, causing grammatical collapse, loss of logical coherence, and severe capability loss.
+### Step 11: Norm-Preserving Biprojected Ablation (MPOA) Steering
+- [ ] **11.1** Implement MPOA decomposition as `MethodNormPreserving` in `internal/steer/steering.go`
+- [ ] **11.2** Add Frobenius norm restoration post-projection for weight orthogonalization paths
+- [ ] **11.3** Benchmark MPOA-steered perplexity vs standard ablation on 3+ model sizes
+- [ ] **11.4** Implement biprojection: when removing direction measured at L1 from L2, also remove harmless component from L2
 
-- [x] **M5.1** Implement real-time, token-level perplexity tracking and output coherence checkers directly inside the model generation loop to monitor early signs of activation collapse.
-- [x] **M5.2** Develop an adaptive feedback loop that automatically scales down steering strength ($\alpha$) or dynamically shifts selected layers if logical degradation is detected in consecutive output tokens.
-- [x] **M5.3** Conduct automated regression tests against standardized capability suites (GSM8k, MMLU) during live steering interventions to optimize individual layer steering bounds.
+### Step 12: Bias Term Projection
+- [ ] **12.1** Audit all transformer component types; add bias projection alongside activation projection
+- [ ] **12.2** Add `BiasDirections` to `ModelProfile` for per-layer bias direction storage
+- [ ] **12.3** Implement `ComputeBiasSteering` projecting direction out of bias vectors
+- [ ] **12.4** Unit tests: bias-only steering reduces deception scores (without touching activations)
+
+### Step 13: Refusal Direction Optimization (Gradient-Based Refinement)
+- [ ] **13.1** Implement `RefusalDirectionOptimizer` — linear probe loss, SGD initialized from SVD direction
+- [ ] **13.2** Add `--rdo` flag to profile CLI
+- [ ] **13.3** Compare AUROC: DIM vs SVD vs RDO on held-out deception dataset
+- [ ] **13.4** Implement in pure Go via `mat.Dense` + manual gradients (no autograd dependency)
+
+---
+
+## Tier 3 — Detection & Steering Quality
+
+### Step 14: KL-Divergence Co-Optimization
+- [ ] **14.1** Implement `ComputeKLDivergence(originalLogits, steeredLogits)` on token-level log-probs
+- [ ] **14.2** Add `KLDivergence` to `SteeringMetrics` in profile format
+- [ ] **14.3** Build KL-co-optimization feedback loop: if KL > 0.2 on harmless prompts, reduce steering strength
+- [ ] **14.4** UI: 2D scatter plot (KL divergence vs remaining deception score) with Pareto frontier
+- [ ] **14.5** Validate correlation between KL divergence and downstream benchmark degradation
+
+### Step 15: Ouroboros Detection & Iterative Refinement
+- [ ] **15.1** Build `OuroborosDetector` in `internal/analysis/ouroboros.go` measure per-layer scores pre/post intervention
+- [ ] **15.2** Identify compensating layers (scores increased post-intervention); flag if net reduction < 50%
+- [ ] **15.3** Implement iterative refinement: secondary passes targeting only compensating layers
+- [ ] **15.4** Add `MaxRefinementPasses` config (default 3)
+
+### Step 16: Alignment Imprint Detection
+- [ ] **16.1** Build `AlignmentImprintDetector` — extract DIM directions, compute geometric metrics (effective rank, SV decay, cross-layer coherence)
+- [ ] **16.2** Classify alignment method (DPO/RLHF/CAI/SFT) via MLP or SVM trained on geometric features
+- [ ] **16.3** Add `AlignmentMethod` to `ModelProfile`; auto-tune regularization and projection strategy
+- [ ] **16.4** Integrate with policy engine: adjust steering strength by alignment fragility
+
+### Step 17: Conditional Activation Steering (CAST)
+- [ ] **17.1** Implement `ConditionalSteering` in `internal/steer/cast.go` — extract condition vectors per bypass category during profiling
+- [ ] **17.2** Apply steering scaled by `f(sim(h_l, c))` where f is thresholded step function
+- [ ] **17.3** Implement logical condition composition: AND/OR/NOT for complex gating rules
+- [ ] **17.4** Benchmark CAST latency vs external LLM classifier (< 0.1ms target)
+
+### Step 18: Component-Specific Steering Scaling
+- [ ] **18.1** Add `AttentionStrength` and `MLPStrength` to `SteeringCommand` (range [0,2])
+- [ ] **18.2** Detect component type from model config metadata
+- [ ] **18.3** Set defaults: attention=1.0, MLP=0.5 (MLP layers carry knowledge, more sensitive)
+- [ ] **18.4** UI: component-type breakdown showing attention vs MLP contribution to steering effect
+
+### Step 19: Standardized Evaluation — Refusal Rate & KL Tradeoff
+- [ ] **19.1** Integrate HarmBench 400: 400 test cases across 7 categories, compute Attack Success Rate (ASR)
+- [ ] **19.2** Add ASR to standard steering metrics output
+- [ ] **19.3** 2D tradeoff plot: KL divergence (x) vs remaining deception/refusal rate (y), Pareto frontier
+- [ ] **19.4** Report "Heretic score": `w1 · refusal_rate + w2 · KL_divergence` as single-number quality metric
+
+### Step 20: Downstream Benchmark Sensitivity Profiling
+- [ ] **20.1** Add TruthfulQA, HellaSwag, ARC, MMLU to steering evaluation suite
+- [ ] **20.2** Compute per-benchmark sensitivity scores (degradation under max steering)
+- [ ] **20.3** Report per-benchmark degradation in capability health dashboard panel
+- [ ] **20.4** Weight capability health ratio by benchmark sensitivity
+
+### Step 21: Latent-Space Separation Metric
+- [ ] **21.1** Implement `ComputeLatentSeparation(harmfulActs, benignActs)` — cosine distance between cluster centroids
+- [ ] **21.2** Measure separation pre/post steering; flag if drop > 25%
+- [ ] **21.3** UI: "Geometric Separation" gauge on dashboard
+
+---
+
+## Tier 4 — Architecture-Specific Steering
+
+### Step 22: MoE-Aware Expert-Granular Extraction
+- [ ] **22.1** Rewrite `internal/engine/moe.go` to capture router logits per token (which experts, what weights)
+- [ ] **22.2** Implement per-expert direction extraction: collect activations separately for each expert
+- [ ] **22.3** Implement per-expert steering: apply vectors only to active experts, weighted by router probability
+- [ ] **22.4** Add MoE capability benchmark: expert routing entropy before/after steering (must not collapse diversity)
+- [ ] **22.5** Tests with synthetic MoE model (2-4 experts) verifying per-expert correctness
+
+### Step 23: CoT-Aware Steering for Reasoning Models
+- [ ] **23.1** Detect `<think>`/`</think>` boundaries (or protocol-level signals) in token stream
+- [ ] **23.2** During thinking phase: monitoring only, zero steering strength
+- [ ] **23.3** During answer phase: full steering intervention
+- [ ] **23.4** Track and report CoT-token-specific deception metrics separately
+- [ ] **23.5** Add `ReasoningModelAware` bool to steering config (auto-detect from architecture)
+
+### Step 24: Sparse Autoencoder Integration
+- [ ] **24.1** Load pretrained SAEs (Gemma Scope, SAELens) alongside base model in inference engine
+- [ ] **24.2** Build `SAEEncoder` in `internal/extract/sae.go`: encode activations through SAE
+- [ ] **24.3** Feature attribution scoring: correlate SAE features with deception/refusal labels
+- [ ] **24.4** Add SAE feature monitoring as independent probe alongside DIM/whitening
+- [ ] **24.5** Implement SAE feature-level ablation (suppress top-k refusal features directly)
+- [ ] **24.6** Tests: SAE monitoring catches jailbreaks that DIM misses (complementary signal)
+
+### Step 25: Cross-Layer Alignment & Refusal Propagation Analysis
+- [ ] **25.1** Build `CrossLayerAlignmentAnalyzer` — extract directions per layer, compute pairwise cosine similarity
+- [ ] **25.2** Identify direction clusters and the "decision layer" where direction first becomes discriminative
+- [ ] **25.3** Use decision-layer analysis to determine minimum steering layer set
+- [ ] **25.4** UI: cross-layer heatmap showing direction similarity across all layer pairs
+
+### Step 26: CKA Similarity for Pre/Post Steering Analysis
+- [ ] **26.1** Implement Centered Kernel Alignment (CKA) between pre/post layer activations
+- [ ] **26.2** Add CKA to steering metrics alongside KL divergence and deception score
+- [ ] **26.3** Establish CKA threshold: < 0.95 → excessive representational distortion
+- [ ] **26.4** Layer-wise CKA to identify most-distorted layers for targeted recovery passes
+
+### Step 27: Float Direction Interpolation
+- [ ] **27.1** Implement `FloatDirectionInterpolation(directions, t, sigma)` — Gaussian-weighted SVD direction blend
+- [ ] **27.2** Add `DirectionMix` continuous param to `SteeringCommand` (range [0, k])
+- [ ] **27.3** UI: "Direction Mix" slider in strength sweep tab
+- [ ] **27.4** Research: does smooth interpolation produce lower KL divergence than discrete selection?
+
+---
+
+## Tier 5 — Multi-Turn & Externalities Safety
+
+### Step 28: KV-Cache Steering Accumulation Tracking
+- [ ] **28.1** Build `KVCacheAccumulationTracker` — maintain per-turn steering vector log, measure cumulative angular drift
+- [ ] **28.2** Alert when cumulative drift exceeds `theta_max` (15 degrees)
+- [ ] **28.3** Implement Gated Cropped Attention-Delta (GCAD): crop attention-delta between steered/unsteered states to prevent KV-cache propagation
+- [ ] **28.4** Multi-turn benchmark: 10-turn conversation with active steering, perplexity per turn
+- [ ] **28.5** Fix EMA temporal scoring to account for KV-cache baseline drift (not actual deception intent)
+
+### Step 29: Steering Externalities Monitoring
+- [ ] **29.1** Implement `JailbreakRiskAssessor` — measure ASR on 100 held-out jailbreak prompts, compare baseline vs steered
+- [ ] **29.2** Add `SteeringExternalitiesScore` = steered_ASR / baseline_ASR; flag if > 1.2
+- [ ] **29.3** Monitor early-token distribution shifts (steering biasing toward non-refusal trajectories)
+- [ ] **29.4** Document in design docs: steering carries jailbreak externalities risk
+
+### Step 30: Extended Refusal Defense
+- [ ] **30.1** Build dataset generator: harmful prompts → extended refusal responses (overview + refusal + rationale)
+- [ ] **30.2** Implement `ExtendedRefusalFineTuner` using DoRA (not standard LoRA)
+- [ ] **30.3** Verify BurnNotice direction extraction still works after defense (defense resists weight-ablation, not inference-time monitoring)
+- [ ] **30.4** Document as optional hardening step for high-security deployments
+
+---
+
+## Tier 6 — Community & Telemetry
+
+### Step 31: Anonymous Telemetry Infrastructure
+- [ ] **31.1** Design telemetry schema: model architecture, model size, steering method, refusal rate, KL divergence, hardware, timestamp. Never prompts, outputs, IPs, or identity
+- [ ] **31.2** Implement submission in `internal/telemetry/reporter.go` (HTTPS POST or local save + PR)
+- [ ] **31.3** Build `burnnotice aggregate` CLI command: summarize contributed results
+- [ ] **31.4** UI: local leaderboard showing community results for current model architecture
+- [ ] **31.5** Write `TELEMETRY.md` with schema documentation and privacy guarantees
+
+---
+
+## Tier 7 — Production Hardening & Platform Pivot
+
+### Step 32: GPU-Native Inference (vLLM / TensorRT-LLM Plugin)
+- [ ] **32.1** Implement CUDA kernels for cosine similarity and dynamic rotation (`plugins/cuda_kernels.cu`)
+- [ ] **32.2** Implement Metal Shading Language kernels for Apple Silicon (`plugins/metal/kernels.metal`)
+- [ ] **32.3** Build vLLM plugin wrappers (PyBind11) linking native kernels into vLLM execution graph
+- [ ] **32.4** Build TensorRT-LLM plugin (`IPluginV2DynamicExt` API)
+- [ ] **32.5** Move all per-token scoring and steering into GPU VRAM; Go layer handles async policy/telemetry only
+
+### Step 33: Adaptive Model-Specific Calibration
+- [ ] **33.1** Calibration worker in `internal/profile/manager.go`: load held-out dataset, build ROC curves, compute F1-optimal thresholds
+- [ ] **33.2** Persist `CalibratedThreshold` struct to `profile.gob`
+- [ ] **33.3** Real-time drift detection: if rolling avg projection drift > 1.5 sigma, trigger recalibration
+- [ ] **33.4** UI: ROC curves, precision-recall graphs, "Recalibrate" trigger
+- [ ] **33.5** Fuzz tests with extreme validation datasets (all-positive, all-negative, high-variance)
+
+### Step 34: Adversarial Robustness
+- [ ] **34.1** Input token sanitization: filter low-probability token transitions typical of gradient-optimized suffixes
+- [ ] **34.2** Steering gradient masking: restrict prompt tracing on high-cosine-similarity probe sequences, generate decoy distributions
+- [ ] **34.3** Latent noise injection: `S_robust(a) = S(a + eta)` with Gaussian eta
+- [ ] **34.4** UI: "Adversarial Shield" panel with live perturbation rates and blocked jailbreak count
+- [ ] **34.5** E2E test: simulated adversarial attack under direct projection manipulation
+
+### Step 35: Multi-Format Quantization & Direction Transfer
+- [ ] **35.1** Implement Turboquant, SQ8, PQ loaders in `internal/engine/onnx.go`
+- [ ] **35.2** Scale calibration: `s_calib = std(a_FP16) / std(a_quant)`
+- [ ] **35.3** Direction transfer: `v_quant = s_calib · v_FP16`; cosine parity check >= 0.98
+- [ ] **35.4** UI: "Quantization Compatibility" chart
+- [ ] **35.5** E2E: INT8 conversion → direction transfer → steering → verify identical behavioral outputs
+
+### Step 36: Temporal Deception Sequence Scoring
+- [ ] **36.1** EMA scoring pipeline: `EMA_t = alpha · S(a_t) + (1-alpha) · EMA_{t-1}`
+- [ ] **36.2** Sliding window monitoring for slow-drift deception patterns
+- [ ] **36.3** Policy engine temporal operators (cumulative thresholds, sustained violation windows)
+- [ ] **36.4** UI: real-time temporal trend chart with threshold envelopes
+- [ ] **36.5** E2E: increasing deceptive prompt sequence → preemptive intervention before completion
+
+### Step 37: Capability Preservation Benchmarks
+- [ ] **37.1** Automated evaluation harness: MMLU, GSM8k, HumanEval under dynamic steering
+- [ ] **37.2** Safe steering clamping: theta <= 15 degrees
+- [ ] **37.3** Capability health ratio: `R_cap >= 0.98` (if below, auto-scale steering strength down)
+- [ ] **37.4** UI: "Capability Health" gauge with per-benchmark retention display
+- [ ] **37.5** E2E: max-strength steering while asserting > 98% capability retention
+
+### Step 38: Asynchronous Non-Blocking Scoring Engine
+- [ ] **38.1** Lock-free ring buffer for zero-copy activation handoff from inference to scoring
+- [ ] **38.2** Background worker pool for subspace projection calculations
+- [ ] **38.3** Emergency sync bypass at 85% queue capacity or 2.5ms latency
+- [ ] **38.4** Race tests under high parallel load
+- [ ] **38.5** UI: system latency panel — queue depth, worker saturation, engine delay
+
+### Step 39: Context-Aware Semantic Intent Gating
+- [ ] **39.1** Parallel lightweight semantic pre-classifier (Llama Guard or distilled model)
+- [ ] **39.2** Dynamic gating logic: disable `deception_direction` for creative writing, academic analysis, roleplay
+- [ ] **39.3** Class-specific confidence weights scaling intervention strength by conversational context
+
+### Step 40: Obfuscation-Resilient Probe Training
+- [ ] **40.1** Upgrade linear probes to non-linear MLPs and multi-directional ensembles
+- [ ] **40.2** Adversarial training: perturb activations via gradient-based noise during profiling
+- [ ] **40.3** Real-time OOD anomaly detection on residual stream
+
+### Step 41: Decentralized Standalone Fallback Engine
+- [ ] **41.1** Local SQLite storage for profile metadata and calibration thresholds
+- [ ] **41.2** Gonum-based local math backend (cosine/dot fallback)
+- [ ] **41.3** Zero-downtime hot-swap between Longbow Flight and local fallback
+
+### Step 42: Closed-Loop Coherence Management
+- [ ] **42.1** Token-level perplexity tracking and coherence checker in generation loop
+- [ ] **42.2** Adaptive feedback: scale down alpha or shift layers on consecutive degradation
+- [ ] **42.3** Regression tests against GSM8k/MMLU during live steering
+
+---
+
+## Tier 8 — Documentation Corrections
+
+### Step 43: Update Theoretical Claims
+- [ ] **43.1** `design.md §3.1`: Replace "single direction" with "multi-dimensional subspace (concept cone)"
+- [ ] **43.2** `design.md §10`: Add Rogue Scalpel / Steering Externalities jailbreak risk finding
+- [ ] **43.3** `design.md §2.2`: Add Bailey et al. obfuscated activations finding and proposed defenses
+- [ ] **43.4** `design.md §12`: Add KV-cache steering accumulation and Prompt-Activation Duality finding
+- [ ] **43.5** `design.md §13`: Add references to MPOA, Gabliteration, concept cones, SAE-based steering
+- [ ] **43.6** `design.md §2.2`: Add Steering Externalities paper (arXiv:2602.04896) to critical findings
+
+### Step 44: Document Known Limitations
+- [ ] **44.1** SAE limitation: only chat/instruction-data SAEs capture refusal — pretraining SAEs do not
+- [ ] **44.2** SAE limitation: different seeds share only ~30% of latents
+- [ ] **44.3** Evaluation limitation: single-turn ASR is misleading — multi-turn red teaming exposes up to 75% ASR
+- [ ] **44.4** Evaluation limitation: GSM8k measures math, not truthfulness — a model can pass GSM8k and still be deceptive
