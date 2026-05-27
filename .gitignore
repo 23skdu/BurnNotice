@@ -230,9 +230,7 @@ go.sum
 bin/
 profiles/
 *_templ.go
-e2e/node_modules/
-e2e/test-results/
-e2e/playwright-report/
+/burnnotice
 e2e/node_modules/
 e2e/test-results/
 e2e/playwright-report/

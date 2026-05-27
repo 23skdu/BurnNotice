@@ -2,94 +2,63 @@ package main
 
 import (
 	"fmt"
+	"burnnotice/internal/engine"
 	"burnnotice/internal/tokenizer"
-	"github.com/yalue/onnxruntime_go"
 )
 
 type ONNXModel struct {
-	session *onnxruntime_go.DynamicAdvancedSession
-	tok     tokenizer.Tokenizer
+	eng  *engine.ONNXEngine
+	tok  tokenizer.Tokenizer
+	dim  int
 }
 
 func LoadONNXModel(path string) (*ONNXModel, error) {
-	if !onnxruntime_go.IsInitialized() {
-		// Attempt to initialize using default shared library path if not already initialized
-		// Note: The user must have the ONNX Runtime shared library installed.
-		onnxruntime_go.SetSharedLibraryPath("libonnxruntime.dylib") 
-		if err := onnxruntime_go.InitializeEnvironment(); err != nil {
-			return nil, fmt.Errorf("failed to initialize onnxruntime: %w", err)
-		}
+	cfg := engine.ModelConfig{
+		HiddenDim:  4096,
+		InputNames: []string{"input_ids"},
+		OutputNames: []string{"hidden_states"},
 	}
-
-	// Assuming standard input/output names for LLM ONNX models
-	inputNames := []string{"input_ids"}
-	outputNames := []string{"hidden_states"}
-
-	session, err := onnxruntime_go.NewDynamicAdvancedSession(path, inputNames, outputNames, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create session: %w", err)
+	eng := engine.NewONNXEngine(path, cfg)
+	if err := eng.Load(); err != nil {
+		return nil, fmt.Errorf("load ONNX model: %w", err)
 	}
 
 	return &ONNXModel{
-		session: session,
-		tok:     tokenizer.NewWordHashTokenizer(),
+		eng: eng,
+		tok: tokenizer.NewWordHashTokenizer(),
+		dim: cfg.HiddenDim,
 	}, nil
 }
 
 func (m *ONNXModel) Close() error {
-	return m.session.Destroy()
+	return m.eng.Close()
 }
 
 func (m *ONNXModel) ExtractActivation(prompt, response string) ([]float64, error) {
 	text := prompt + " " + response
-	
-	// Pre-allocate slice for zero-alloc tokenization
-	tokens := make([]int64, 4096)
+
+	tokens := make([]int64, m.dim)
 	count := m.tok.Tokenize(text, tokens)
 	if count == 0 {
-		return make([]float64, 4096), nil
+		return make([]float64, m.dim), nil
 	}
 
-	// For standard inference, we truncate to the actual token count
 	inputData := tokens[:count]
-	
-	inputTensor, err := onnxruntime_go.NewTensor(
-		[]int64{1, int64(count)}, // batch_size=1, sequence_length
-		inputData,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create input tensor: %w", err)
-	}
-	defer inputTensor.Destroy()
 
-	// Prepare output tensor (assuming hidden_states is [batch, seq, dim], here dim=4096)
-	outputData := make([]float32, 1*count*4096)
-	outputTensor, err := onnxruntime_go.NewTensor(
-		[]int64{1, int64(count), 4096},
-		outputData,
-	)
+	outputData, err := m.eng.Forward(inputData, []int64{1, int64(count)})
 	if err != nil {
-		return nil, fmt.Errorf("create output tensor: %w", err)
-	}
-	defer outputTensor.Destroy()
-
-	err = m.session.Run(
-		[]onnxruntime_go.ArbitraryTensor{inputTensor},
-		[]onnxruntime_go.ArbitraryTensor{outputTensor},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("run session: %w", err)
+		return nil, fmt.Errorf("forward: %w", err)
 	}
 
 	// Average pool over sequence length to get a single vector per request
-	activation := make([]float64, 4096)
+	activation := make([]float64, m.dim)
 	for i := 0; i < count; i++ {
-		offset := i * 4096
-		for j := 0; j < 4096; j++ {
+		offset := i * m.dim
+		for j := 0; j < m.dim; j++ {
 			activation[j] += float64(outputData[offset+j])
 		}
 	}
-	for j := 0; j < 4096; j++ {
+	for j := 0; j < m.dim; j++ {
 		activation[j] /= float64(count)
 	}
 
