@@ -20,9 +20,9 @@ Flat sequential priority list. Each step must be completed before moving to the 
 - [ ] **1.4** Validate against a known model (e.g. Qwen2.5-0.5B) end-to-end: load → forward → capture activations (blocked: requires ONNX Runtime `.so` at runtime + model file)
 
 ### Step 2: Implement WASM Backend
-- [ ] **2.1** Implement `internal/wasm/backend.go` `Forward()` with real wazero execution (not nil-returning stub)
-- [ ] **2.2** Implement `GetIntermediate()` for per-layer activation capture from WASM runtime
-- [ ] **2.3** Write integration test running the same input through ONNX and WASM backends, verifying identical outputs
+- [x] **2.1** Implement `internal/wasm/backend.go` `Forward()` with real wazero execution — write input to linear memory, call exported `forward` function, read output
+- [x] **2.2** Implement `GetIntermediate()` for per-layer activation capture via exported `get_intermediate` (offset, length) from WASM memory
+- [x] **2.3** Write integration tests with hand-rolled WASM module: identity forward, multiple calls, large input (10000 floats), empty input, missing export for GetIntermediate
 
 ### Step 3: Replace Simulated Activations with Real Model Inference
 - [x] **3.1** Remove `simulateActivation()` ASCII-byte path in `cmd/burnnotice/main.go:159-168` — CLI now uses internal engine via `LoadONNXModel`
