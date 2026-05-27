@@ -1,15 +1,23 @@
 package engine
 
-// MoEEngine wraps a base inference engine with per-expert activation extraction.
+
+
+// AsyncLedger represents a zero-copy stream or memory-mapped file containing asynchronous metrics from the CUDA plugins.
+type AsyncLedger interface {
+	PollActivation(layerIdx int) ([]float64, error)
+}
+
+// MoEEngine wraps a base inference engine with per-expert activation extraction asynchronously.
 type MoEEngine struct {
 	numExperts   int
 	topK         int
 	expertDims   []int
 	routingCache map[int][]float64 // layer -> routing weights
+	ledger       AsyncLedger
 }
 
-// NewMoEEngine creates a MoE engine.
-func NewMoEEngine(numExperts, topK int, expertDims []int) *MoEEngine {
+// NewMoEEngine creates an async MoE engine.
+func NewMoEEngine(numExperts, topK int, expertDims []int, ledger AsyncLedger) *MoEEngine {
 	if len(expertDims) != numExperts {
 		panic("expertDims length must match numExperts")
 	}
@@ -18,39 +26,32 @@ func NewMoEEngine(numExperts, topK int, expertDims []int) *MoEEngine {
 		topK:         topK,
 		expertDims:   expertDims,
 		routingCache: make(map[int][]float64),
+		ledger:       ledger,
 	}
 }
 
 // DetectRouting computes which experts are active for a given activation.
 // Returns expert indices and their routing weights.
 func (e *MoEEngine) DetectRouting(layerIdx int, activation []float64) ([]int, []float64) {
-	// Simulate routing: use activation norm to determine expert selection
-	routing := e.routingCache[layerIdx]
-	if routing == nil {
-		routing = make([]float64, e.numExperts)
-		for i := 0; i < e.numExperts; i++ {
-			routing[i] = 1.0 / float64(e.numExperts) // uniform
+	var totalSumSq float64
+	expertSumSq := make([]float64, e.numExperts)
+	
+	start := 0
+	for idx := 0; idx < e.numExperts; idx++ {
+		dim := e.expertDims[idx]
+		end := start + dim
+		if end > len(activation) {
+			end = len(activation)
 		}
-		e.routingCache[layerIdx] = routing
-	}
-
-	// Select top-K experts
-	type expertScore struct {
-		idx   int
-		score float64
-	}
-	scores := make([]expertScore, e.numExperts)
-	for i := 0; i < e.numExperts; i++ {
-		scores[i] = expertScore{i, routing[i]}
-	}
-
-	// Simple bubble sort for top-K
-	for i := 0; i < e.numExperts-1; i++ {
-		for j := 0; j < e.numExperts-i-1; j++ {
-			if scores[j].score < scores[j+1].score {
-				scores[j], scores[j+1] = scores[j+1], scores[j]
-			}
+		
+		var sumSq float64
+		for i := start; i < end; i++ {
+			sumSq += activation[i] * activation[i]
 		}
+		expertSumSq[idx] = sumSq
+		totalSumSq += sumSq
+		
+		start = end
 	}
 
 	topK := e.topK
@@ -60,9 +61,38 @@ func (e *MoEEngine) DetectRouting(layerIdx int, activation []float64) ([]int, []
 
 	indices := make([]int, topK)
 	weights := make([]float64, topK)
+
+	if totalSumSq < 1e-10 {
+		// Fallback to uniform 1/N distribution
+		uniformWeight := 1.0 / float64(e.numExperts)
+		for i := 0; i < topK; i++ {
+			indices[i] = i
+			weights[i] = uniformWeight
+		}
+		return indices, weights
+	}
+
+	type expertScore struct {
+		index int
+		score float64
+	}
+	scores := make([]expertScore, e.numExperts)
+	for i := 0; i < e.numExperts; i++ {
+		scores[i] = expertScore{index: i, score: expertSumSq[i]}
+	}
+
+	// Simple stable sort
+	for i := 0; i < e.numExperts-1; i++ {
+		for j := i + 1; j < e.numExperts; j++ {
+			if scores[j].score > scores[i].score {
+				scores[i], scores[j] = scores[j], scores[i]
+			}
+		}
+	}
+
 	for i := 0; i < topK; i++ {
-		indices[i] = scores[i].idx
-		weights[i] = scores[i].score
+		indices[i] = scores[i].index
+		weights[i] = scores[i].score / totalSumSq
 	}
 
 	return indices, weights

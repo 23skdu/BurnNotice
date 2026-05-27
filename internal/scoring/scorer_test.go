@@ -6,7 +6,7 @@ import (
 )
 
 func TestScorer_RegisterAndScore(t *testing.T) {
-	s := NewScorer()
+	s := NewScorer(nil)
 	s.RegisterDirection("truth", []float64{1, 0, 0})
 	s.RegisterDirection("deception", []float64{-1, 0, 0})
 
@@ -29,7 +29,7 @@ func TestScorer_RegisterAndScore(t *testing.T) {
 }
 
 func TestScorer_ZeroActivation(t *testing.T) {
-	s := NewScorer()
+	s := NewScorer(nil)
 	s.RegisterDirection("truth", []float64{1, 0, 0})
 
 	scores := s.Score([]float64{0, 0, 0})
@@ -40,7 +40,7 @@ func TestScorer_ZeroActivation(t *testing.T) {
 }
 
 func TestScorer_NoDirections(t *testing.T) {
-	s := NewScorer()
+	s := NewScorer(nil)
 	scores := s.Score([]float64{1, 2, 3})
 
 	if scores == nil {
@@ -52,7 +52,7 @@ func TestScorer_NoDirections(t *testing.T) {
 }
 
 func TestScorer_GetScore(t *testing.T) {
-	s := NewScorer()
+	s := NewScorer(nil)
 	s.RegisterDirection("test", []float64{1, 0})
 
 	scores := s.Score([]float64{1, 0})
@@ -69,7 +69,7 @@ func TestScorer_GetScore(t *testing.T) {
 }
 
 func TestScorer_SubspaceScoring(t *testing.T) {
-	s := NewScorer()
+	s := NewScorer(nil)
 
 	basis := [][]float64{
 		{1, 0, 0},
@@ -86,7 +86,7 @@ func TestScorer_SubspaceScoring(t *testing.T) {
 }
 
 func TestScorer_SubspaceOrthogonal(t *testing.T) {
-	s := NewScorer()
+	s := NewScorer(nil)
 
 	basis := [][]float64{{1, 0, 0}}
 	activation := []float64{0, 5, 0}
@@ -99,7 +99,7 @@ func TestScorer_SubspaceOrthogonal(t *testing.T) {
 }
 
 func TestScorer_ConcurrentAccess(t *testing.T) {
-	s := NewScorer()
+	s := NewScorer(nil)
 	s.RegisterDirection("test", []float64{1, 0, 0})
 
 	done := make(chan bool, 10)
@@ -118,7 +118,7 @@ func TestScorer_ConcurrentAccess(t *testing.T) {
 }
 
 func TestScorer_ZeroNormDirection(t *testing.T) {
-	s := NewScorer()
+	s := NewScorer(nil)
 	s.RegisterDirection("zero", []float64{0, 0, 0})
 	
 	scores := s.Score([]float64{1, 0, 0})

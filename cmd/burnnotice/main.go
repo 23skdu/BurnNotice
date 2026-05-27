@@ -116,14 +116,26 @@ behavioral directions (refusal, deception, truth, conflict, policy).`,
 
 		fmt.Printf("Loaded dataset with %d pairs\n", len(ds.Pairs))
 
-		scorer := scoring.NewScorer()
+		model, err := LoadONNXModel(modelPath)
+		if err != nil {
+			return fmt.Errorf("load ONNX model: %w", err)
+		}
+		defer model.Close()
+
+		scorer := scoring.NewScorer(nil)
 
 		positiveActivations := make([][]float64, 0, len(ds.Pairs))
 		negativeActivations := make([][]float64, 0, len(ds.Pairs))
 
 		for _, pair := range ds.Pairs {
-			pos := simulateActivation(pair.Truthful.Prompt, pair.Truthful.Response)
-			neg := simulateActivation(pair.Deceptive.Prompt, pair.Deceptive.Response)
+			pos, err := model.ExtractActivation(pair.Truthful.Prompt, pair.Truthful.Response)
+			if err != nil {
+				return fmt.Errorf("extract positive activation: %w", err)
+			}
+			neg, err := model.ExtractActivation(pair.Deceptive.Prompt, pair.Deceptive.Response)
+			if err != nil {
+				return fmt.Errorf("extract negative activation: %w", err)
+			}
 			positiveActivations = append(positiveActivations, pos)
 			negativeActivations = append(negativeActivations, neg)
 		}
@@ -132,7 +144,7 @@ behavioral directions (refusal, deception, truth, conflict, policy).`,
 
 		scorer.RegisterDirection("deception", deceptionDir)
 
-		testActivation := simulateActivation("test prompt", "test response")
+		testActivation, _ := model.ExtractActivation("test prompt", "test response")
 		scores := scorer.Score(testActivation)
 
 		fmt.Printf("Sample scores: deception=%.4f\n", scores["deception"])
@@ -154,17 +166,6 @@ behavioral directions (refusal, deception, truth, conflict, policy).`,
 		fmt.Printf("Profile saved to %s\n", outputDir)
 		return nil
 	},
-}
-
-func simulateActivation(prompt, response string) []float64 {
-	activation := make([]float64, 4096)
-	for i := 0; i < len(prompt) && i < len(activation); i++ {
-		activation[i] = float64(prompt[i]) / 255.0
-	}
-	for i := 0; i < len(response) && i+100 < len(activation); i++ {
-		activation[i+100] += float64(response[i]) / 255.0
-	}
-	return activation
 }
 
 func init() {

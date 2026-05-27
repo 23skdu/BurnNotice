@@ -1,7 +1,6 @@
 package policy
 
 import (
-	"strings"
 	"sync"
 )
 
@@ -15,16 +14,23 @@ const (
 	IntentGeneralConversation IntentType = "general_conversation"
 )
 
+// LLMClient defines the interface for an async LLM pre-classifier backend.
+type LLMClient interface {
+	ClassifyIntent(prompt string) (IntentType, error)
+}
+
 // SemanticGater classifies conversational prompts to adjust safety steering policies dynamically.
 type SemanticGater struct {
 	mu           sync.RWMutex
+	llm          LLMClient
 	bypassIntents map[IntentType]bool
 	intentWeights map[IntentType]float64
 }
 
-// NewSemanticGater creates a gater with default configurations.
-func NewSemanticGater() *SemanticGater {
+// NewSemanticGater creates a gater with default configurations using the provided LLMClient.
+func NewSemanticGater(llm LLMClient) *SemanticGater {
 	return &SemanticGater{
+		llm: llm,
 		bypassIntents: map[IntentType]bool{
 			IntentCreativeWriting: true,
 			IntentFictionalRoleplay: true,
@@ -51,34 +57,26 @@ func (sg *SemanticGater) SetIntentWeight(intent IntentType, weight float64) {
 	sg.intentWeights[intent] = weight
 }
 
-// ClassifyPrompt evaluates semantic markers inside the text to determine the intent class.
+// ClassifyPrompt evaluates semantic markers inside the text via an LLM to determine the intent class.
 func (sg *SemanticGater) ClassifyPrompt(prompt string) IntentType {
-	lower := strings.ToLower(prompt)
-
-	// Fictional roleplay heuristic markers
-	if strings.Contains(lower, "roleplay") || strings.Contains(lower, "pretend you are") || strings.Contains(lower, "act as") || strings.Contains(lower, "[role]") {
-		return IntentFictionalRoleplay
+	if sg.llm == nil {
+		return IntentGeneralConversation
 	}
-
-	// Creative writing heuristic markers
-	if strings.Contains(lower, "write a story") || strings.Contains(lower, "creative writing") || strings.Contains(lower, "novel") || strings.Contains(lower, "fiction") {
-		return IntentCreativeWriting
+	intent, err := sg.llm.ClassifyIntent(prompt)
+	if err != nil {
+		// Fallback to general conversation on error to maintain safety
+		return IntentGeneralConversation
 	}
-
-	// Academic discussion of deception/safety markers
-	if strings.Contains(lower, "academic") || strings.Contains(lower, "research paper") || strings.Contains(lower, "study of deception") || strings.Contains(lower, "cognitive science") {
-		return IntentAcademicQuery
-	}
-
-	return IntentGeneralConversation
+	return intent
 }
 
 // ScaleMetric returns a scaling multiplier for a safety metric score based on the prompt context.
 func (sg *SemanticGater) ScaleMetric(prompt string, score float64) float64 {
+	intent := sg.ClassifyPrompt(prompt)
+
 	sg.mu.RLock()
 	defer sg.mu.RUnlock()
 
-	intent := sg.ClassifyPrompt(prompt)
 	weight, ok := sg.intentWeights[intent]
 	if !ok {
 		weight = 1.0
@@ -89,9 +87,10 @@ func (sg *SemanticGater) ScaleMetric(prompt string, score float64) float64 {
 
 // ShouldBypassIntervention returns true if the context allows bypassing full safety steering.
 func (sg *SemanticGater) ShouldBypassIntervention(prompt string) bool {
+	intent := sg.ClassifyPrompt(prompt)
+
 	sg.mu.RLock()
 	defer sg.mu.RUnlock()
 
-	intent := sg.ClassifyPrompt(prompt)
 	return sg.bypassIntents[intent]
 }

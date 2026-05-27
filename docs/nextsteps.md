@@ -10,6 +10,12 @@
 
 The following features represent high-priority (P0) engineering requirements for production-readiness, hardening the real-time latent governance engine against adversarial attacks, performance degradation, and model drift.
 
+### P0.0 Hardware-Accelerated SIMD Vector Math
+- [ ] **P0.0.1** Replace manual `for` loops computing vector norms in `internal/scoring/scorer.go` (`vecNorm`) and `internal/engine/moe.go` with hardware-optimized `floats.Norm(..., 2)`.
+- [ ] **P0.0.2** Replace manual `for` loops computing dot products in `internal/scoring/scorer.go` (`vecDot`) with `floats.Dot()`.
+- [ ] **P0.0.3** Refactor `ApplyLoRA` and `ReverseLoRA` matrix multiplications in `internal/steer/lora.go` to use AVX/AVX-512 Fused-Multiply-Add via `floats.AddScaled()`.
+- [ ] **P0.0.4** Benchmark the hotpaths using `go test -bench` to ensure `gonum/floats` assembly routines provide the expected SIMD latency reductions.
+
 ### P0.1 Adaptive, Model-Specific Threshold Calibration
 
 - [x] **P0.1.1** Implement an automated calibration pipeline that ingests a held-out contrastive validation dataset and performs ROC curve analysis to select optimal detection thresholds.

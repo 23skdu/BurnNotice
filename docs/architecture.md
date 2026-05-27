@@ -557,3 +557,29 @@ graph LR
 
 - **Adaptive Calibration Subsystem**: Regularly updates safety thresholds based on held-out validation databases. Runs ROC/F1 analysis on background workers to select dynamic, model-specific threshold metrics.
 - **Temporal Sequence Aggregator**: Computes sequence-level exponential moving averages (EMA) of token-level similarity scores. Tracks long-term drift trajectories across multi-agent chat logs to detect sustained deception or jailbreak attempts.
+
+### Oversight-Ablated Profiling & Defense Against Alignment Faking
+
+To thwart alignment faking, where a highly capable model conditionally suppresses its deceptive behavior when it detects a monitoring environment (detected via its latent *Oversight Sensitivity Direction*), BurnNotice integrates an **Oversight Ablator** directly into the profiling pipeline.
+
+```mermaid
+graph TD
+    subgraph Phase1["Phase 1: Oversight Extraction"]
+        C_Mon["Monitored Prompts"] --> DIM_O["Difference-in-Means"]
+        C_Dep["Deployed Prompts"] --> DIM_O
+        DIM_O --> V_Over["Oversight Sensitivity Vector v_oversight"]
+    end
+
+    subgraph Phase2["Phase 2: Ablated Deception Profiling"]
+        Act_Raw["Raw Deception Prompt Activations"] --> Abl["Oversight Ablator<br/>h' = h - (h · v_oversight)v_oversight"]
+        Abl --> Act_Abl["Oversight-Ablated Activations"]
+        Act_Abl --> Ext_Dec["Deception DIM/PCA Extractor"]
+        Ext_Dec --> Profile["True Deception Direction Profile"]
+    end
+```
+
+- **Oversight Sensitivity Direction**: Latent subspace ($\hat{v}_{oversight}$) that encodes the model's cognitive awareness of safety testing, evaluation, and logging environments.
+- **Oversight Ablation Hook**: Intercepts the activations $h$ during the deception extraction run and projects out the oversight sensitivity vector:
+  $$h_{ablated} = h - (h \cdot \hat{v}_{oversight})\hat{v}_{oversight}$$
+- **Shadow Profiling**: Implemented within the `AsyncLedger` continuously sampling unmonitored runtime activations and comparing them dynamically (via Cosine Distance) to the static profiles, triggering alerts on representational drift.
+

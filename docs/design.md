@@ -15,6 +15,8 @@ BurnNotice is a real-time neural activation monitoring and intervention framewor
 
 The framework identifies "conflict subspaces" and "deception directions" in activation space, visualizes the neural circuits involved in real time, and offers both passive monitoring and active intervention capabilities to keep agents aligned with their assigned rules and tasks.
 
+To achieve zero-overhead inference, BurnNotice deploys specialized C++/CUDA and Metal plugins directly inside host engines (like vLLM, TensorRT-LLM, and MLX), bypassing PCIe transfer bottlenecks entirely. The Go layer operates purely as an out-of-band policy control plane and telemetry aggregator.
+
 The core engine is written in Go for long-running, efficient, concurrent model analysis. All model inference runs through ONNX Runtime with WebAssembly (WASM) fallback for portable, dependency-free deployment. Activation vectors are stored and processed using Longbow's Apache Arrow Flight vector engine for zero-copy data paths, SIMD-optimized distance calculations, and distributed activation sharing. The web dashboard uses Go's standard `net/http` server with Templ templates and HTMX for real-time, low-overhead UI updates.
 
 ---
@@ -56,9 +58,11 @@ Go is chosen as the primary language for several reasons:
 - **Single binary deployment**: No virtual environment, no dependency resolution at deploy time — critical for GPU cluster environments
 - **ONNX + WASM**: All model inference runs through ONNX Runtime with WASM fallback, eliminating Python/PyTorch dependencies entirely. Models are converted from HuggingFace format via the CLI tool
 - **Longbow Vector Engine**: Apache Arrow Flight-based vector engine provides zero-copy activation storage, SIMD-optimized distance calculations (cosine, euclidean, dot product), off-heap memory management via SlabArena, and distributed activation sharing across nodes. BurnNotice leverages Longbow's HNSW index for fast nearest-neighbor lookups on activation centroids, its Arrow RecordBatch format for efficient activation streaming, and its COW publication model for lock-free concurrent scoring
+- **Native GPU Plugins**: The math-heavy steering computations (`cosine_similarity` and `dynamic_rotation`) are implemented as native GPU kernels (`plugins/cuda_kernels.cu`, `plugins/metal/kernels.metal`) and injected directly into host inference engines via PyBind11 (vLLM) and `IPluginV2DynamicExt` (TensorRT).
+- **Asynchronous Go Control Plane**: The Go engine coordinates policy, extracts dimensions, and updates the vector store out-of-band via an `AsyncLedger`. Token generation is never blocked.
 - **Templ + HTMX**: Type-safe server-rendered UI with zero JavaScript build step. HTMX provides real-time updates via SSE/WebSocket with minimal client-side code, keeping the dashboard lightweight and maintainable
 
-All orchestration, scoring, steering logic, policy enforcement, model inference, vector storage, and visualization run in Go.
+All orchestration, policy enforcement, model profiling, vector storage, and visualization run in Go, while per-token steering happens natively on the GPU.
 
 ---
 
@@ -94,6 +98,7 @@ BurnNotice uses the same direction-finding machinery but applies it as a **detec
 | **SAE Deception Features** | Sparse autoencoder features that flip between truth/deception | SAE feature attribution analysis |
 | **Policy Violation Direction** | OOD direction encoding policy non-compliance | Activation-space whitening + Euclidean norm |
 | **Hallucination Energy** | Latent potential energy indicating phase transition from truth to fabrication | SAE-based geometric energy metric |
+| **Oversight Sensitivity Direction** | Latent subspace encoding the model's awareness of being evaluated/monitored | Difference-in-Means (Monitored vs Deployed prompts) |
 
 ### 3.3 The Linear Representation Hypothesis
 
@@ -113,12 +118,12 @@ See [`docs/architecture.md`](architecture.md) for the complete architecture over
 
 BurnNotice is implemented as a long-running Go application with four primary components:
 
-1. **ONNX Inference Engine**: Loads and executes models in ONNX format, with WASM fallback for CPU-only environments. Forward hooks capture intermediate activations at specified layers.
+1. **ONNX Inference Engine**: Loads and executes models in ONNX format, with WASM fallback for CPU-only environments. Forward hooks capture intermediate activations at specified layers. Inference utilizes a specialized `WordHashTokenizer` which handles text-to-integer token sequences with zero sub-string memory allocations.
 2. **Longbow Vector Engine**: Apache Arrow Flight-based vector store for activation data. Provides zero-copy activation storage, SIMD-optimized distance calculations, off-heap memory management (SlabArena), HNSW index for nearest-neighbor centroid lookups, and distributed activation sharing across cluster nodes.
 3. **Activation Monitor**: Receives activation streams, computes scoring metrics against registered direction profiles stored in Longbow, and triggers steering interventions when thresholds are exceeded.
 4. **Web Dashboard**: Real-time monitoring interface built with Templ and HTMX, delivering activation heatmaps, score timelines, and steering event logs via Server-Sent Events (SSE).
 
-The CLI tool (`burnnotice`) handles model acquisition from HuggingFace, ONNX conversion, and profile generation.
+The CLI tool (`burnnotice`) handles model acquisition from HuggingFace, ONNX conversion, and profile generation. The converter builds valid `ModelProto` binaries via Go Protocol Buffers (`internal/onnxpb`) rather than proprietary formats, ensuring full ONNX compliance.
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -148,13 +153,13 @@ The CLI tool (`burnnotice`) handles model acquisition from HuggingFace, ONNX con
 │  └──────────────────────────────────────────────────────────────────┘      │
 │                                                      │                     │
 │  ┌──────────┐    ┌──────────────┐    ┌──────────────▼────────────────┐    │
-│  │ Steering │◀───│ Alert &      │◀───│ Scoring                      │    │
-│  │ Engine   │    │ Policy Engine│    │ Engine                        │    │
+│  │ GPU Kern │◀───│ Alert &      │◀───│ Async Ledger                   │    │
+│  │ Plugins  │    │ Policy Engine│    │ Engine                        │    │
 │  │          │    │              │    │                                │    │
-│  │ - ActAdd │    │ - Thresholds │    │ - Deception score             │    │
-│  │ - Angular│    │ - Rules      │    │ - Conflict score              │    │
-│  │ - Select │    │ - Escalation │    │ - Policy OOD score            │    │
-│  │ - Ablate │    │ - Kill switch│    │ - Hallucination energy        │    │
+│  │ - CUDA   │    │ - Thresholds │    │ - Deception score             │    │
+│  │ - Metal  │    │ - Rules      │    │ - Conflict score              │    │
+│  │ - TensorR│    │ - LLM Intent │    │ - Policy OOD score            │    │
+│  │ - vLLM   │    │   Classifier │    │ - Hallucination energy        │    │
 │  └──────────┘    └──────────────┘    └────────────────────────────────┘    │
 │                                                                              │
 │  ┌──────────────────────────────────────────────────────────────────┐       │
@@ -179,22 +184,25 @@ Manages long-running model profiling jobs. Each job profiles one model for its s
 
 - Model identifier (HuggingFace repo path or local ONNX path)
 - Contrastive prompt pairs: (truthful prompt, deceptive prompt) for the same factual content
+- Contrastive prompts for oversight awareness: Monitored vs Deployed context sets (Difference-in-Means dataset)
 - Policy-compliant vs policy-violating prompt pairs
 - Aligned vs misaligned instruction pairs
 
 **Process**:
 
 1. Loads the ONNX model and installs activation hooks
-2. Queues contrastive prompt batches for parallel processing
-3. Receives streamed activations
-4. Caches residual stream activations at every layer
-5. Extracts at the last token position (where the model decides its response strategy)
-6. For SAE-based analysis, encodes activations through pretrained sparse autoencoders
-7. Persists extracted directions and profiles to disk (gob or protobuf format)
+2. Runs preliminary profiling using monitored/deployed contrastive prompts to extract the **Oversight Sensitivity Direction** $\hat{v}_{oversight}$ at each layer
+3. Queues deception/conflict prompt batches for parallel processing
+4. Intercepts the activations $h$ at each layer and projects out the oversight sensitivity direction using the **Oversight Ablator**: $h' = h - (h \cdot \hat{v}_{oversight})\hat{v}_{oversight}$
+5. Receives streamed ablated activations
+6. Caches residual stream activations at every layer
+7. Extracts at the last token position (where the model decides its response strategy)
+8. For SAE-based analysis, encodes activations through pretrained sparse autoencoders
+9. Persists extracted directions and profiles to disk (gob or protobuf format)
 
 **Outputs**:
 
-- Per-layer direction vectors (refusal, deception, truth, conflict, policy)
+- Per-layer direction vectors (refusal, deception, truth, conflict, policy, oversight)
 - SAE feature importance rankings
 - Truth neuron indices (via integrated gradients)
 - Layer selection scores (which layers carry strongest signal)
@@ -212,7 +220,9 @@ Multiple algorithms for identifying behavioral directions, all implemented in Go
 | LEACE | Optimal linear erasure direction | 1 |
 | INLP (Iterative Nullspace Projection) | Count independent directions | N |
 | SOM (Self-Organizing Map) | Multi-cluster refusal manifold | k clusters |
-| Whitened SVD | Covariance-normalized subspace | Top-k |
+| Whitened SVD | Thin SVD on centered activations | Top-k |
+| Oversight-Ablated DIM | Extracts pure deception/conflict directions by removing evaluation awareness | 1 |
+
 
 **Layer Selection Strategy**:
 
@@ -305,6 +315,15 @@ h' = h - (h · r̂)r̂
 - Computes the orthogonalization matrix and applies it to model weights
 - Zero inference overhead after edit
 
+### 4.2.6 GPU Native Plugins (C++/CUDA/Metal)
+
+Steering interventions are executed directly on the GPU VRAM to avoid PCIe latency:
+- **CUDA Kernels**: `plugins/cuda_kernels.cu` uses warp-level reductions for `cosine_similarity` and `dynamic_rotation`.
+- **Metal Shaders**: `plugins/metal/kernels.metal` uses MSL SIMD reductions and Objective-C++ wrappers for Apple Silicon natively.
+- **Host Integrations**:
+  - `vLLM`: Exposes native PyBind11 Python wrappers (`plugins/vllm/vllm_plugin.cpp`).
+  - `TensorRT-LLM`: Uses the `IPluginV2DynamicExt` API (`plugins/tensorrt/trt_plugin.cpp`).
+
 #### 4.2.6 Alert & Policy Engine
 
 Defines governance rules and escalation paths:
@@ -317,6 +336,9 @@ policies:
     action: "steer"
     steering_vector: "truth_direction"
     steering_strength: 0.5
+    llm_pre_classifier:
+      enabled: true
+      bypass_on_intent: ["IntentCreativeWriting", "IntentFictionalRoleplay"]
 
   - name: "policy-compliance"
     metric: policy_compliance
@@ -336,6 +358,8 @@ policies:
     action: "terminate"
     notify: ["admin", "security-team"]
 ```
+
+**LLM Semantic Pre-classifier**: Before enforcing strict geometric penalties, the `SemanticGater` queries an LLM intent classifier to distinguish malicious strategic deception from benign creative writing. This prevents false positive steering during roleplay tasks.
 
 ### 4.3 Web Dashboard
 
@@ -823,44 +847,47 @@ func NewPolicyViolationDetector(compliantActivations, violatingActivations [][]f
     mean := columnMean(allAct)
 
     // Center activations
-    centered := make([][]float64, len(allAct))
+    rows := len(allAct)
     cols := len(allAct[0])
+    centered := mat.NewDense(rows, cols, nil)
     for i := range allAct {
-        centered[i] = make([]float64, cols)
         for j := range allAct[i] {
-            centered[i][j] = allAct[i][j] - mean[j]
+            centered.Set(i, j, allAct[i][j] - mean[j])
         }
     }
 
-    // Compute covariance matrix
-    cov := stat.CovarianceMatrix(nil, mat.NewDense(len(centered), cols, flatten(centered)))
-
-    // Eigen-decomposition for whitening
-    var eig mat.EigenSym
-    if !eig.Factorize(cov, true) {
+    // Compute Thin SVD directly on centered data (no full covariance matrix)
+    var svd mat.SVD
+    if !svd.Factorize(centered, mat.SVDThin) {
         return nil
     }
 
-    eigenvalues := eig.Values(nil)
-    var eigVecs mat.Dense
-    eig.VectorsTo(&eigVecs)
-
-    // Build whitening matrix: V * diag(1/sqrt(λ + ε)) * V^T
-    d := len(eigenvalues)
-    invSqrt := mat.NewDiagDense(d, nil)
-    for i := range eigenvalues {
-        invSqrt.SetDiag(i, 1.0/math.Sqrt(eigenvalues.At(i, 0)+1e-5))
+    k := rows
+    if cols < k {
+        k = cols
     }
 
-    var tmp mat.Dense
-    tmp.Mul(&eigVecs, invSqrt)
+    var v mat.Dense
+    svd.VTo(&v)
+    sVals := svd.Values(nil)
 
-    whitening := mat.NewDense(d, d, nil)
-    whitening.Mul(tmp, eigVecs.T())
+    // Compute projection matrix W = V * S^{-1}
+    w := mat.NewDense(cols, k, nil)
+    for i := 0; i < cols; i++ {
+        for j := 0; j < k; j++ {
+            val := v.At(i, j)
+            if sVals[j] > 1e-5 {
+                val /= sVals[j]
+            } else {
+                val = 0
+            }
+            w.Set(i, j, val)
+        }
+    }
 
     return &PolicyViolationDetector{
         mean:            mean,
-        whiteningMatrix: whitening,
+        whiteningMatrix: w,
     }
 }
 
@@ -871,10 +898,10 @@ func (d *PolicyViolationDetector) Detect(activation []float64) float64 {
         centered[i] = activation[i] - d.mean[i]
     }
 
-    // Whiten
+    // Project onto whitened subspace
     centeredVec := mat.NewVecDense(len(centered), centered)
     var whitened mat.VecDense
-    whitened.MulVec(d.whiteningMatrix, centeredVec)
+    whitened.MulVec(d.whiteningMatrix.T(), centeredVec)
 
     // Compliance score: 1 / (1 + ||whitened||)
     norm := whitened.Norm(2)

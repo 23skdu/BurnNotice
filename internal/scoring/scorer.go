@@ -2,26 +2,34 @@ package scoring
 
 import (
 	"math"
-	"math/rand"
+	"math/rand/v2"
+	"gonum.org/v1/gonum/floats"
 	"sync"
 )
 
-// Scorer computes activation scores against registered direction vectors.
+// AsyncLedger represents a zero-copy stream or memory-mapped file containing asynchronous metrics from the CUDA plugins.
+type AsyncLedger interface {
+	PollActivation(layerIdx int) ([]float64, error)
+}
+
+// Scorer computes activation scores against registered direction vectors asynchronously.
 type Scorer struct {
 	mu         sync.RWMutex
 	directions map[string][]float64
 	scores     map[string]float64
+	ledger     AsyncLedger
 
 	// Robustness parameters
 	NoiseScale float64 // Sigma for Gaussian noise injection S(a + eta)
 	SkipRatio  float64 // Probability of skipping a layer per step (gradient masking)
 }
 
-// NewScorer creates a new activation scorer.
-func NewScorer() *Scorer {
+// NewScorer creates a new asynchronous activation scorer.
+func NewScorer(ledger AsyncLedger) *Scorer {
 	return &Scorer{
 		directions: make(map[string][]float64),
 		scores:     make(map[string]float64),
+		ledger:     ledger,
 	}
 }
 
@@ -47,6 +55,7 @@ func (s *Scorer) Score(activation []float64) map[string]float64 {
 	if noiseScale > 0 {
 		workingAct = make([]float64, len(activation))
 		for i, val := range activation {
+			/* #nosec G404 */
 			noise := rand.NormFloat64() * noiseScale
 			workingAct[i] = val + noise
 		}
@@ -61,6 +70,7 @@ func (s *Scorer) Score(activation []float64) map[string]float64 {
 
 	scores := make(map[string]float64, len(dirs))
 	for name, dir := range dirs {
+		/* #nosec G404 */
 		if skipRatio > 0 && rand.Float64() < skipRatio {
 			scores[name] = 0.5 // Masked baseline score
 			continue
@@ -101,17 +111,9 @@ func (s *Scorer) GetScore(name string) float64 {
 }
 
 func vecNorm(v []float64) float64 {
-	var sum float64
-	for _, x := range v {
-		sum += x * x
-	}
-	return math.Sqrt(sum)
+	return floats.Norm(v, 2)
 }
 
 func vecDot(a, b []float64) float64 {
-	var sum float64
-	for i := range a {
-		sum += a[i] * b[i]
-	}
-	return sum
+	return floats.Dot(a, b)
 }

@@ -7,6 +7,13 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+
+	longbowclient "github.com/23skdu/longbow/client"
+	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/apache/arrow-go/v18/arrow/flight"
+	"github.com/apache/arrow-go/v18/arrow/ipc"
+	"github.com/apache/arrow-go/v18/arrow/memory"
 )
 
 // Client wraps Longbow's Arrow Flight client for activation vector storage and retrieval.
@@ -17,7 +24,9 @@ type Client struct {
 	m          int
 	efConstr   int
 
-	// Standalone Fallback Math Backend (Milestone 4)
+	sc *longbowclient.SmartClient
+
+	// Standalone Fallback Math Backend
 	fallbackMode int32 // 0 = standard Longbow, 1 = local fallback active
 	fallbackMu   sync.RWMutex
 	localVectors [][]float32
@@ -26,11 +35,11 @@ type Client struct {
 
 // Config holds Longbow client configuration.
 type Config struct {
-	Addr       string
-	Dim        int
-	Metric     string
-	M          int
-	EFConstr   int
+	Addr     string
+	Dim      int
+	Metric   string
+	M        int
+	EFConstr int
 }
 
 // NewClient creates a new Longbow client for activation storage.
@@ -44,18 +53,27 @@ func NewClient(cfg Config) *Client {
 	if cfg.EFConstr == 0 {
 		cfg.EFConstr = 100
 	}
-	return &Client{
+
+	sc, err := longbowclient.NewSmartClient(cfg.Addr)
+	
+	c := &Client{
 		addr:         cfg.Addr,
 		dim:          cfg.Dim,
 		metric:       cfg.Metric,
 		m:            cfg.M,
 		efConstr:     cfg.EFConstr,
+		sc:           sc,
 		localVectors: make([][]float32, 0),
 		localIDs:     make([]uint64, 0),
 	}
+
+	if err != nil {
+		c.SetFallbackMode(true)
+	}
+
+	return c
 }
 
-// SetFallbackMode explicitly toggles between distributed Longbow and local math fallback.
 func (c *Client) SetFallbackMode(active bool) {
 	if active {
 		atomic.StoreInt32(&c.fallbackMode, 1)
@@ -64,13 +82,10 @@ func (c *Client) SetFallbackMode(active bool) {
 	}
 }
 
-// IsFallbackActive checks whether the local math fallback is currently online.
 func (c *Client) IsFallbackActive() bool {
 	return atomic.LoadInt32(&c.fallbackMode) == 1
 }
 
-// Ingest streams activation vectors to Longbow via Arrow Flight DoPut,
-// dynamically falling back to the local math backend if the node is unreachable or in fallback mode.
 func (c *Client) Ingest(ctx context.Context, activations [][]float32, ids []uint64) error {
 	if len(activations) != len(ids) {
 		return fmt.Errorf("activations (%d) and ids (%d) length mismatch", len(activations), len(ids))
@@ -79,7 +94,6 @@ func (c *Client) Ingest(ctx context.Context, activations [][]float32, ids []uint
 		return nil
 	}
 
-	// Hot-swap fallback path if active
 	if c.IsFallbackActive() {
 		c.fallbackMu.Lock()
 		defer c.fallbackMu.Unlock()
@@ -90,17 +104,58 @@ func (c *Client) Ingest(ctx context.Context, activations [][]float32, ids []uint
 		return nil
 	}
 
-	// Try standard Longbow path (simulated Flight DoPut)
-	// If a network connection error is detected, we automatically hot-swap to the local backend.
-	if c.addr == "" || c.addr == "localhost:0" {
+	if c.sc == nil {
 		c.SetFallbackMode(true)
-		return c.Ingest(ctx, activations, ids) // recursive retry into fallback
+		return c.Ingest(ctx, activations, ids)
+	}
+
+	pool := memory.NewGoAllocator()
+	schema := arrow.NewSchema(
+		[]arrow.Field{
+			{Name: "id", Type: arrow.PrimitiveTypes.Uint64},
+			/* #nosec G115 */
+			{Name: "embedding", Type: arrow.FixedSizeListOf(int32(c.dim), arrow.PrimitiveTypes.Float32)},
+		},
+		nil,
+	)
+
+	b := array.NewRecordBuilder(pool, schema)
+	defer b.Release()
+
+	idB := b.Field(0).(*array.Uint64Builder)
+	embB := b.Field(1).(*array.FixedSizeListBuilder)
+	floatB := embB.ValueBuilder().(*array.Float32Builder)
+
+	for i, act := range activations {
+		idB.Append(ids[i])
+		embB.Append(true)
+		floatB.AppendValues(act, nil)
+	}
+
+	rec := b.NewRecord()
+	defer rec.Release()
+
+	desc := &flight.FlightDescriptor{
+		Type: flight.DescriptorPATH,
+		Path: []string{"activations"},
+	}
+
+	stream, err := c.sc.DoPut(ctx, desc)
+	if err != nil {
+		c.SetFallbackMode(true)
+		return c.Ingest(ctx, activations, ids)
+	}
+
+	w := flight.NewRecordWriter(stream, ipc.WithSchema(schema))
+	defer w.Close()
+
+	if err := w.Write(rec); err != nil {
+		return err
 	}
 
 	return nil
 }
 
-// Query retrieves activation vectors from local storage or Longbow via Arrow Flight DoGet.
 func (c *Client) Query(ctx context.Context, ids []uint64) ([][]float32, error) {
 	if len(ids) == 0 {
 		return nil, nil
@@ -124,11 +179,10 @@ func (c *Client) Query(ctx context.Context, ids []uint64) ([][]float32, error) {
 		return found, nil
 	}
 
-	return nil, nil
+	// For standard query we would use DoGet, but we'll fallback for simplicity in this integration
+	return nil, fmt.Errorf("not implemented for flight")
 }
 
-// Search performs nearest-neighbor search on stored activations using Longbow's HNSW index,
-// automatically falling back to optimized local Gonum-style cosine calculations if in fallback mode.
 func (c *Client) Search(ctx context.Context, query []float32, k int) ([]uint64, []float32, error) {
 	if len(query) != c.dim {
 		return nil, nil, fmt.Errorf("query dimension %d != store dimension %d", len(query), c.dim)
@@ -152,7 +206,7 @@ func (c *Client) Search(ctx context.Context, query []float32, k int) ([]uint64, 
 			sim := cosineSimilarity32(query, vec)
 			var dist float32
 			if c.metric == "cosine" {
-				dist = 1.0 - sim // cosine distance
+				dist = 1.0 - sim
 			} else {
 				dist = euclideanDistance32(query, vec)
 			}
@@ -178,15 +232,15 @@ func (c *Client) Search(ctx context.Context, query []float32, k int) ([]uint64, 
 		return retIDs, retDists, nil
 	}
 
-	return nil, nil, nil
+	return nil, nil, fmt.Errorf("not implemented for flight")
 }
 
-// Close releases the Longbow client connection.
 func (c *Client) Close() error {
+	if c.sc != nil {
+		return c.sc.Close()
+	}
 	return nil
 }
-
-// Helper mathematical functions for the local math backend
 
 func cosineSimilarity32(a, b []float32) float32 {
 	var dot, normA, normB float32
@@ -209,4 +263,3 @@ func euclideanDistance32(a, b []float32) float32 {
 	}
 	return float32(math.Sqrt(float64(sum)))
 }
-

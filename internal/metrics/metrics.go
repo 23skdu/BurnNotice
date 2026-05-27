@@ -315,4 +315,30 @@ var (
 		},
 		[]string{"direction", "layer"},
 	)
+
+	CUDAKernelLatencyUS = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "burnnotice_cuda_kernel_latency_us",
+			Help:    "Latency of C++/CUDA GPU kernel executions in microseconds",
+			Buckets: prometheus.ExponentialBuckets(1, 2, 12),
+		},
+		[]string{"kernel_name"},
+	)
+
+	VLLMHookTriggersTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "burnnotice_vllm_hook_triggers_total",
+			Help: "Total number of times vLLM triggered the steering hook",
+		},
+		[]string{"model_id"},
+	)
+
+	LLMClassifierLatencyMS = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "burnnotice_llm_classifier_latency_ms",
+			Help:    "Latency of the async LLM pre-classifier in milliseconds",
+			Buckets: prometheus.ExponentialBuckets(10, 2, 10),
+		},
+		[]string{"classifier_type"},
+	)
 )

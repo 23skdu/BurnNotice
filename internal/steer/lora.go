@@ -3,6 +3,7 @@ package steer
 import (
 	"fmt"
 	"math"
+	"gonum.org/v1/gonum/floats"
 )
 
 // LoRASteerer implements LoRA-based reversible steering.
@@ -67,12 +68,8 @@ func (l *LoRASteerer) ApplyLoRA(weights [][]float64) ([][]float64, error) {
 	for i := 0; i < l.dim; i++ {
 		result[i] = make([]float64, len(weights[i]))
 		copy(result[i], weights[i])
-		for j := 0; j < len(weights[i]); j++ {
-			var delta float64
-			for k := 0; k < l.rank; k++ {
-				delta += l.A[i][k] * l.B[k][j]
-			}
-			result[i][j] += delta
+		for k := 0; k < l.rank; k++ {
+			floats.AddScaled(result[i], l.A[i][k], l.B[k])
 		}
 	}
 
@@ -93,12 +90,8 @@ func (l *LoRASteerer) ReverseLoRA(weights [][]float64) ([][]float64, error) {
 	for i := 0; i < l.dim; i++ {
 		result[i] = make([]float64, len(weights[i]))
 		copy(result[i], weights[i])
-		for j := 0; j < len(weights[i]); j++ {
-			var delta float64
-			for k := 0; k < l.rank; k++ {
-				delta += l.A[i][k] * l.B[k][j]
-			}
-			result[i][j] -= delta
+		for k := 0; k < l.rank; k++ {
+			floats.AddScaled(result[i], -l.A[i][k], l.B[k])
 		}
 	}
 

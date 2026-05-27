@@ -36,7 +36,7 @@ func NewValidator(minAUROC float64) *Validator {
 func (v *Validator) Validate(profile *ModelProfile, dataset *datasets.Dataset) []ValidationResult {
 	var results []ValidationResult
 
-	scorer := scoring.NewScorer()
+	scorer := scoring.NewScorer(nil)
 
 	for dirName, layers := range profile.Directions {
 		for layerIdx, dir := range layers {

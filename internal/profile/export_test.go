@@ -254,3 +254,69 @@ func TestCosineDistance_ZeroVector(t *testing.T) {
 		t.Errorf("cosineDistance(zero vector) = %f, want 1.0", dist)
 	}
 }
+
+func TestModelProfile_ExportImport_GOB(t *testing.T) {
+	p := &ModelProfile{
+		ModelID:    "test-model-gob",
+		Directions: map[string]map[int][]float64{"d": {0: {1.0, 2.0}}},
+	}
+
+	meta := ProfileMetadata{
+		CreatedAt:       time.Now(),
+		ModelArchitecture: "test",
+		DatasetSize:     100,
+		ValidationScore: 0.9,
+		Version:         1,
+	}
+
+	data, err := p.Export(meta, "gob")
+	if err != nil {
+		t.Fatalf("Export GOB error: %v", err)
+	}
+
+	ep, err := ImportProfile(data, "gob")
+	if err != nil {
+		t.Fatalf("ImportProfile GOB error: %v", err)
+	}
+
+	if ep.ModelID != "test-model-gob" {
+		t.Errorf("imported GOB ModelID = %s, want test-model-gob", ep.ModelID)
+	}
+}
+
+func TestNilReader_EOF(t *testing.T) {
+	r := &nilReader{data: []byte{1, 2}, pos: 2}
+	buf := make([]byte, 10)
+	_, err := r.Read(buf)
+	if err == nil {
+		t.Error("expected EOF error from nilReader, got nil")
+	}
+}
+
+func TestSqrt_EdgeCases(t *testing.T) {
+	if got := sqrt(0.0); got != 0.0 {
+		t.Errorf("sqrt(0) = %f, want 0", got)
+	}
+	if got := sqrt(-5.0); got != 0.0 {
+		t.Errorf("sqrt(-5) = %f, want 0", got)
+	}
+}
+
+func TestComputeDiff_MissingLayer(t *testing.T) {
+	old := &ExportableProfile{
+		Directions: map[string]map[int][]float64{
+			"deception": {0: {1.0, 0.0}},
+		},
+	}
+	new := &ExportableProfile{
+		Directions: map[string]map[int][]float64{
+			"deception": {1: {1.0, 0.0}}, // missing layer 0
+		},
+	}
+
+	diff := ComputeDiff(old, new)
+	if len(diff["deception"]) != 0 {
+		t.Errorf("expected empty diff for missing layer, got %v", diff)
+	}
+}
+

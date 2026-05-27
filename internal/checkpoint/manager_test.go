@@ -93,6 +93,97 @@ func TestStartStop(t *testing.T) {
 func TestLoadNotFound(t *testing.T) {
 	_, err := Load("/nonexistent/path/checkpoint.gob")
 	if err == nil {
-		t.Fatal("expected error for non-existent file")
+		t.Fatal("expected error for nonexistent file")
 	}
 }
+
+func TestLoad_InvalidJSON(t *testing.T) {
+	tmp := t.TempDir() + "/invalid.json"
+	if err := os.WriteFile(tmp, []byte("invalid-json"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load(tmp)
+	if err == nil {
+		t.Error("expected error loading invalid JSON, got nil")
+	}
+}
+
+func TestSave_MarshalError(t *testing.T) {
+	tmp := t.TempDir() + "/marshal_error.json"
+	m := NewManager(1*time.Hour, tmp)
+
+	// Functions cannot be marshalled to JSON
+	unmarshallable := map[string]interface{}{
+		"fn": func() {},
+	}
+
+	err := m.Save(unmarshallable)
+	if err == nil {
+		t.Error("expected error saving unmarshallable state, got nil")
+	}
+}
+
+func TestSave_DirCreationError(t *testing.T) {
+	// A file already exists at the parent directory path, so MkdirAll should fail
+	tmpDir := t.TempDir()
+	filePath := tmpDir + "/parent"
+	if err := os.WriteFile(filePath, []byte("some-data"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// This path attempts to create a subdirectory under /parent, which is a file
+	m := NewManager(1*time.Hour, filePath+"/checkpoint.json")
+	err := m.Save(map[string]interface{}{"val": 1})
+	if err == nil {
+		t.Error("expected directory creation error, got nil")
+	}
+}
+
+func TestSave_WriteFileError(t *testing.T) {
+	tmpDir := t.TempDir()
+	m := NewManager(1*time.Hour, tmpDir+"/checkpoint.json")
+
+	// Pre-create the temp path as a directory so os.WriteFile fails
+	if err := os.MkdirAll(tmpDir+"/checkpoint.json.tmp", 0750); err != nil {
+		t.Fatal(err)
+	}
+
+	err := m.Save(map[string]interface{}{"val": 1})
+	if err == nil {
+		t.Error("expected write file error, got nil")
+	}
+}
+
+func TestStart_SaveErrorPath(t *testing.T) {
+	// If the initial save inside Start fails, it returns early without ticker
+	tmpDir := t.TempDir()
+	filePath := tmpDir + "/parent"
+	if err := os.WriteFile(filePath, []byte("some-data"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := NewManager(1*time.Hour, filePath+"/checkpoint.json")
+	m.Start(map[string]interface{}{"val": 1})
+	if m.ticker != nil {
+		t.Error("expected ticker to not be initialized on save error")
+	}
+}
+
+func TestSave_RenameError(t *testing.T) {
+	tmpDir := t.TempDir()
+	filePath := tmpDir + "/checkpoint.json"
+
+	// Pre-create filePath as a directory, so that os.Rename(tmp, filePath) will fail
+	// because you cannot rename a file to replace a directory.
+	if err := os.MkdirAll(filePath, 0750); err != nil {
+		t.Fatal(err)
+	}
+
+	m := NewManager(1*time.Hour, filePath)
+	err := m.Save(map[string]interface{}{"val": 1})
+	if err == nil {
+		t.Error("expected rename error, got nil")
+	}
+}
+

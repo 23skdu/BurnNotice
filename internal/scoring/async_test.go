@@ -8,7 +8,7 @@ import (
 )
 
 func TestAsyncScorer_ExecutionAndBypass(t *testing.T) {
-	scorer := NewScorer()
+	scorer := NewScorer(nil)
 	dir := make([]float64, 4096)
 	dir[0] = 1.0
 	scorer.RegisterDirection("deception:0", dir)

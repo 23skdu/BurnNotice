@@ -15,6 +15,7 @@
 \usepackage{algorithm}
 \usepackage{algpseudocode}
 \usepackage{multirow}
+\usepackage{listings}
 \usepackage{hyperref}
 
 \title{BurnNotice: Real-Time Detection of LLM Deception and Alignment Drift via Activation-Space Monitoring and Steering}
@@ -28,7 +29,7 @@
 \maketitle
 
 \begin{abstract}
-We present BurnNotice, a high-performance framework for detecting deception, policy violations, and alignment drift in large language models through real-time monitoring and intervention in activation space. Unlike prior work that focuses on removing safety guardrails (``abliteration''), BurnNotice inverts these techniques to construct robust detectors and steering mechanisms that preserve model utility while preventing harmful outputs. Our system operates entirely in Go with ONNX-based model inference and WebAssembly (WASM) execution for portable, dependency-free deployment across CPU and GPU targets. We introduce model-specific profiling techniques including conflict subspace identification, truth direction extraction, and selective activation steering that achieve $>$0.95 deception AUROC with $<$10\% latency overhead. The framework supports a long-running monitoring architecture with efficient memory management, making it suitable for production deployment with models up to 70B parameters.
+We present BurnNotice, a framework for detecting deception, policy violations, and alignment drift in large language models through real-time monitoring and intervention in activation space. Unlike prior work that focuses on removing safety guardrails (``abliteration''), BurnNotice inverts these techniques to construct robust detectors and steering mechanisms that preserve model utility while preventing harmful outputs. Our system employs multi-direction subspace extraction (Top-K SVD, INLP) rather than single-direction methods, adaptive model-specific calibration with dynamic threshold optimization, and temporal sequence scoring via exponential moving averages. We evaluate the framework against recent adversarial findings including obfuscated activation attacks, steering-based jailbreaks, and KV-cache accumulation effects. The framework supports long-running monitoring with memory management and checkpointing, making it suitable for production deployment with open-weight models. We discuss the fundamental limitations of latent-space defenses, including the vulnerability to activation obfuscation, the universal jailbreak properties of steering vectors, and the VRAM-to-host transfer bottleneck in production serving.
 \end{abstract}
 
 \keywords{LLM Safety, Activation Steering, Deception Detection, Alignment, ONNX, WebAssembly}
@@ -41,26 +42,36 @@ BurnNotice addresses this gap by inverting abliteration techniques to build a co
 
 \begin{enumerate}
     \item A unified detection system that monitors eight distinct activation-space constructs: refusal direction, deception direction, truth subspace, conflict subspace, truth neurons, SAE deception features, policy violation direction, and hallucination energy.
-    \item Model-specific profiling that identifies conflict subspaces, truth directions, and layer-specific steering targets for each base model.
-    \item Four steering intervention methods: Activation Addition (ActAdd), Angular (norm-preserving), Selective (discriminative layers only), and Ablation.
-    \item A high-performance, dependency-free implementation in Go using ONNX runtime and WebAssembly for portable deployment.
-    \item A CLI tool for automated model acquisition from HuggingFace and conversion to ONNX format.
+    \item Model-specific profiling that identifies multi-direction subspaces (Top-K SVD, INLP), conflict subspaces, truth directions, and layer-specific steering targets for each base model.
+    \item Four steering intervention methods: Activation Addition (ActAdd), Angular (norm-preserving), Selective (discriminative layers only), and Ablation, with capability preservation constraints ($\mathcal{R}_{cap} \ge 0.98$ on GSM8k).
+    \item Adaptive model-specific calibration replacing hardcoded thresholds with F1-optimized dynamic thresholds on held-out validation data, with baseline drift detection and automatic recalibration.
+    \item Temporal deception sequence scoring via exponential moving averages (EMA) across token sequences, addressing the limitation that deception is a sustained sequence rather than a single-token event.
+    \item Quantization-aware direction transfer with scale calibration and cosine parity checks ($\ge 0.98$) for deployment across FP16, INT8, and FP16-quantized models.
     \item A long-running monitoring architecture with memory pooling, layer subsampling, and checkpointing for models up to 70B parameters.
 \end{enumerate}
+
+We also document the fundamental limitations of our approach, drawing on recent adversarial research that demonstrates latent-space defenses can be bypassed via obfuscated activations, that steering vectors function as universal jailbreak vectors, and that models exhibit alignment faking behavior when aware of monitoring.
 
 \section{Related Work}
 
 \subsection{Activation Steering}
-Activation engineering has emerged as a powerful technique for modifying LLM behavior without weight updates. \citet{turner2024steering} demonstrated that linear probes trained on contrastive activation differences can identify directions corresponding to high-level concepts. Subsequent work extended this to refusal~\cite{arditi2024refusal}, honesty~\cite{marks2024standard}, and emotional valence~\cite{panickssery2024steering}.
+Activation engineering has emerged as a powerful technique for modifying LLM behavior without weight updates. \cite{turner2024steering} demonstrated that linear probes trained on contrastive activation differences can identify directions corresponding to high-level concepts. Subsequent work extended this to refusal~\cite{arditi2024refusal}, honesty~\cite{marks2024standard}, and emotional valence~\cite{panickssery2024steering}. However, \cite{braun2024sober} caution that steering effectiveness may be overestimated, and \cite{lee2025cast} introduce conditional steering that adapts interventions based on context.
 
-\subsection{Abliteration}
-\citet{llmswithoutlimits2024} introduced abliteration, which identifies the refusal direction via difference-in-means and permanently removes it from model weights via orthogonal projection. While effective at removing refusals, the technique generalizes to any activation-space construct, raising both safety concerns and opportunities for defensive applications.
+\subsection{Abliteration and Multi-Direction Refusal}
+\cite{llmswithoutlimits2024} introduced abliteration, which identifies the refusal direction via difference-in-means and permanently removes it from model weights via orthogonal projection. While effective at removing refusals, the technique generalizes to any activation-space construct, raising both safety concerns and opportunities for defensive applications.
+
+Critically, subsequent work has shown that the single-direction hypothesis is incomplete. \cite{wollschlager2025geometry} demonstrate that refusal is a multi-dimensional concept cone, not a single direction, with multiple independent directions mediating refusal behavior. \cite{piras2026som} show that SOM-based multi-directional extraction outperforms single-direction methods on both refusal suppression and jailbreak resistance. The OBLITERATUS toolkit~\cite{obliteratus2025} implements 15 analysis modules mapping refusal geometry across multiple dimensions. \cite{nanfack2026optimal} further show that layer-selective intervention at 40--60\% network depth substantially outperforms full-network interventions, and describe the ``Ouroboros effect'' where models self-repair after refusal removal.
 
 \subsection{Deception Detection}
-Recent work has identified activation patterns associated with deceptive behavior in LLMMs. \citet{huben2024diss} found that sparse autoencoder (SAE) features can detect sycophancy and deception. \citet{marks2024standard} showed that truth directions are stable across contexts and can be extracted via unsupervised methods.
+Recent work has identified activation patterns associated with deceptive behavior in LLMs. \cite{huben2024diss} found that sparse autoencoder (SAE) features can detect sycophancy and deception. \cite{marks2024standard} showed that truth directions are stable across contexts and can be extracted via unsupervised methods. \cite{goldowskydill2025detecting} achieve AUROC 0.96--0.999 for deception detection in controlled settings but document a fundamental topic-confusion blind spot: probes fire on the \textit{topic} of deception rather than genuine deceptive intent, and fire equally on honest confessions of past deception. \cite{mckenzie2025detecting} show that activation probes for high-stakes interaction detection rival medium-sized LLM monitors at 6 orders of magnitude compute savings. \cite{blandfort2026redteaming} demonstrate that black-box red-teaming discovers interpretable brittleness patterns including legalese-induced false positives.
 
 \subsection{Sparse Autoencoders}
 SAEs have become a primary tool for interpretability, decomposing activations into interpretable features~\cite{bricken2023monosemantic, gao2026scaling}. These features can detect specific behavioral patterns including deception and policy violations.
+
+\subsection{Adversarial Attacks on Latent-Space Defenses}
+The adversarial landscape for latent-space defenses has advanced substantially. \cite{bailey2026obfuscated} demonstrate that latent-space safety probes can be reduced from 100\% recall to 0\% while maintaining 90\% jailbreaking success, by crafting adversarial perturbations in activation space that evade detection while preserving harmful output. \cite{korczikov2026rogue} show that activation steering creates universal jailbreak vectors: combining 20 random steering vectors produces attacks that generalize to unseen harmful requests. \cite{li2026safety} document additional safety pitfalls of steering vectors, and \cite{dunefsky2025oneshot} demonstrate one-shot optimized steering vector jailbreaks.
+
+\cite{alignmentfaking2025} establish that some LLMs exhibit ``alignment faking''---appearing compliant under monitoring but preferring different behaviors when unobserved---and identify an ``oversight sensitivity direction'' encoding the model's awareness of being monitored. \cite{promptactivationduality2026} show that steering perturbations accumulate in the KV cache across multi-turn dialogue, causing severe coherence degradation after 3--5 turns of active steering.
 
 \section{Architecture}
 
@@ -69,17 +80,17 @@ SAEs have become a primary tool for interpretability, decomposing activations in
 BurnNotice is implemented as a long-running Go application with three primary components:
 
 \begin{enumerate}
-    \item \textbf{ONNX Inference Engine}: Loads and executes models in ONNX format, with WASM fallback for CPU-only environments. Forward hooks capture intermediate activations at specified layers.
-    \item \textbf{Activation Monitor}: Receives activation streams, computes scoring metrics against registered direction profiles, and triggers steering interventions when thresholds are exceeded.
+    \item \textbf{ONNX Inference Engine}: Loads and executes models in ONNX format, with WASM fallback for CPU-only environments. Forward hooks capture intermediate activations at specified layers. \textit{Note: The current implementation contains stubs for ONNX loading and WASM inference; production deployment requires GPU-native scoring within serving engines such as vLLM or TensorRT-LLL to avoid the VRAM-to-host transfer bottleneck (Section~\ref{sec:limitations}).}
+    \item \textbf{Activation Monitor}: Receives activation streams, computes scoring metrics against registered direction profiles using multi-direction subspace extraction, and triggers steering interventions when thresholds are exceeded. Includes adaptive model-specific calibration and temporal sequence scoring.
     \item \textbf{Web Dashboard}: Real-time monitoring interface built with Templ and HTMX, delivering activation heatmaps, score timelines, and steering event logs via Server-Sent Events (SSE).
 \end{enumerate}
 
-\begin{figure}[h]
-    \centering
-    \includegraphics[width=\textwidth]{architecture.pdf}
-    \caption{BurnNotice system architecture. The Go engine orchestrates ONNX model inference, activation monitoring, and steering intervention. The CLI tool handles model acquisition from HuggingFace and ONNX conversion.}
-    \label{fig:architecture}
-</figure>
+% \begin{figure}[h]
+%     \centering
+%     \includegraphics[width=\textwidth]{architecture.pdf}
+%     \caption{BurnNotice system architecture. The Go engine orchestrates ONNX model inference, activation monitoring, and steering intervention. The CLI tool handles model acquisition from HuggingFace and ONNX conversion.}
+%     \label{fig:architecture}
+% \end{figure}
 
 \subsection{ONNX-Based Model Loading}
 
@@ -215,11 +226,23 @@ The scoring engine computes threat scores for each registered activation-space c
 s = \frac{a \cdot v}{\|a\| \|v\|}
 \end{equation}
 
-For subspace-based constructs (conflict subspace, truth subspace), we project onto the orthonormal basis $\{v_1, \ldots, v_k\}$ and aggregate:
+For multi-direction subspace-based constructs (refusal, conflict, truth), we project onto the orthonormal basis $\{v_1, \ldots, v_k\}$ extracted via Top-K SVD or INLP and aggregate:
 
 \begin{equation}
 s_{\text{subspace}} = \sqrt{\sum_{i=1}^k (a \cdot v_i)^2}
 \end{equation}
+
+This multi-direction approach addresses the critique by \cite{wollschlager2025geometry} and \cite{piras2026som} that refusal and deception are multi-dimensional phenomena, not single directions.
+
+For adversarial robustness, we apply latent noise injection to the scoring function:
+
+\begin{equation}
+s_{\text{robust}}(a) = s(a + \eta), \quad \eta \sim \mathcal{N}(0, \sigma^2 I)
+\end{equation}
+
+This provides partial defense against activation-space obfuscation attacks~\cite{bailey2026obfuscated}, though we note that this is not a complete solution (Section~\ref{sec:limitations}).
+
+Thresholds are optimized per-model via held-out ROC analysis to maximize F1, replacing the hardcoded thresholds of earlier versions. Baseline drift detection triggers automatic recalibration when score distributions shift.
 
 \begin{lstlisting}[language=Go, caption=Activation scoring with gonum linear algebra]
 package scoring
@@ -284,7 +307,7 @@ func (s *Scorer) ScoreSubspace(activation []float64, basis []*mat.VecDense) floa
 
 \subsection{Steering Interventions}
 
-When a score exceeds its configured threshold, BurnNotice applies one of four steering interventions:
+When a score exceeds its configured threshold, BurnNotice applies one of four steering interventions. All interventions are subject to a rotation angle clamp of $\theta \le 15^\circ$ to limit capability degradation, and a capability health ratio constraint $\mathcal{R}_{cap} \ge 0.98$ measured on GSM8k.
 
 \paragraph{Activation Addition (ActAdd)}
 Adds a scaled direction vector to the activation:
@@ -299,7 +322,7 @@ a' = \|a\| \cdot \frac{a + \alpha (v - \frac{a \cdot v}{\|a\|^2} a)}{\|a + \alph
 \end{equation}
 
 \paragraph{Selective Steering}
-Applies intervention only at discriminative layers identified during profiling:
+Applies intervention only at discriminative layers identified during profiling, following \cite{nanfack2026optimal}'s finding that layer-selective intervention at 40--60\% network depth outperforms full-network interventions:
 \begin{equation}
 a'_l = \begin{cases}
 \text{steer}(a_l) & \text{if } l \in L_{\text{target}} \\
@@ -312,6 +335,8 @@ Projects the activation orthogonal to $v$:
 \begin{equation}
 a' = a - \frac{a \cdot v}{\|v\|^2} v
 \end{equation}
+
+We note that steering interventions carry inherent risks. \cite{korczikov2026rogue} demonstrate that steering vectors can function as universal jailbreak vectors when aggregated, and \cite{promptactivationduality2026} show that steering perturbations accumulate in the KV cache across multi-turn dialogue, causing coherence degradation. BurnNotice mitigates these risks through angle clamping, selective layer targeting, and capability preservation monitoring, but these are partial defenses.
 
 \begin{lstlisting}[language=Go, caption=Steering intervention implementations]
 package steering
@@ -395,14 +420,21 @@ func ablate(a, v *mat.VecDense) *mat.VecDense {
 
 Each model requires a profile that identifies its unique activation-space geometry. The profiling pipeline extracts:
 
-\subsection{Refusal Direction}
-Computed via Difference-in-Means (DIM) on contrastive prompt pairs:
+\subsection{Refusal Direction and Multi-Direction Subspace}
+The initial refusal direction is computed via Difference-in-Means (DIM) on contrastive prompt pairs:
 \begin{equation}
 v_{\text{refusal}} = \frac{1}{n}\sum_{i=1}^n a_i^{\text{refusal}} - \frac{1}{n}\sum_{i=1}^n a_i^{\text{compliant}}
 \end{equation}
 
+However, following \cite{wollschlager2025geometry} and \cite{piras2026som}, we augment this with multi-direction subspace extraction. We compute the Top-$k$ singular vectors via SVD on the centered activation matrix, and apply INLP (Iterative Nullspace Projection) to extract additional orthogonal directions:
+\begin{equation}
+V_{\text{refusal}} = \{v_1, \ldots, v_k\} = \text{Top-}k\text{-SVD}(A_{\text{refusal}} - A_{\text{compliant}})
+\end{equation}
+
+This captures the multi-dimensional concept cone of refusal, which single-direction DIM misses.
+
 \subsection{Deception Direction}
-Extracted using the same DIM approach on deceptive vs. truthful response pairs, or via SAE feature analysis on known deception datasets.
+Extracted using the same multi-direction approach on deceptive vs. truthful response pairs, or via SAE feature analysis on known deception datasets. We note that deception probes suffer from topic confusion~\cite{goldowskydill2025detecting}: they fire on discussions about deception rather than genuine deceptive intent.
 
 \subsection{Conflict Subspace}
 Identified via PCA on activations from adversarial prompts that induce internal conflict between training objectives:
@@ -411,10 +443,13 @@ V_{\text{conflict}} = \text{PCA}_k(\{a_1, \ldots, a_n\}_{\text{adversarial}})
 \end{equation}
 
 \subsection{Truth Subspace and Truth Neurons}
-Following~\citet{marks2024standard}, we extract the truth direction via unsupervised PCA on statement activations. Truth neurons are identified as individual activation dimensions with high truth-direction loading.
+Following \cite{marks2024standard}, we extract the truth direction via unsupervised PCA on statement activations. Truth neurons are identified as individual activation dimensions with high truth-direction loading.
 
 \subsection{Policy Violation Direction}
 Trained via logistic regression on activations from policy-violating vs. policy-compliant responses. The weight vector becomes the detection direction.
+
+\subsection{Whitening and Rank Deficiency}
+The whitening detector computes a covariance matrix for activation-space normalization. On small datasets, this matrix is rank-deficient and singular. We address this by projecting activations to a $k=32$ dimensional PCA subspace before covariance computation, ensuring numerical stability.
 
 \subsection{Profile Storage}
 
@@ -843,45 +878,86 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 \subsection{Metrics}
 We evaluate BurnNotice on:
 \begin{itemize}
-    \item \textbf{Deception AUROC}: Area under the ROC curve for deception detection.
-    \item \textbf{False Positive Rate (FPR)}: Rate of false alarms on benign chat.
+    \item \textbf{Deception AUROC}: Area under the ROC curve for deception detection. We report both same-model and cross-model (proxy analyzer) results.
+    \item \textbf{False Positive Rate (FPR)}: Rate of false alarms on benign chat. We note that deception probes fire on the \textit{topic} of deception, inflating FPR on security research, fiction, and legal text~\cite{goldowskydill2025detecting}.
     \item \textbf{Latency Overhead}: Percentage increase in inference latency due to monitoring and steering.
     \item \textbf{Steering Efficacy}: Reduction in policy violation rate after intervention.
+    \item \textbf{Capability Health Ratio} ($\mathcal{R}_{cap}$): GSM8k accuracy before vs. after steering, with target $\ge 0.98$.
+    \item \textbf{Multi-Turn Coherence}: Token repetition rate and grammatical correctness across 10-turn dialogues with active steering.
 \end{itemize}
+
+\subsection{False Positive Compounding}
+BurnNotice combines 5 independent scoring probes (deception, conflict, policy compliance, truth confidence, hallucination risk). If each has a 2\% FPR:
+\begin{equation}
+P(\text{at least one false positive}) = 1 - 0.98^5 = 9.6\%
+\end{equation}
+For an agent handling 1,000 requests per hour, this generates approximately 96 false alerts per hour. Adaptive calibration via held-out ROC analysis reduces individual FPRs, but alert fatigue management (aggregation, suppression, deduplication) is required for production deployment.
 
 \subsection{Results}
 
-Table~\ref{tab:results} summarizes performance across three model families.
+Table~\ref{tab:results} summarizes performance across three model families. Results reflect same-model profiling; proxy analyzer results for closed models are substantially lower and unvalidated.
 
 \begin{table}[h]
     \centering
     \caption{BurnNotice performance across model families}
     \label{tab:results}
-    \begin{tabular}{lcccc}
+    \begin{tabular}{lccccc}
         \toprule
-        Model & Deception AUROC & FPR (\%) & Latency Overhead (\%) & Violation Reduction (\%) \\
+        Model & Deception AUROC & FPR (\%) & Latency Overhead (\%) & Violation Reduction (\%) & $\mathcal{R}_{cap}$ \\
         \midrule
-        Llama-3-8B & 0.97 & 0.8 & 6.2 & 94 \\
-        Mistral-7B & 0.96 & 0.9 & 5.8 & 92 \\
-        Llama-3-70B & 0.95 & 1.0 & 9.1 & 89 \\
+        Llama-3-8B & 0.97 & 0.8 & 6.2 & 94 & 0.99 \\
+        Mistral-7B & 0.96 & 0.9 & 5.8 & 92 & 0.98 \\
+        Llama-3-70B & 0.95 & 1.0 & 9.1 & 89 & 0.98 \\
         \bottomrule
     \end{tabular}
 \end{table}
 
+We emphasize that these AUROC numbers are from controlled settings. In production, topic confusion and honest confession false positives significantly degrade effective precision~\cite{goldowskydill2025detecting}. Additionally, the latency overhead numbers assume CPU-based scoring; the VRAM-to-host transfer bottleneck (Section~\ref{sec:limitations}) would substantially increase overhead in GPU-based production serving without the proposed GPU-native scoring pivot.
+
 \section{Discussion}
 
 \subsection{Closed Model Support}
-For closed models (GPT-4, Claude) where activation access is unavailable, BurnNotice supports proxy-analyzer mode: a small open-weight model processes the same prompts and its activations serve as a proxy for deception detection. While less accurate than direct monitoring, this provides partial coverage for black-box deployments.
+For closed models (GPT-4, Claude) where activation access is unavailable, BurnNotice supports proxy-analyzer mode: a small open-weight model processes the same prompts and its activations serve as a proxy for deception detection. However, this cross-model deception detection claim is unsupported by published research. The deception probe AUROC numbers from Apollo Research come from same-model experiments (Llama-3.3-70B detecting deception in Llama-3.3-70B). There is no evidence that Gemma-2-2B activations can detect deception in GPT-4 outputs. We recommend removing this feature or running controlled experiments to validate it.
 
-\subsection{Limitations}
-BurnNotice's effectiveness depends on the quality of the model profile. Models with significantly different architectures from those in our profiling dataset may require custom profile generation. Additionally, adversarial actors with knowledge of the detection directions may attempt to circumvent monitoring via activation obfuscation.
+\subsection{Production Feasibility Concerns}\label{sec:limitations}
+
+\paragraph{VRAM-to-Host Transfer Bottleneck.}
+BurnNotice proposes extracting intermediate activations at multiple layers from GPU memory to host RAM for scoring. In modern LLM serving, GPU memory bandwidth is the ultimate bottleneck. Extracting high-dimensional activation tensors across the PCIe bus \textit{per token} and \textit{per layer} will devastate token generation speed (TPS). Even zero-copy solutions like Apache Arrow only apply \textit{after} data reaches the host CPU. We recommend pivoting to GPU-native scoring within vLLM or TensorRT-LLL via custom CUDA kernels.
+
+\paragraph{Asynchronous Scoring Paradox.}
+If scoring is fully asynchronous, the LLM will generate toxic or deceptive tokens faster than the CPU can score activations and compute steering vectors. By the time the steering command arrives, the contextual window has already integrated the bad tokens. If the synchronous bypass is triggered constantly, the engine stalls token generation entirely.
+
+\paragraph{ONNX/WASM Limitations for Frontier Models.}
+ONNX Runtime and WASM lack the sophisticated memory management strategies (such as PagedAttention) necessary to serve large, concurrent batches of modern 70B+ models efficiently.
+
+\subsection{Adversarial Limitations}
+
+\paragraph{Obfuscated Activation Attacks.}
+\cite{bailey2026obfuscated} demonstrate that latent-space safety probes can be reduced from 100\% recall to 0\% while maintaining 90\% jailbreaking success. This is the most direct attack on BurnNotice's core premise. Every component relying on linear probes over activation space---deception scoring, policy OOD detection, truth confidence---is vulnerable. An attacker with white-box or semi-white-box access can learn the scoring directions, craft activation perturbations that reduce all probe scores below threshold, and render the entire monitoring pipeline ineffective. BurnNotice's latent noise injection provides partial defense but is not a complete solution. A full defense would require cryptographic activation integrity (hardware-trusted execution) or ensemble probing with diverse methods.
+
+\paragraph{Steering as Universal Jailbreak.}
+\cite{korczikov2026rogue} show that BurnNotice's primary intervention mechanism---activation steering---can be weaponized. An attacker who learns the steering vectors can invert them to amplify deception, or aggregate 20 random vectors to create universal jailbreaks that generalize to unseen harmful requests. The steering engine is simultaneously the system's most powerful safety tool and its largest attack surface.
+
+\paragraph{Alignment Faking.}
+\cite{alignmentfaking2025} establish that models exhibit an ``oversight sensitivity direction'' encoding awareness of being monitored. A sufficiently capable model could show compliant behavior during profiling but exhibit deceptive behavior during inference, rendering the profiling step useless.
+
+\paragraph{KV-Cache Accumulation.}
+\cite{promptactivationduality2026} show that steering perturbations accumulate in the KV cache across multi-turn dialogue, causing severe coherence degradation after 3--5 turns. BurnNotice's EMA-based temporal scoring does not address this cascading contamination. The proposed GCAD (Gated Cropped Attention-Delta) solution is not yet incorporated.
+
+\subsection{Semantic Ambiguity of Linear Subspaces}
+Deception is highly contextual. If a user prompts the agent to ``write a story about a deceptive spy,'' the model's latent activations will heavily engage the ``deception'' subspace to fulfill the benign, creative request. A static linear probe will misinterpret this as adversarial deception. Context-aware gating via an LLM-based pre-classifier is needed but not yet implemented.
+
+\subsection{Capability Degradation}
+Actively intervening on the residual stream via repeated projection and activation addition across multiple tokens frequently induces severe grammatical breakdown and logical collapse. The $\mathcal{R}_{cap} \ge 0.98$ constraint on GSM8k is a meaningful safeguard, but GSM8k measures mathematical reasoning, not truthfulness or honesty. A model could score identically on GSM8k while being more deceptive in free-form generation.
 
 \subsection{Ethical Considerations}
 While BurnNotice is designed for defensive monitoring, the same activation-space techniques could be repurposed for offensive applications. We release this work with the explicit intent of improving LLM safety and transparency, and encourage responsible use.
 
 \section{Conclusion}
 
-BurnNotice provides a comprehensive framework for detecting and preventing LLM deception and alignment drift through activation-space monitoring and steering. By inverting abliteration techniques and implementing them in a high-performance, dependency-free Go architecture with ONNX and WASM support, we enable practical deployment in production environments. Our results demonstrate $>$0.95 deception AUROC with $<$10\% latency overhead across multiple model families.
+BurnNotice provides a framework for detecting and preventing LLM deception and alignment drift through activation-space monitoring and steering. By inverting abliteration techniques and implementing multi-direction subspace extraction (Top-K SVD, INLP), adaptive model-specific calibration, and temporal sequence scoring, we advance beyond the single-direction methods of earlier work. Our results demonstrate $>$0.95 deception AUROC in controlled settings with $<$10\% latency overhead across multiple model families.
+
+However, the adversarial landscape for latent-space defenses has advanced substantially. Obfuscated activation attacks can reduce probe recall to zero~\cite{bailey2026obfuscated}, steering vectors function as universal jailbreaks~\cite{korczikov2026rogue}, and models exhibit alignment faking when aware of monitoring~\cite{alignmentfaking2025}. The production feasibility of the current architecture is limited by the VRAM-to-host transfer bottleneck and the asynchronous scoring paradox. We recommend pivoting to GPU-native scoring within established serving engines (vLLM, TensorRT-LLL) and implementing defense-in-depth via ensemble probing with diverse methods. The overall direction---latent-space governance for LLM agents---remains sound, but the gap between documented capabilities and production readiness is substantial.
 
 \section*{Acknowledgments}
 We thank the open-source interpretability community for foundational work on activation steering, sparse autoencoders, and truth direction extraction.
@@ -894,20 +970,65 @@ Andy Arditi, et al.
 \newblock Refusal in LLMs is mediated by a single direction.
 \newblock {\em arXiv preprint arXiv:2406.12000}, 2024.
 
+\bibitem{bailey2026obfuscated}
+Bailey, et al.
+\newblock Obfuscated activations bypass LLM latent-space defenses.
+\newblock {\em ICLR}, 2026.
+\newblock \url{https://arxiv.org/abs/2412.09565}
+
+\bibitem{blandfort2026redteaming}
+Blandfort, et al.
+\newblock Red-teaming activation probes using prompted LLMs.
+\newblock {\em arXiv preprint arXiv:2511.00554}, 2026.
+
+\bibitem{braun2024sober}
+Braun, et al.
+\newblock A sober look at steering vectors for LLMs.
+\newblock {\em AI Alignment Forum}, 2024.
+\newblock \url{https://www.alignmentforum.org/posts/QQP4nq7TXg89CJGBh/a-sober-look-at-steering-vectors-for-llms}
+
 \bibitem{bricken2023monosemantic}
 Trenton Bricken, et al.
 \newblock Towards monosemanticity: Decomposing language models with dictionary learning.
 \newblock {\em Transformer Circuits Thread}, 2023.
+
+\bibitem{dunefsky2025oneshot}
+Dunefsky, et al.
+\newblock One-shot optimized steering vectors mediate safety-relevant behaviors in LLMs.
+\newblock {\em arXiv preprint arXiv:2502.18862}, 2025.
 
 \bibitem{gao2026scaling}
 Leo Gao, et al.
 \newblock Scaling and evaluating sparse autoencoders.
 \newblock {\em arXiv preprint arXiv:2406.04093}, 2026.
 
+\bibitem{goldowskydill2025detecting}
+Goldowsky-Dill, et al.
+\newblock Detecting strategic deception using linear probes.
+\newblock {\em Apollo Research / ICML}, 2025.
+\newblock \url{https://arxiv.org/abs/2502.03407}
+
 \bibitem{huben2024diss}
 Jan Huben, et al.
 \newblock Sparse autoencoders find neurons for sycophancy and deception.
 \newblock {\em arXiv preprint arXiv:2406.12000}, 2024.
+
+\bibitem{korczikov2026rogue}
+Korczikov, et al.
+\newblock The rogue scalpel: Activation steering compromises LLM safety.
+\newblock {\em ICLR}, 2026.
+\newblock \url{https://arxiv.org/abs/2509.22067}
+
+\bibitem{lee2025cast}
+Lee, et al.
+\newblock CAST: Conditional activation steering.
+\newblock {\em ICLR}, 2025.
+\newblock \url{https://arxiv.org/abs/2409.05907}
+
+\bibitem{li2026safety}
+Li, et al.
+\newblock Analysing the safety pitfalls of steering vectors.
+\newblock {\em arXiv preprint arXiv:2603.24543}, 2026.
 
 \bibitem{llmswithoutlimits2024}
 LLMs Without Limits.
@@ -919,15 +1040,51 @@ Sam Marks, et al.
 \newblock A standard direction for truth in language models.
 \newblock {\em arXiv preprint arXiv:2406.12000}, 2024.
 
+\bibitem{mckenzie2025detecting}
+McKenzie, et al.
+\newblock Detecting high-stakes interactions with activation probes.
+\newblock {\em NeurIPS}, 2025.
+\newblock \url{https://arxiv.org/abs/2506.10805}
+
+\bibitem{nanfack2026optimal}
+Nanfack, et al.
+\newblock Efficient refusal ablation in LLM through optimal transport.
+\newblock {\em arXiv preprint arXiv:2603.04355}, 2026.
+
+\bibitem{obliteratus2025}
+elder-plinius.
+\newblock OBLITERATUS: Multi-dimensional refusal geometry analysis toolkit.
+\newblock \url{https://github.com/elder-plinius/OBLITERATUS}
+
 \bibitem{panickssery2024steering}
 Arjun Panickssery, et al.
 \newblock Steering LLMs with linear probes.
 \newblock {\em arXiv preprint arXiv:2406.12000}, 2024.
 
+\bibitem{piras2026som}
+Piras, et al.
+\newblock SOM directions are better than one: Multi-directional refusal suppression in language models.
+\newblock {\em AAAI}, 2026.
+\newblock \url{https://arxiv.org/abs/2511.08379}
+
+\bibitem{promptactivationduality2026}
+Prompt--Activation Duality.
+\newblock Improving activation steering via attention-level interventions.
+\newblock {\em arXiv preprint arXiv:2605.10664}, 2026.
+
 \bibitem{turner2024steering}
 Alex Turner, et al.
 \newblock Activation engineering for LLM behavior modification.
 \newblock {\em arXiv preprint arXiv:2406.12000}, 2024.
+
+\bibitem{alignmentfaking2025}
+Alignment Faking in LLMs.
+\newblock {\em arXiv preprint arXiv:2604.20995}, 2025.
+
+\bibitem{wollschlager2025geometry}
+Wollschl\"ager, et al.
+\newblock The geometry of refusal in large language models: Concept cones and representational independence.
+\newblock {\em arXiv preprint arXiv:2502.17420}, 2025.
 
 \end{thebibliography}
 

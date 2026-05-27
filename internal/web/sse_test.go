@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"burnnotice/internal/metrics"
 )
 
 func TestNewSSEHub(t *testing.T) {
@@ -148,3 +150,56 @@ func (w *noFlusherWriter) Write(b []byte) (int, error) {
 func (w *noFlusherWriter) WriteHeader(code int) {
 	w.recorder.WriteHeader(code)
 }
+
+func TestServeHTTP_WithBroadcast(t *testing.T) {
+	h := NewSSEHub()
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest("GET", "/sse", nil).WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	done := make(chan bool)
+	go func() {
+		h.ServeHTTP(w, req)
+		done <- true
+	}()
+
+	// Wait for client to connect
+	for {
+		h.mu.RLock()
+		n := len(h.clients)
+		h.mu.RUnlock()
+		if n > 0 {
+			break
+		}
+	}
+
+	h.Broadcast("test-event", "some-data")
+
+	// Wait slightly for flush, then cancel
+	cancel()
+	<-done
+
+	body := w.Body.String()
+	if !strings.Contains(body, "event: test-event") {
+		t.Errorf("expected body to contain test-event, got: %q", body)
+	}
+	if !strings.Contains(body, "data: some-data") {
+		t.Errorf("expected body to contain some-data, got: %q", body)
+	}
+}
+
+func TestBroadcast_WithSampling(t *testing.T) {
+	oldRate := uint64(metrics.DefaultSampler.Weight())
+	defer metrics.DefaultSampler.SetSampleRate(oldRate)
+
+	metrics.DefaultSampler.SetSampleRate(1)
+
+	h := NewSSEHub()
+	ch := h.AddClient()
+	defer h.RemoveClient(ch)
+
+	h.Broadcast("test", "data")
+	<-ch
+}
+
+

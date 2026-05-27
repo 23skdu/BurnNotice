@@ -5,7 +5,6 @@ import (
 	"math"
 
 	"gonum.org/v1/gonum/mat"
-	"gonum.org/v1/gonum/stat"
 )
 
 // WhiteningDetector detects policy violations using whitening transformation.
@@ -56,36 +55,28 @@ func (d *WhiteningDetector) Train(compliant, violating [][]float64) error {
 		}
 	}
 
-	// Compute covariance matrix
-	cov := mat.NewSymDense(dim, nil)
-	stat.CovarianceMatrix(cov, centered, nil)
-
-	// Eigen-decomposition
-	var eigen mat.EigenSym
-	if !eigen.Factorize(cov, true) {
-		return fmt.Errorf("eigen-decomposition failed")
+	// SVD factorization
+	var svd mat.SVD
+	ok := svd.Factorize(centered, mat.SVDThin)
+	if !ok {
+		return fmt.Errorf("SVD factorization failed")
 	}
 
-	eigenvalues := eigen.Values(nil)
-	eigenvectors := mat.NewDense(dim, dim, nil)
-	eigen.VectorsTo(eigenvectors)
+	s := svd.Values(nil)
+	var v mat.Dense
+	svd.VTo(&v)
 
-	// Build whitening matrix: V * diag(1/sqrt(λ + ε)) * V^T
-	n := dim
-	invSqrtData := make([]float64, n*n)
-	for i := 0; i < n; i++ {
-		val := eigenvalues[i]
-		if val < 0 {
-			val = 0
+	_, k := v.Dims() // v is d x k
+	N := float64(len(compliant))
+
+	d.whiteningMat = mat.NewDense(k, dim, nil)
+	for i := 0; i < k; i++ {
+		lambda := (s[i] * s[i]) / (N - 1)
+		scale := 1.0 / math.Sqrt(lambda+d.epsilon)
+		for j := 0; j < dim; j++ {
+			d.whiteningMat.Set(i, j, v.At(j, i)*scale)
 		}
-		invSqrtData[i*n+i] = 1.0 / math.Sqrt(val+d.epsilon)
 	}
-	invSqrt := mat.NewDense(n, n, invSqrtData)
-
-	var tmp mat.Dense
-	tmp.Mul(eigenvectors, invSqrt)
-	d.whiteningMat = mat.NewDense(n, n, nil)
-	d.whiteningMat.Mul(&tmp, eigenvectors.T())
 
 	d.trained = true
 	return nil
@@ -109,11 +100,12 @@ func (d *WhiteningDetector) Detect(activation []float64) (float64, error) {
 
 	// Whiten
 	centeredVec := mat.NewVecDense(len(centered), centered)
-	var whitened mat.VecDense
+	k, _ := d.whiteningMat.Dims()
+	whitened := mat.NewVecDense(k, nil)
 	whitened.MulVec(d.whiteningMat, centeredVec)
 
 	// Compute norm (lower norm = more compliant)
-	norm := mat.Norm(&whitened, 2)
+	norm := mat.Norm(whitened, 2)
 
 	// Convert to compliance score: exp(-norm^2 / 2)
 	score := math.Exp(-norm * norm / 2)

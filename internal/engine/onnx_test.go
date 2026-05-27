@@ -77,3 +77,46 @@ func TestGetIntermediate_NotLoaded(t *testing.T) {
 		t.Error("expected error when model not loaded")
 	}
 }
+
+func TestForward_Success(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "model.onnx")
+	if err := os.WriteFile(path, []byte("fake onnx"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	e := NewONNXEngine(path, ModelConfig{})
+	if err := e.Load(); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := e.Forward([]float32{1.0, 2.0})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res != nil {
+		t.Errorf("expected nil result, got %v", res)
+	}
+}
+
+func TestGetIntermediate_Success(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "model.onnx")
+	if err := os.WriteFile(path, []byte("fake onnx"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	e := NewONNXEngine(path, ModelConfig{})
+	if err := e.Load(); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := e.GetIntermediate("layer.0")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res != nil {
+		t.Errorf("expected nil result, got %v", res)
+	}
+}
+

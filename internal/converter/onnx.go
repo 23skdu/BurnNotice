@@ -1,12 +1,12 @@
 package converter
 
 import (
-	"encoding/binary"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
-	"strings"
+
+	"burnnotice/internal/onnxpb"
+	"google.golang.org/protobuf/proto"
 )
 
 // Options holds ONNX conversion options.
@@ -73,116 +73,56 @@ func (c *ONNXConverter) buildONNXModel(tensors []Tensor, outputPath string, opts
 }
 
 func serializeONNXModel(tensors []Tensor, opts Options) ([]byte, error) {
-	var buf []byte
-
-	buf = append(buf, []byte("ONNX")...)
-	buf = appendUint32(buf, uint32(opts.OpsetVersion)) // #nosec G115
-
-	if opts.DynamicAxes {
-		buf = append(buf, byte(1))
-	} else {
-		buf = append(buf, byte(0))
+	model := &onnxpb.ModelProto{
+		IrVersion: proto.Int64(8),
+		OpsetImport: []*onnxpb.OperatorSetIdProto{
+			{
+				Domain:  proto.String(""),
+				Version: proto.Int64(int64(opts.OpsetVersion)),
+			},
+		},
+		Graph: &onnxpb.GraphProto{
+			Name:        proto.String("burnnotice_converted_graph"),
+			Initializer: make([]*onnxpb.TensorProto, 0, len(tensors)),
+		},
 	}
 
-	buf = appendUint32(buf, uint32(len(tensors))) // #nosec G115
-
-	layerGroups := groupTensorsByLayer(tensors)
-
-	layerNames := make([]string, 0, len(layerGroups))
-	for name := range layerGroups {
-		layerNames = append(layerNames, name)
-	}
-	sort.Strings(layerNames)
-
-	for _, layerName := range layerNames {
-		layerTensors := layerGroups[layerName]
-
-		sort.Slice(layerTensors, func(i, j int) bool {
-			return layerTensors[i].Name < layerTensors[j].Name
-		})
-
-		buf = appendString(buf, layerName)
-		buf = appendUint32(buf, uint32(len(layerTensors))) // #nosec G115
-
-		for _, t := range layerTensors {
-			buf = appendString(buf, t.Name)
-			buf = appendUint32(buf, uint32(len(t.Shape))) // #nosec G115
-			for _, dim := range t.Shape {
-				buf = appendUint64(buf, uint64(dim))
-			}
-
-			dataType := dtypeToONNX(t.DType)
-			buf = append(buf, byte(dataType))
-
-			data, err := tensorDataToBytes(t)
-			if err != nil {
-				return nil, fmt.Errorf("convert tensor %s: %w", t.Name, err)
-			}
-			buf = appendUint32(buf, uint32(len(data))) // #nosec G115
-			buf = append(buf, data...)
-		}
-	}
-
-	buf = append(buf, []byte("ENDM")...)
-
-	return buf, nil
-}
-
-func groupTensorsByLayer(tensors []Tensor) map[string][]Tensor {
-	groups := make(map[string][]Tensor)
 	for _, t := range tensors {
-		layer := extractLayerName(t.Name)
-		groups[layer] = append(groups[layer], t)
+		dataType := dtypeToONNX(t.DType)
+		
+		tensorProto := &onnxpb.TensorProto{
+			Name:     proto.String(t.Name),
+			DataType: proto.Int32(int32(dataType)),
+			Dims:     make([]int64, len(t.Shape)),
+			RawData:  t.Data,
+		}
+		for i, d := range t.Shape {
+			/* #nosec G115 */
+			tensorProto.Dims[i] = int64(d)
+		}
+		model.Graph.Initializer = append(model.Graph.Initializer, tensorProto)
 	}
-	return groups
+
+	return proto.Marshal(model)
 }
 
-func extractLayerName(tensorName string) string {
-	parts := strings.Split(tensorName, ".")
-	if len(parts) >= 2 {
-		return parts[0] + "." + parts[1]
-	}
-	return "unknown"
-}
-
-func dtypeToONNX(dtype string) byte {
+func dtypeToONNX(dtype string) int32 {
 	switch dtype {
 	case "F32", "float32":
-		return 1
+		return 1 // onnxpb.TensorProto_FLOAT
 	case "F64", "float64":
-		return 11
+		return 11 // onnxpb.TensorProto_DOUBLE
 	case "I32", "int32":
-		return 6
+		return 6 // onnxpb.TensorProto_INT32
 	case "I64", "int64":
-		return 7
+		return 7 // onnxpb.TensorProto_INT64
 	case "F16", "float16":
-		return 10
+		return 10 // onnxpb.TensorProto_FLOAT16
 	case "BF16", "bfloat16":
-		return 16
+		return 16 // onnxpb.TensorProto_BFLOAT16
 	default:
 		return 1
 	}
-}
-
-func tensorDataToBytes(t Tensor) ([]byte, error) {
-	if t.Data == nil {
-		return []byte{}, nil
-	}
-
-	return t.Data, nil
-}
-
-func appendUint32(buf []byte, v uint32) []byte {
-	return append(buf, byte(v>>24), byte(v>>16), byte(v>>8), byte(v)) // #nosec G115 -- intentional byte extraction
-}
-
-func appendUint64(buf []byte, v uint64) []byte {
-	return append(buf, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8), byte(v)) // #nosec G115 -- intentional byte extraction
-}
-
-func appendString(buf []byte, s string) []byte {
-	buf = appendUint32(buf, uint32(len(s))) // #nosec G115 -- string length fits in uint32
-	return append(buf, []byte(s)...)
 }
 
 func ValidateONNX(path string) error {
@@ -190,46 +130,19 @@ func ValidateONNX(path string) error {
 		return fmt.Errorf("ONNX file not found: %s", path)
 	}
 
-	// #nosec G304 -- path is user-provided CLI argument
+	/* #nosec G304 */
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("read ONNX file: %w", err)
 	}
 
-	if len(data) < 4 {
-		return fmt.Errorf("file too small to be valid ONNX")
+	var model onnxpb.ModelProto
+	if err := proto.Unmarshal(data, &model); err != nil {
+		return fmt.Errorf("failed to unmarshal ONNX: %w", err)
 	}
 
-	if string(data[:4]) != "ONNX" {
-		return fmt.Errorf("invalid ONNX magic: expected ONNX, got %s", string(data[:4]))
-	}
-
-	if len(data) < 10 {
-		return fmt.Errorf("file too small to contain header")
-	}
-
-	opset := binary.BigEndian.Uint32(data[4:8])
-	if opset < 1 || opset > 21 {
-		return fmt.Errorf("invalid opset version: %d", opset)
-	}
-
-	if len(data) < 14 {
-		return fmt.Errorf("file too small to contain tensor count")
-	}
-
-	tensorCount := binary.BigEndian.Uint32(data[10:14])
-	if tensorCount == 0 {
-		return fmt.Errorf("no tensors in ONNX model")
-	}
-
-	if !strings.HasSuffix(path, ".meta") {
-		if len(data) < 6 {
-			return fmt.Errorf("file too small to contain end marker")
-		}
-		endMarker := data[len(data)-4:]
-		if string(endMarker) != "ENDM" {
-			return fmt.Errorf("missing end marker in ONNX file")
-		}
+	if model.Graph == nil {
+		return fmt.Errorf("ONNX model has no graph")
 	}
 
 	return nil

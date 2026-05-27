@@ -363,3 +363,31 @@ func containsAll(s string, substrs ...string) bool {
 	}
 	return true
 }
+
+type errorResponseWriter struct {
+	header http.Header
+}
+
+func (e *errorResponseWriter) Header() http.Header {
+	if e.header == nil {
+		e.header = make(http.Header)
+	}
+	return e.header
+}
+
+func (e *errorResponseWriter) Write(b []byte) (int, error) {
+	return 0, http.ErrBodyNotAllowed
+}
+
+func (e *errorResponseWriter) WriteHeader(statusCode int) {}
+
+func TestHandlers_DashboardSummary_Error(t *testing.T) {
+	hub := NewSSEHub()
+	h := NewHandlers(hub)
+	
+	req := httptest.NewRequest("GET", "/api/summary", nil)
+	w := &errorResponseWriter{}
+
+	h.DashboardSummary().ServeHTTP(w, req)
+}
+

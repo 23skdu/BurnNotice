@@ -47,7 +47,7 @@ func NewHandlers(hub *SSEHub) *Handlers {
 func (h *Handlers) Dashboard() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, dashboardHTML(h.ActiveModels, h.TotalProfiles))
+		_ = dashboardHTML(h.ActiveModels, h.TotalProfiles).Render(r.Context(), w)
 	}
 }
 
@@ -71,7 +71,7 @@ func (h *Handlers) DashboardSummary() http.HandlerFunc {
 func (h *Handlers) Profiler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, profilerHTML())
+		_ = profilerHTML().Render(r.Context(), w)
 	}
 }
 
@@ -80,7 +80,7 @@ func (h *Handlers) ModelProfile() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		modelID := r.PathValue("id")
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, modelProfileHTML(modelID))
+		_ = modelProfileHTML(modelID).Render(r.Context(), w)
 	}
 }
 
@@ -89,7 +89,7 @@ func (h *Handlers) Monitor() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sessionID := r.PathValue("session")
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, monitorHTML(sessionID))
+		_ = monitorHTML(sessionID).Render(r.Context(), w)
 	}
 }
 
@@ -98,7 +98,7 @@ func (h *Handlers) Heatmap() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		modelID := r.PathValue("id")
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, heatmapHTML(modelID))
+		_ = heatmapHTML(modelID).Render(r.Context(), w)
 	}
 }
 
@@ -107,7 +107,7 @@ func (h *Handlers) Subspace() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		modelID := r.PathValue("id")
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, subspaceHTML(modelID))
+		_ = subspaceHTML(modelID).Render(r.Context(), w)
 	}
 }
 
@@ -116,7 +116,7 @@ func (h *Handlers) Circuits() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		modelID := r.PathValue("id")
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, circuitsHTML(modelID))
+		_ = circuitsHTML(modelID).Render(r.Context(), w)
 	}
 }
 
@@ -124,7 +124,7 @@ func (h *Handlers) Circuits() http.HandlerFunc {
 func (h *Handlers) Policies() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, policiesHTML())
+		_ = policiesHTML().Render(r.Context(), w)
 	}
 }
 
@@ -144,7 +144,7 @@ func (h *Handlers) SavePolicy() http.HandlerFunc {
 func (h *Handlers) Alerts() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, alertsHTML())
+		_ = alertsHTML().Render(r.Context(), w)
 	}
 }
 

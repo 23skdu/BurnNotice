@@ -7,7 +7,7 @@ import (
 )
 
 func BenchmarkScorer_Score(b *testing.B) {
-	s := NewScorer()
+	s := NewScorer(nil)
 	s.RegisterDirection("deception", randomVec(4096))
 	s.RegisterDirection("truth", randomVec(4096))
 	s.RegisterDirection("conflict", randomVec(4096))
@@ -21,7 +21,7 @@ func BenchmarkScorer_Score(b *testing.B) {
 }
 
 func BenchmarkScorer_SubspaceScore(b *testing.B) {
-	s := NewScorer()
+	s := NewScorer(nil)
 	s.RegisterDirection("deception", randomVec(4096))
 	s.RegisterDirection("truth", randomVec(4096))
 

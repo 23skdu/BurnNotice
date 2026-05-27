@@ -485,3 +485,330 @@ func TestLongbow_InterventionsAndCSV(t *testing.T) {
 		t.Errorf("expected CSV to contain deception_score and terminate, got: %s", csv)
 	}
 }
+
+func TestSQLite_ClosedDBErrors(t *testing.T) {
+	tmp := t.TempDir() + "/closed_test.db"
+	defer os.Remove(tmp)
+
+	backend, err := NewBackend("sqlite", tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := backend.Init(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Close the connection
+	if err := backend.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Operations should return error
+	alert := Alert{Timestamp: time.Now(), SessionID: "s", Metric: "m"}
+	if err := backend.RecordAlert(alert); err == nil {
+		t.Error("expected error RecordAlert on closed DB")
+	}
+
+	intervention := Intervention{Timestamp: time.Now(), SessionID: "s", Method: "m"}
+	if err := backend.RecordIntervention(intervention); err == nil {
+		t.Error("expected error RecordIntervention on closed DB")
+	}
+
+	if _, err := backend.QueryAlerts(AlertFilter{}); err == nil {
+		t.Error("expected error QueryAlerts on closed DB")
+	}
+
+	if _, err := backend.QueryInterventions("s"); err == nil {
+		t.Error("expected error QueryInterventions on closed DB")
+	}
+
+	if _, err := backend.CountAlerts(AlertFilter{}); err == nil {
+		t.Error("expected error CountAlerts on closed DB")
+	}
+
+	if _, err := backend.GetAlertStats(); err == nil {
+		t.Error("expected error GetAlertStats on closed DB")
+	}
+
+	if _, err := backend.DeleteOldAlerts(1 * time.Hour); err == nil {
+		t.Error("expected error DeleteOldAlerts on closed DB")
+	}
+
+	if err := backend.IngestBatch([]Alert{alert}); err == nil {
+		t.Error("expected error IngestBatch on closed DB")
+	}
+}
+
+func TestLongbow_PaginationAndJSON(t *testing.T) {
+	backend, err := NewBackend("longbow", "") // address fallback to default
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer backend.Close()
+
+	if err := backend.Init(); err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Now()
+	// Insert 2 alerts
+	a1 := Alert{Timestamp: now, SessionID: "sess-p", Metric: "m1", Score: 0.5}
+	a2 := Alert{Timestamp: now.Add(time.Minute), SessionID: "sess-p", Metric: "m2", Score: 0.6}
+	_ = backend.RecordAlert(a1)
+	_ = backend.RecordAlert(a2)
+
+	// Filter.Offset >= len(results) (which is 2)
+	results, err := backend.QueryAlerts(AlertFilter{SessionID: "sess-p", Offset: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 0 {
+		t.Errorf("expected empty results for offset overflow, got %d", len(results))
+	}
+
+	// Test Serialize/Deserialize
+	data, err := SerializeAlert(a1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	deserialized, err := DeserializeAlert(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deserialized.Metric != "m1" {
+		t.Errorf("deserialized metric = %s, want m1", deserialized.Metric)
+	}
+
+	// Test DeserializeAlert with malformed JSON
+	_, err = DeserializeAlert([]byte("invalid json"))
+	if err == nil {
+		t.Error("expected error deserializing malformed JSON, got nil")
+	}
+}
+
+func TestSQLite_DefaultDSN(t *testing.T) {
+	defer os.Remove("ledger.db")
+	defer os.Remove("ledger.db-journal")
+	defer os.Remove("ledger.db-shm")
+	defer os.Remove("ledger.db-wal")
+
+	backend, err := NewBackend("sqlite", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer backend.Close()
+	if err := backend.Init(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSQLite_FiltersAndSorting(t *testing.T) {
+	tmp := t.TempDir() + "/filters_test.db"
+	defer os.Remove(tmp)
+
+	backend, err := NewBackend("sqlite", tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer backend.Close()
+	_ = backend.Init()
+
+	now := time.Now()
+	// Insert multiple alerts
+	a1 := Alert{Timestamp: now.Add(-5 * time.Minute), SessionID: "sess-1", Metric: "m1", Score: 0.5, Threshold: 0.4, Action: "act-1"}
+	a2 := Alert{Timestamp: now.Add(-10 * time.Minute), SessionID: "sess-2", Metric: "m2", Score: 0.6, Threshold: 0.4, Action: "act-2"}
+	_ = backend.RecordAlert(a1)
+	_ = backend.RecordAlert(a2)
+
+	// Filter by Action
+	res, err := backend.QueryAlerts(AlertFilter{Action: "act-1"})
+	if err != nil || len(res) != 1 || res[0].Action != "act-1" {
+		t.Errorf("QueryAlerts Action filter failed: %v", res)
+	}
+
+	// Filter by StartTime/EndTime
+	res, err = backend.QueryAlerts(AlertFilter{StartTime: now.Add(-7 * time.Minute)})
+	if err != nil || len(res) != 1 || res[0].SessionID != "sess-1" {
+		t.Errorf("QueryAlerts StartTime filter failed: %v", res)
+	}
+
+	res, err = backend.QueryAlerts(AlertFilter{EndTime: now.Add(-7 * time.Minute)})
+	if err != nil || len(res) != 1 || res[0].SessionID != "sess-2" {
+		t.Errorf("QueryAlerts EndTime filter failed: %v", res)
+	}
+
+	// CountAlerts with filters
+	c, err := backend.CountAlerts(AlertFilter{Action: "act-1"})
+	if err != nil || c != 1 {
+		t.Errorf("CountAlerts Action filter failed: %d, %v", c, err)
+	}
+
+	c, err = backend.CountAlerts(AlertFilter{SessionID: "sess-2"})
+	if err != nil || c != 1 {
+		t.Errorf("CountAlerts SessionID filter failed: %d, %v", c, err)
+	}
+}
+
+func TestLongbow_FiltersAndSorting(t *testing.T) {
+	backend, err := NewBackend("longbow", "localhost:9091")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer backend.Close()
+	_ = backend.Init()
+
+	now := time.Now()
+	a1 := Alert{Timestamp: now.Add(-10 * time.Minute), SessionID: "sess-1", Metric: "m1", Score: 0.5, Threshold: 0.4, Action: "act-1"}
+	a2 := Alert{Timestamp: now.Add(-5 * time.Minute), SessionID: "sess-2", Metric: "m2", Score: 0.6, Threshold: 0.4, Action: "act-2"}
+	_ = backend.RecordAlert(a1)
+	_ = backend.RecordAlert(a2)
+
+	// Filter by Action
+	res, err := backend.QueryAlerts(AlertFilter{Action: "act-1"})
+	if err != nil || len(res) != 1 || res[0].Action != "act-1" {
+		t.Errorf("Longbow QueryAlerts Action filter failed: %v", res)
+	}
+
+	// Mismatched SessionID filter to exercise negative check in QueryAlerts
+	res, err = backend.QueryAlerts(AlertFilter{SessionID: "nonexistent"})
+	if err != nil || len(res) != 0 {
+		t.Errorf("expected 0 results, got %v", res)
+	}
+
+	// Filter by Metric
+	res, err = backend.QueryAlerts(AlertFilter{Metric: "m2"})
+	if err != nil || len(res) != 1 || res[0].Metric != "m2" {
+		t.Errorf("Longbow QueryAlerts Metric filter failed: %v", res)
+	}
+
+	// Filter by StartTime/EndTime
+	res, err = backend.QueryAlerts(AlertFilter{StartTime: now.Add(-7 * time.Minute)})
+	if err != nil || len(res) != 1 || res[0].SessionID != "sess-2" {
+		t.Errorf("Longbow QueryAlerts StartTime filter failed: %v", res)
+	}
+
+	res, err = backend.QueryAlerts(AlertFilter{EndTime: now.Add(-7 * time.Minute)})
+	if err != nil || len(res) != 1 || res[0].SessionID != "sess-1" {
+		t.Errorf("Longbow QueryAlerts EndTime filter failed: %v", res)
+	}
+
+	// Pagination offset / limit where limit < len(results)
+	res, err = backend.QueryAlerts(AlertFilter{Limit: 1, Offset: 0})
+	if err != nil || len(res) != 1 || res[0].SessionID != "sess-2" {
+		t.Errorf("Longbow Pagination Limit/Offset failed: %v", res)
+	}
+
+	// Test QueryInterventions filters and sorting
+	// Place them in ascending order of timestamps so the bubble sort has to swap them
+	i1 := Intervention{Timestamp: now.Add(-10 * time.Minute), SessionID: "sess-1", Method: "ActAdd", Layer: 2}
+	i2 := Intervention{Timestamp: now.Add(-5 * time.Minute), SessionID: "sess-1", Method: "ActAdd", Layer: 1}
+	i3 := Intervention{Timestamp: now.Add(-20 * time.Minute), SessionID: "sess-2", Method: "ActAdd", Layer: 3}
+	_ = backend.RecordIntervention(i1)
+	_ = backend.RecordIntervention(i2)
+	_ = backend.RecordIntervention(i3)
+
+	interventions, err := backend.QueryInterventions("sess-1")
+	if err != nil || len(interventions) != 2 {
+		t.Errorf("Longbow QueryInterventions session filter failed: %v", interventions)
+	}
+	if interventions[0].Layer != 1 || interventions[1].Layer != 2 {
+		t.Errorf("Longbow QueryInterventions sorting failed: %v", interventions)
+	}
+
+	// QueryInterventions with mismatched session ID to hit the continue block
+	interventions, err = backend.QueryInterventions("nonexistent")
+	if err != nil || len(interventions) != 0 {
+		t.Errorf("expected 0 results, got %v", interventions)
+	}
+
+	// Test Longbow pagination offset where 0 < Offset < len(results)
+	resOffset, err := backend.QueryAlerts(AlertFilter{Offset: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resOffset) != 1 {
+		t.Errorf("expected 1 result with offset 1, got %d", len(resOffset))
+	}
+}
+
+func TestSQLite_ScanErrors(t *testing.T) {
+	tmp := t.TempDir() + "/scan_error.db"
+	defer os.Remove(tmp)
+
+	backend, err := NewBackend("sqlite", tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer backend.Close()
+
+	if err := backend.Init(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Cast the backend to internal sqliteBackend
+	sqliteB, ok := backend.(*sqliteBackend)
+	if !ok {
+		t.Fatal("expected sqliteBackend")
+	}
+
+	// Drop alerts and create a schema where score is a text and insert a bad string
+	if _, err := sqliteB.db.Exec("DROP TABLE alerts"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqliteB.db.Exec(`
+		CREATE TABLE alerts (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			timestamp TEXT NOT NULL,
+			session_id TEXT NOT NULL,
+			metric TEXT NOT NULL,
+			score TEXT NOT NULL,
+			threshold REAL NOT NULL,
+			action TEXT NOT NULL
+		)
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqliteB.db.Exec("INSERT INTO alerts (timestamp, session_id, metric, score, threshold, action) VALUES (?, ?, ?, ?, ?, ?)",
+		time.Now().Format(time.RFC3339), "s-1", "m-1", "not-a-float", 0.5, "act-1"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now querying alerts should trigger rows.Scan error
+	if _, err := backend.QueryAlerts(AlertFilter{}); err == nil {
+		t.Error("expected error QueryAlerts on malformed score value")
+	}
+
+	// Drop interventions and create a schema where layer is a text and insert a bad string
+	if _, err := sqliteB.db.Exec("DROP TABLE interventions"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqliteB.db.Exec(`
+		CREATE TABLE interventions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			timestamp TEXT NOT NULL,
+			session_id TEXT NOT NULL,
+			method TEXT NOT NULL,
+			layer TEXT NOT NULL,
+			result TEXT NOT NULL
+		)
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqliteB.db.Exec("INSERT INTO interventions (timestamp, session_id, method, layer, result) VALUES (?, ?, ?, ?, ?)",
+		time.Now().Format(time.RFC3339), "s-1", "method-1", "not-an-int", "result-1"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now querying interventions should trigger rows.Scan error
+	if _, err := backend.QueryInterventions("s-1"); err == nil {
+		t.Error("expected error QueryInterventions on malformed layer value")
+	}
+}
+
+
+
+
+

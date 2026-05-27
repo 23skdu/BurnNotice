@@ -54,3 +54,37 @@ func TestOODAnomalyDetector(t *testing.T) {
 		t.Error("expected highly perturbed OOD vector to be flagged as anomaly")
 	}
 }
+
+func TestMLPProbe_Predict_EdgeCases(t *testing.T) {
+	probe := &MLPProbe{
+		Weights1: [][]float64{},
+	}
+	if score := probe.Predict([]float64{1.0}); score != 0.5 {
+		t.Errorf("expected 0.5 for empty hidden layers, got %f", score)
+	}
+
+	probe2 := NewMLPProbe(4, 2)
+	if score := probe2.Predict([]float64{}); score != 0.5 {
+		t.Errorf("expected 0.5 for empty input activation, got %f", score)
+	}
+}
+
+func TestOODAnomalyDetector_EmptyBaseline(t *testing.T) {
+	_, err := NewOODAnomalyDetector(nil, 3.0)
+	if err == nil {
+		t.Error("expected error for nil baseline")
+	}
+
+	_, err2 := NewOODAnomalyDetector([][]float64{}, 3.0)
+	if err2 == nil {
+		t.Error("expected error for empty baseline")
+	}
+}
+
+func TestOODAnomalyDetector_IsAnomaly_MismatchedDimension(t *testing.T) {
+	detector, _ := NewOODAnomalyDetector([][]float64{{1.0, 2.0}}, 3.0)
+	if !detector.IsAnomaly([]float64{1.0}) {
+		t.Error("expected mismatched vector to be flagged as anomaly")
+	}
+}
+

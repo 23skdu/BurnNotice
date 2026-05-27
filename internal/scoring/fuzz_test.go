@@ -17,7 +17,7 @@ func FuzzScorer_Score(f *testing.F) {
 			}
 		}
 
-		s := NewScorer()
+		s := NewScorer(nil)
 		s.RegisterDirection("test", []float64{d1, d2, d3})
 
 		scores := s.Score([]float64{a1, a2, a3})
@@ -44,7 +44,7 @@ func FuzzScorer_Subspace(f *testing.F) {
 			}
 		}
 
-		s := NewScorer()
+		s := NewScorer(nil)
 		basis := [][]float64{{b1, b2, b3}}
 
 		energy := s.ScoreSubspace([]float64{a1, a2, a3}, basis)

@@ -128,18 +128,18 @@ test.describe('Cross-Browser Compatibility', () => {
   test('should render correctly on desktop viewport', async ({ page }) => {
     await page.setViewportSize({ width: 1920, height: 1080 });
     await page.goto('/');
-    await expect(page.getByText('BurnNotice Dashboard')).toBeVisible();
+    await expect(page).toHaveTitle('BurnNotice Dashboard');
   });
 
   test('should render correctly on tablet viewport', async ({ page }) => {
     await page.setViewportSize({ width: 768, height: 1024 });
     await page.goto('/');
-    await expect(page.getByText('BurnNotice Dashboard')).toBeVisible();
+    await expect(page).toHaveTitle('BurnNotice Dashboard');
   });
 
   test('should render correctly on mobile viewport', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
     await page.goto('/');
-    await expect(page.getByText('BurnNotice Dashboard')).toBeVisible();
+    await expect(page).toHaveTitle('BurnNotice Dashboard');
   });
 });

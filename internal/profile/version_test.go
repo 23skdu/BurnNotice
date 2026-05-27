@@ -1,6 +1,8 @@
 package profile
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -146,5 +148,34 @@ func TestVersionCosineDistanceEdgeCases(t *testing.T) {
 
 	if d := versionCosineDistance([]float64{0, 0}, []float64{0, 0}); d != 0 {
 		t.Errorf("zero vectors distance = %f, want 0", d)
+	}
+}
+
+func TestVersionCosineDistance_Mismatched(t *testing.T) {
+	if d := versionCosineDistance([]float64{1.0}, []float64{1.0, 2.0}); d != 0 {
+		t.Errorf("mismatched length distance = %f, want 0", d)
+	}
+}
+
+func TestListVersions_MalformedJSON(t *testing.T) {
+	tmp := t.TempDir()
+	vm := NewVersionManager(tmp)
+
+	p := &ModelProfile{ModelID: "test-model"}
+	_, err := vm.SaveVersion(p, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Write invalid JSON to the version directory version.json
+	os.WriteFile(filepath.Join(tmp, "versions", "v1", "version.json"), []byte("invalid-json"), 0644)
+
+	versions, err := vm.ListVersions()
+	if err != nil {
+		t.Fatalf("ListVersions error on malformed: %v", err)
+	}
+	// Should skip the malformed version
+	if len(versions) != 0 {
+		t.Errorf("expected 0 versions listed, got %d", len(versions))
 	}
 }

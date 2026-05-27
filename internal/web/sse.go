@@ -48,7 +48,9 @@ func (h *SSEHub) Broadcast(event, data string) {
 	for ch := range h.clients {
 		select {
 		case ch <- msg:
-			metrics.SSEMessagesSentTotal.Inc()
+			if metrics.DefaultSampler.ShouldSample() {
+				metrics.SSEMessagesSentTotal.Add(metrics.DefaultSampler.Weight())
+			}
 		default:
 			// Client buffer full, skip
 		}

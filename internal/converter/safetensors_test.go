@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"burnnotice/internal/onnxpb"
+	"google.golang.org/protobuf/proto"
 	"os"
 	"path/filepath"
 	"testing"
@@ -300,14 +302,18 @@ func TestValidateONNX_FileNotFound(t *testing.T) {
 func TestValidateONNX_Exists(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "model.onnx")
-	data := []byte("ONNX")
-	data = append(data, 0, 0, 0, 17)
-	data = append(data, 1)
-	data = append(data, 0, 0, 0, 1)
-	data = append(data, []byte("ENDM")...)
+	
+	model := &onnxpb.ModelProto{
+		Graph: &onnxpb.GraphProto{},
+	}
+	data, err := proto.Marshal(model)
+	if err != nil {
+		t.Fatalf("Failed to marshal dummy onnxpb.ModelProto: %v", err)
+	}
+
 	os.WriteFile(path, data, 0644)
 
-	err := ValidateONNX(path)
+	err = ValidateONNX(path)
 	if err != nil {
 		t.Errorf("ValidateONNX error: %v", err)
 	}

@@ -20,7 +20,7 @@ func (c *Calibrator) Calibrate(prof *ModelProfile, dataset *datasets.Dataset) (m
 		return nil, fmt.Errorf("empty calibration dataset")
 	}
 
-	scorer := scoring.NewScorer()
+	scorer := scoring.NewScorer(nil)
 	for dirName, layers := range prof.Directions {
 		for layerIdx, dir := range layers {
 			dirKey := fmt.Sprintf("%s:%d", dirName, layerIdx)
