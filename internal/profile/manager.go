@@ -19,7 +19,7 @@ const (
 	StatusCheckpointed JobStatus = "checkpointed"
 )
 
-// ProfileJob represents a single profiling task.
+// Job represents a single profiling task.
 type Job struct {
 	ID        string
 	ModelID   string
@@ -52,7 +52,7 @@ func (j *Job) Context() context.Context {
 	return j.ctx
 }
 
-// ProfileManager manages profiling jobs with a worker pool.
+// Manager manages profiling jobs with a worker pool.
 type Manager struct {
 	jobs    map[string]*Job
 	jobChan chan *Job
@@ -61,7 +61,7 @@ type Manager struct {
 	wg      sync.WaitGroup
 }
 
-// NewProfileManager creates a manager with the specified worker count.
+// NewManager creates a manager with the specified worker count.
 func NewManager(workers int) *Manager {
 	pm := &Manager{
 		jobs:    make(map[string]*Job),

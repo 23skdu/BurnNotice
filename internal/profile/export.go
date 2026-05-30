@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// ProfileMetadata holds metadata about a profile.
+// Metadata holds metadata about a profile.
 type Metadata struct {
 	CreatedAt         time.Time `json:"created_at"`
 	ModelArchitecture string    `json:"model_architecture"`
