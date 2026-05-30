@@ -8,26 +8,26 @@ import (
 )
 
 // ProfileMetadata holds metadata about a profile.
-type ProfileMetadata struct {
-	CreatedAt        time.Time `json:"created_at"`
+type Metadata struct {
+	CreatedAt         time.Time `json:"created_at"`
 	ModelArchitecture string    `json:"model_architecture"`
-	DatasetSize      int       `json:"dataset_size"`
-	ValidationScore  float64   `json:"validation_score"`
-	Version          int       `json:"version"`
+	DatasetSize       int       `json:"dataset_size"`
+	ValidationScore   float64   `json:"validation_score"`
+	Version           int       `json:"version"`
 }
 
 // ExportableProfile is the exportable version of ModelProfile with metadata.
 type ExportableProfile struct {
-	ModelID         string                     `json:"model_id"`
+	ModelID         string                       `json:"model_id"`
 	Directions      map[string]map[int][]float64 `json:"directions"`
-	LayerScores     map[string][]float64        `json:"layer_scores"`
-	TruthNeurons    []int                       `json:"truth_neurons"`
-	MonitoredLayers []int                       `json:"monitored_layers"`
-	Metadata        ProfileMetadata             `json:"metadata"`
+	LayerScores     map[string][]float64         `json:"layer_scores"`
+	TruthNeurons    []int                        `json:"truth_neurons"`
+	MonitoredLayers []int                        `json:"monitored_layers"`
+	Metadata        Metadata                     `json:"metadata"`
 }
 
 // ToExportable converts a ModelProfile to an exportable format.
-func (p *ModelProfile) ToExportable(meta ProfileMetadata) *ExportableProfile {
+func (p *ModelProfile) ToExportable(meta Metadata) *ExportableProfile {
 	return &ExportableProfile{
 		ModelID:         p.ModelID,
 		Directions:      p.Directions,
@@ -50,7 +50,7 @@ func (ep *ExportableProfile) FromExportable() *ModelProfile {
 }
 
 // Export serializes a profile to the given format.
-func (p *ModelProfile) Export(meta ProfileMetadata, format string) ([]byte, error) {
+func (p *ModelProfile) Export(meta Metadata, format string) ([]byte, error) {
 	ep := p.ToExportable(meta)
 
 	switch format {

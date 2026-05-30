@@ -15,12 +15,12 @@ func TestModelProfile_ToExportable(t *testing.T) {
 		MonitoredLayers: []int{0, 1},
 	}
 
-	meta := ProfileMetadata{
-		CreatedAt:       time.Now(),
+	meta := Metadata{
+		CreatedAt:         time.Now(),
 		ModelArchitecture: "llama-3-8b",
-		DatasetSize:     1000,
-		ValidationScore: 0.95,
-		Version:         1,
+		DatasetSize:       1000,
+		ValidationScore:   0.95,
+		Version:           1,
 	}
 
 	ep := p.ToExportable(meta)
@@ -64,12 +64,12 @@ func TestModelProfile_Export_JSON(t *testing.T) {
 		Directions: map[string]map[int][]float64{"d": {0: {1, 2}}},
 	}
 
-	meta := ProfileMetadata{
-		CreatedAt:       time.Now(),
+	meta := Metadata{
+		CreatedAt:         time.Now(),
 		ModelArchitecture: "test",
-		DatasetSize:     100,
-		ValidationScore: 0.9,
-		Version:         1,
+		DatasetSize:       100,
+		ValidationScore:   0.9,
+		Version:           1,
 	}
 
 	data, err := p.Export(meta, "json")
@@ -85,7 +85,7 @@ func TestModelProfile_Export_JSON(t *testing.T) {
 func TestModelProfile_Export_UnsupportedFormat(t *testing.T) {
 	p := &ModelProfile{ModelID: "test"}
 
-	_, err := p.Export(ProfileMetadata{}, "xml")
+	_, err := p.Export(Metadata{}, "xml")
 	if err == nil {
 		t.Fatal("expected error for unsupported format")
 	}
@@ -97,12 +97,12 @@ func TestImportProfile_JSON(t *testing.T) {
 		Directions: map[string]map[int][]float64{"d": {0: {1, 2}}},
 	}
 
-	meta := ProfileMetadata{
-		CreatedAt:       time.Now(),
+	meta := Metadata{
+		CreatedAt:         time.Now(),
 		ModelArchitecture: "test",
-		DatasetSize:     100,
-		ValidationScore: 0.9,
-		Version:         1,
+		DatasetSize:       100,
+		ValidationScore:   0.9,
+		Version:           1,
 	}
 
 	data, _ := p.Export(meta, "json")
@@ -261,12 +261,12 @@ func TestModelProfile_ExportImport_GOB(t *testing.T) {
 		Directions: map[string]map[int][]float64{"d": {0: {1.0, 2.0}}},
 	}
 
-	meta := ProfileMetadata{
-		CreatedAt:       time.Now(),
+	meta := Metadata{
+		CreatedAt:         time.Now(),
 		ModelArchitecture: "test",
-		DatasetSize:     100,
-		ValidationScore: 0.9,
-		Version:         1,
+		DatasetSize:       100,
+		ValidationScore:   0.9,
+		Version:           1,
 	}
 
 	data, err := p.Export(meta, "gob")
@@ -319,4 +319,3 @@ func TestComputeDiff_MissingLayer(t *testing.T) {
 		t.Errorf("expected empty diff for missing layer, got %v", diff)
 	}
 }
-

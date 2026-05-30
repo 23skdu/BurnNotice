@@ -11,15 +11,16 @@ import (
 type JobStatus string
 
 const (
-	StatusQueued      JobStatus = "queued"
-	StatusRunning     JobStatus = "running"
-	StatusComplete    JobStatus = "complete"
-	StatusFailed      JobStatus = "failed"
+	// StatusQueued means the job is waiting to be processed.
+	StatusQueued       JobStatus = "queued"
+	StatusRunning      JobStatus = "running"
+	StatusComplete     JobStatus = "complete"
+	StatusFailed       JobStatus = "failed"
 	StatusCheckpointed JobStatus = "checkpointed"
 )
 
 // ProfileJob represents a single profiling task.
-type ProfileJob struct {
+type Job struct {
 	ID        string
 	ModelID   string
 	Status    JobStatus
@@ -33,7 +34,7 @@ type ProfileJob struct {
 }
 
 // Cancel stops the job.
-func (j *ProfileJob) Cancel() {
+func (j *Job) Cancel() {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	if j.cancel != nil {
@@ -42,7 +43,7 @@ func (j *ProfileJob) Cancel() {
 }
 
 // Context returns the job's context.
-func (j *ProfileJob) Context() context.Context {
+func (j *Job) Context() context.Context {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	if j.ctx == nil {
@@ -52,26 +53,26 @@ func (j *ProfileJob) Context() context.Context {
 }
 
 // ProfileManager manages profiling jobs with a worker pool.
-type ProfileManager struct {
-	jobs    map[string]*ProfileJob
-	jobChan chan *ProfileJob
+type Manager struct {
+	jobs    map[string]*Job
+	jobChan chan *Job
 	workers int
 	mu      sync.RWMutex
 	wg      sync.WaitGroup
 }
 
 // NewProfileManager creates a manager with the specified worker count.
-func NewProfileManager(workers int) *ProfileManager {
-	pm := &ProfileManager{
-		jobs:    make(map[string]*ProfileJob),
-		jobChan: make(chan *ProfileJob, workers*2),
+func NewManager(workers int) *Manager {
+	pm := &Manager{
+		jobs:    make(map[string]*Job),
+		jobChan: make(chan *Job, workers*2),
 		workers: workers,
 	}
 	return pm
 }
 
 // Start spawns worker goroutines.
-func (pm *ProfileManager) Start(handler func(*ProfileJob) error) {
+func (pm *Manager) Start(handler func(*Job) error) {
 	for i := 0; i < pm.workers; i++ {
 		pm.wg.Add(1)
 		go func() {
@@ -84,7 +85,7 @@ func (pm *ProfileManager) Start(handler func(*ProfileJob) error) {
 }
 
 // Submit enqueues a profiling job.
-func (pm *ProfileManager) Submit(job *ProfileJob) {
+func (pm *Manager) Submit(job *Job) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
@@ -95,7 +96,7 @@ func (pm *ProfileManager) Submit(job *ProfileJob) {
 }
 
 // GetJob returns a job by ID.
-func (pm *ProfileManager) GetJob(id string) (*ProfileJob, bool) {
+func (pm *Manager) GetJob(id string) (*Job, bool) {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 	job, ok := pm.jobs[id]
@@ -103,11 +104,11 @@ func (pm *ProfileManager) GetJob(id string) (*ProfileJob, bool) {
 }
 
 // ListJobs returns all jobs.
-func (pm *ProfileManager) ListJobs() []*ProfileJob {
+func (pm *Manager) ListJobs() []*Job {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 
-	result := make([]*ProfileJob, 0, len(pm.jobs))
+	result := make([]*Job, 0, len(pm.jobs))
 	for _, j := range pm.jobs {
 		result = append(result, j)
 	}
@@ -115,12 +116,12 @@ func (pm *ProfileManager) ListJobs() []*ProfileJob {
 }
 
 // Stop shuts down the worker pool.
-func (pm *ProfileManager) Stop() {
+func (pm *Manager) Stop() {
 	close(pm.jobChan)
 	pm.wg.Wait()
 }
 
-func (pm *ProfileManager) executeJob(job *ProfileJob, handler func(*ProfileJob) error) {
+func (pm *Manager) executeJob(job *Job, handler func(*Job) error) {
 	pm.mu.Lock()
 	job.Status = StatusRunning
 	pm.mu.Unlock()

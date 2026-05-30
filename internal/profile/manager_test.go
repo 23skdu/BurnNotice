@@ -8,7 +8,7 @@ import (
 )
 
 func TestNewProfileManager(t *testing.T) {
-	pm := NewProfileManager(4)
+	pm := NewManager(4)
 
 	if pm.workers != 4 {
 		t.Errorf("workers = %d, want 4", pm.workers)
@@ -19,14 +19,14 @@ func TestNewProfileManager(t *testing.T) {
 }
 
 func TestProfileManager_SubmitAndGet(t *testing.T) {
-	pm := NewProfileManager(1)
+	pm := NewManager(1)
 	defer pm.Stop()
 
-	pm.Start(func(job *ProfileJob) error {
+	pm.Start(func(job *Job) error {
 		return nil
 	})
 
-	job := &ProfileJob{ID: "job1", ModelID: "model1", Total: 10}
+	job := &Job{ID: "job1", ModelID: "model1", Total: 10}
 	pm.Submit(job)
 
 	time.Sleep(100 * time.Millisecond)
@@ -44,15 +44,15 @@ func TestProfileManager_SubmitAndGet(t *testing.T) {
 }
 
 func TestProfileManager_JobFails(t *testing.T) {
-	pm := NewProfileManager(1)
+	pm := NewManager(1)
 	defer pm.Stop()
 
 	expectedErr := errors.New("handler error")
-	pm.Start(func(job *ProfileJob) error {
+	pm.Start(func(job *Job) error {
 		return expectedErr
 	})
 
-	job := &ProfileJob{ID: "job2", ModelID: "model1", Total: 5}
+	job := &Job{ID: "job2", ModelID: "model1", Total: 5}
 	pm.Submit(job)
 
 	time.Sleep(100 * time.Millisecond)
@@ -70,16 +70,16 @@ func TestProfileManager_JobFails(t *testing.T) {
 }
 
 func TestProfileManager_ListJobs(t *testing.T) {
-	pm := NewProfileManager(2)
+	pm := NewManager(2)
 	defer pm.Stop()
 
-	pm.Start(func(job *ProfileJob) error {
+	pm.Start(func(job *Job) error {
 		return nil
 	})
 
-	pm.Submit(&ProfileJob{ID: "a", ModelID: "m1", Total: 1})
-	pm.Submit(&ProfileJob{ID: "b", ModelID: "m1", Total: 1})
-	pm.Submit(&ProfileJob{ID: "c", ModelID: "m1", Total: 1})
+	pm.Submit(&Job{ID: "a", ModelID: "m1", Total: 1})
+	pm.Submit(&Job{ID: "b", ModelID: "m1", Total: 1})
+	pm.Submit(&Job{ID: "c", ModelID: "m1", Total: 1})
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -90,16 +90,16 @@ func TestProfileManager_ListJobs(t *testing.T) {
 }
 
 func TestProfileManager_CancelJob(t *testing.T) {
-	pm := NewProfileManager(1)
+	pm := NewManager(1)
 	defer pm.Stop()
 
 	blocker := make(chan struct{})
-	pm.Start(func(job *ProfileJob) error {
+	pm.Start(func(job *Job) error {
 		<-job.Context().Done()
 		return job.Context().Err()
 	})
 
-	job := &ProfileJob{ID: "cancel1", ModelID: "m1", Total: 10}
+	job := &Job{ID: "cancel1", ModelID: "m1", Total: 10}
 	pm.Submit(job)
 
 	time.Sleep(50 * time.Millisecond)
@@ -119,7 +119,7 @@ func TestProfileManager_CancelJob(t *testing.T) {
 }
 
 func TestProfileManager_JobContext(t *testing.T) {
-	job := &ProfileJob{ID: "ctx1", ModelID: "m1"}
+	job := &Job{ID: "ctx1", ModelID: "m1"}
 
 	ctx := job.Context()
 	if ctx == nil {
@@ -144,7 +144,7 @@ func TestProfileManager_JobContext(t *testing.T) {
 }
 
 func TestProfileManager_JobContextIdempotent(t *testing.T) {
-	job := &ProfileJob{ID: "ctx2"}
+	job := &Job{ID: "ctx2"}
 
 	ctx1 := job.Context()
 	ctx2 := job.Context()
@@ -155,10 +155,10 @@ func TestProfileManager_JobContextIdempotent(t *testing.T) {
 }
 
 func TestProfileManager_ProgressTracking(t *testing.T) {
-	pm := NewProfileManager(1)
+	pm := NewManager(1)
 	defer pm.Stop()
 
-	pm.Start(func(job *ProfileJob) error {
+	pm.Start(func(job *Job) error {
 		for i := 0; i < 5; i++ {
 			job.Completed = i + 1
 			job.Progress = float64(i+1) / 5.0
@@ -167,7 +167,7 @@ func TestProfileManager_ProgressTracking(t *testing.T) {
 		return nil
 	})
 
-	job := &ProfileJob{ID: "progress1", ModelID: "m1", Total: 5}
+	job := &Job{ID: "progress1", ModelID: "m1", Total: 5}
 	pm.Submit(job)
 
 	time.Sleep(200 * time.Millisecond)
@@ -185,14 +185,14 @@ func TestProfileManager_ProgressTracking(t *testing.T) {
 }
 
 func TestProfileManager_PanicRecovery(t *testing.T) {
-	pm := NewProfileManager(1)
+	pm := NewManager(1)
 	defer pm.Stop()
 
-	pm.Start(func(job *ProfileJob) error {
+	pm.Start(func(job *Job) error {
 		panic("handler panic")
 	})
 
-	job := &ProfileJob{ID: "panic1", ModelID: "m1", Total: 1}
+	job := &Job{ID: "panic1", ModelID: "m1", Total: 1}
 	pm.Submit(job)
 
 	time.Sleep(100 * time.Millisecond)
@@ -210,16 +210,16 @@ func TestProfileManager_PanicRecovery(t *testing.T) {
 }
 
 func TestProfileManager_MultipleWorkers(t *testing.T) {
-	pm := NewProfileManager(4)
+	pm := NewManager(4)
 	defer pm.Stop()
 
-	pm.Start(func(job *ProfileJob) error {
+	pm.Start(func(job *Job) error {
 		time.Sleep(50 * time.Millisecond)
 		return nil
 	})
 
 	for i := 0; i < 8; i++ {
-		pm.Submit(&ProfileJob{ID: "multi", ModelID: "m1", Total: 1})
+		pm.Submit(&Job{ID: "multi", ModelID: "m1", Total: 1})
 	}
 
 	time.Sleep(500 * time.Millisecond)
@@ -234,7 +234,7 @@ func TestProfileManager_MultipleWorkers(t *testing.T) {
 }
 
 func TestProfileManager_GetJobNotFound(t *testing.T) {
-	pm := NewProfileManager(1)
+	pm := NewManager(1)
 	defer pm.Stop()
 
 	_, ok := pm.GetJob("nonexistent")
@@ -244,21 +244,21 @@ func TestProfileManager_GetJobNotFound(t *testing.T) {
 }
 
 func TestProfileManager_JobQueuedStatus(t *testing.T) {
-	pm := NewProfileManager(1)
+	pm := NewManager(1)
 	defer pm.Stop()
 
 	blocker := make(chan struct{})
-	pm.Start(func(job *ProfileJob) error {
+	pm.Start(func(job *Job) error {
 		<-blocker
 		return nil
 	})
 
-	job1 := &ProfileJob{ID: "q1", ModelID: "m1", Total: 1}
+	job1 := &Job{ID: "q1", ModelID: "m1", Total: 1}
 	pm.Submit(job1)
 
 	time.Sleep(50 * time.Millisecond)
 
-	job2 := &ProfileJob{ID: "q2", ModelID: "m1", Total: 1}
+	job2 := &Job{ID: "q2", ModelID: "m1", Total: 1}
 	pm.Submit(job2)
 
 	time.Sleep(50 * time.Millisecond)
@@ -273,7 +273,7 @@ func TestProfileManager_JobQueuedStatus(t *testing.T) {
 }
 
 func TestProfileManager_ContextCancellation(t *testing.T) {
-	job := &ProfileJob{ID: "cancel_ctx", ModelID: "m1"}
+	job := &Job{ID: "cancel_ctx", ModelID: "m1"}
 
 	ctx := job.Context()
 	job.Cancel()
