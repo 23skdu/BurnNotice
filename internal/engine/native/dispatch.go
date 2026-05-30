@@ -18,6 +18,7 @@ func NewGPUEngine(dim int) *GPUEngine {
 	return &GPUEngine{Dimension: dim}
 }
 
+
 // CosineSimilarity parallelizes activation metric evaluations directly within GPU kernels.
 func (ge *GPUEngine) CosineSimilarity(activation []float32, directions []float32, numDirections int) []float32 {
 	if len(activation) != ge.Dimension || len(directions) != ge.Dimension*numDirections || numDirections <= 0 {
@@ -26,11 +27,14 @@ func (ge *GPUEngine) CosineSimilarity(activation []float32, directions []float32
 
 	output := make([]float32, numDirections)
 
+	dim32 := toInt32(ge.Dimension)
+	numDir32 := toInt32(numDirections)
+
 	C.gpu_cosine_similarity(
 		(*C.float)(unsafe.Pointer(&activation[0])),
 		(*C.float)(unsafe.Pointer(&directions[0])),
-		C.int(ge.Dimension),
-		C.int(numDirections),
+		C.int(dim32),
+		C.int(numDir32),
 		(*C.float)(unsafe.Pointer(&output[0])),
 	)
 
@@ -46,10 +50,12 @@ func (ge *GPUEngine) DynamicRotation(activation []float32, direction []float32, 
 	output := make([]float32, ge.Dimension)
 	copy(output, activation)
 
+	dim32 := toInt32(ge.Dimension)
+
 	C.gpu_dynamic_rotation(
 		(*C.float)(unsafe.Pointer(&output[0])),
 		(*C.float)(unsafe.Pointer(&direction[0])),
-		C.int(ge.Dimension),
+		C.int(dim32),
 		C.float(theta),
 		(*C.float)(unsafe.Pointer(&output[0])),
 	)
