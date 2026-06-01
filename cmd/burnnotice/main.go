@@ -113,6 +113,7 @@ behavioral directions (refusal, deception, truth, conflict, policy).`,
 		modelPath := args[0]
 		outputDir, _ := cmd.Flags().GetString("output")
 		datasetPath, _ := cmd.Flags().GetString("dataset")
+		oversightPath, _ := cmd.Flags().GetString("oversight-dataset")
 		layers, _ := cmd.Flags().GetIntSlice("layers")
 
 		if datasetPath == "" {
@@ -145,6 +146,46 @@ behavioral directions (refusal, deception, truth, conflict, policy).`,
 
 		scorer := scoring.NewScorer(nil)
 
+		var ablator *profile.OversightAblator
+		var oversightDirs map[int][]float64
+		if oversightPath != "" {
+			var ods *datasets.Dataset
+			switch filepath.Ext(oversightPath) {
+			case ".json":
+				ods, err = loader.LoadJSON(oversightPath)
+			case ".jsonl":
+				ods, err = loader.LoadJSONL(oversightPath)
+			default:
+				return fmt.Errorf("unsupported oversight dataset format: %s", oversightPath)
+			}
+			if err != nil {
+				return fmt.Errorf("load oversight dataset: %w", err)
+			}
+			
+			monitoredActs := make([][][]float64, 0, len(ods.Pairs))
+			deployedActs := make([][][]float64, 0, len(ods.Pairs))
+			
+			for _, pair := range ods.Pairs {
+				pos, err := model.ExtractActivation(pair.Truthful.Prompt, pair.Truthful.Response)
+				if err != nil {
+					return fmt.Errorf("extract monitored activation: %w", err)
+				}
+				neg, err := model.ExtractActivation(pair.Deceptive.Prompt, pair.Deceptive.Response)
+				if err != nil {
+					return fmt.Errorf("extract deployed activation: %w", err)
+				}
+				monitoredActs = append(monitoredActs, [][]float64{pos})
+				deployedActs = append(deployedActs, [][]float64{neg})
+			}
+			
+			oversightDirs, err = profile.ExtractOversightDirection(monitoredActs, deployedActs)
+			if err != nil {
+				return fmt.Errorf("extract oversight direction: %w", err)
+			}
+			ablator = profile.NewOversightAblator(oversightDirs)
+			fmt.Printf("Extracted oversight directions across %d layers for ablation\n", len(oversightDirs))
+		}
+
 		positiveActivations := make([][]float64, 0, len(ds.Pairs))
 		negativeActivations := make([][]float64, 0, len(ds.Pairs))
 
@@ -157,11 +198,33 @@ behavioral directions (refusal, deception, truth, conflict, policy).`,
 			if err != nil {
 				return fmt.Errorf("extract negative activation: %w", err)
 			}
+
+			if ablator != nil {
+				pos = ablator.Ablate(0, pos)
+				neg = ablator.Ablate(0, neg)
+			}
+
 			positiveActivations = append(positiveActivations, pos)
 			negativeActivations = append(negativeActivations, neg)
 		}
 
-		deceptionDir := extract.ExtractDIM(positiveActivations, negativeActivations)
+		if ablator != nil {
+			fmt.Println("Ablated oversight direction from deception dataset activations")
+		}
+
+		var deceptionDir []float64
+		useWhitenedSVD, _ := cmd.Flags().GetBool("whitened-svd")
+		if useWhitenedSVD {
+			// Extract top k=5 directions and use dynamic Ledoit-Wolf alpha (-1.0)
+			dirs, _ := extract.ExtractWhitenedSVD(positiveActivations, negativeActivations, 5, -1.0)
+			if len(dirs) > 0 {
+				deceptionDir = dirs[0]
+			} else {
+				return fmt.Errorf("failed to extract whitened SVD directions")
+			}
+		} else {
+			deceptionDir = extract.ExtractDIM(positiveActivations, negativeActivations)
+		}
 
 		scorer.RegisterDirection("deception", deceptionDir)
 
@@ -177,6 +240,9 @@ behavioral directions (refusal, deception, truth, conflict, policy).`,
 		modelProfile.Directions["deception"] = make(map[int][]float64)
 		for _, layer := range layers {
 			modelProfile.Directions["deception"][layer] = deceptionDir
+		}
+		if len(oversightDirs) > 0 {
+			modelProfile.Directions["oversight"] = oversightDirs
 		}
 		modelProfile.MonitoredLayers = layers
 
@@ -277,6 +343,8 @@ func init() {
 
 	profileCmd.Flags().StringP("output", "o", "./profiles", "Profile output directory")
 	profileCmd.Flags().String("dataset", "", "Path to profiling dataset (JSON/JSONL)")
+	profileCmd.Flags().String("oversight-dataset", "", "Path to oversight contrastive dataset (optional)")
+	profileCmd.Flags().Bool("whitened-svd", false, "Use whitened SVD extraction instead of DIM")
 	profileCmd.Flags().IntSlice("layers", []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31}, "Specific layers to profile (default: all)")
 
 	validateCmd.Flags().Int("hidden-dim", 4096, "Model hidden dimension")
