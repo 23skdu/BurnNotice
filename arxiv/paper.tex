@@ -21,8 +21,7 @@
 \title{BurnNotice: Real-Time Detection of LLM Deception and Alignment Drift via Activation-Space Monitoring and Steering}
 
 \author{
-  Ross Dmochowski \\
-  \texttt{rsd@rsd.dev} \\
+  Ross Dmochowski
 }
 
 \begin{document}
@@ -96,127 +95,13 @@ BurnNotice is implemented as a long-running Go application with three primary co
 
 All model inference runs through ONNX Runtime, eliminating Python and PyTorch dependencies. Models are converted from HuggingFace format to ONNX via the CLI tool (Section~\ref{sec:cli}). The Go engine uses the \texttt{github.com/owulveryck/onnx-go} binding for ONNX Runtime execution.
 
-\begin{lstlisting}[language=Go, caption=ONNX model loader with forward hook registration]
-package engine
-
-import (
-    "github.com/owulveryck/onnx-go"
-    "github.com/owulveryck/onnx-go/backend/onnxruntime"
-)
-
-type ModelLoader struct {
-    runtime *onnxruntime.ONNXRuntime
-    hooks   map[string]ActivationHook
-}
-
-func (ml *ModelLoader) Load(path string, hookLayers []string) (*LoadedModel, error) {
-    model, err := onnx.NewModel(onnxruntime.New())
-    if err != nil {
-        return nil, fmt.Errorf("create ONNX model: %w", err)
-    }
-
-    data, err := os.ReadFile(path)
-    if err != nil {
-        return nil, fmt.Errorf("read ONNX file: %w", err)
-    }
-
-    if err := model.UnmarshalBinary(data); err != nil {
-        return nil, fmt.Errorf("parse ONNX: %w", err)
-    }
-
-    hooks := make(map[string]ActivationHook)
-    for _, layer := range hookLayers {
-        hooks[layer] = NewActivationHook(layer)
-    }
-
-    return &LoadedModel{
-        model: model,
-        hooks: hooks,
-    }, nil
-}
-
-func (lm *LoadedModel) Forward(input []float32) (output []float32, activations map[string][]float32, err error) {
-    activations = make(map[string][]float32, len(lm.hooks))
-
-    // Register intermediate value capture for hooked layers
-    for name, hook := range lm.hooks {
-        tensor, err := lm.model.GetIntermediate(name)
-        if err != nil {
-            continue
-        }
-        activations[name] = tensor.Data().([]float32)
-        _ = hook
-    }
-
-    // Execute inference
-    outputTensor, err := lm.model.Predict(input)
-    if err != nil {
-        return nil, nil, fmt.Errorf("forward pass: %w", err)
-    }
-
-    return outputTensor.Data().([]float32), activations, nil
-}
-\end{lstlisting}
+The full source code for the ONNX model loader with forward hook registration can be found in the GitHub repository at \url{https://github.com/rsd/BurnNotice/tree/main/internal/engine}.
 
 \subsection{WASM Execution Path}
 
 For environments without GPU access or where ONNX Runtime is unavailable, BurnNotice supports WASM-based inference using \texttt{wazero}. ONNX models are compiled to WASM via \texttt{webnn} or \texttt{onnx2wasm}, enabling pure Go execution with near-native performance.
 
-\begin{lstlisting}[language=Go, caption=WASM inference backend]
-package wasm
-
-import (
-    "context"
-    "github.com/tetratelabs/wazero"
-    "github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
-)
-
-type WASMBackend struct {
-    runtime  wazero.Runtime
-    module   wazero.CompiledModule
-    memory   []byte
-}
-
-func NewWASMBackend(wasmPath string) (*WASMBackend, error) {
-    ctx := context.Background()
-    r := wazero.NewRuntime(ctx)
-    defer wasi_snapshot_preview1.MustInstantiate(ctx, r)
-
-    code, err := os.ReadFile(wasmPath)
-    if err != nil {
-        return nil, fmt.Errorf("read WASM: %w", err)
-    }
-
-    mod, err := r.CompileModule(ctx, code)
-    if err != nil {
-        return nil, fmt.Errorf("compile WASM: %w", err)
-    }
-
-    return &WASMBackend{
-        runtime: r,
-        module:  mod,
-    }, nil
-}
-
-func (wb *WASMBackend) Forward(input []float32) ([]float32, error) {
-    ctx := context.Background()
-
-    // Write input to WASM memory
-    mem := wb.runtime.NewMemoryView(len(input) * 4)
-    binary.LittleEndian.PutUint32(mem, uint32(len(input)))
-
-    // Execute forward pass
-    _, err := wb.runtime.InstantiateModule(ctx, wb.module, wazero.NewModuleConfig())
-    if err != nil {
-        return nil, fmt.Errorf("WASM execution: %w", err)
-    }
-
-    // Read output from WASM memory
-    output := make([]float32, /* output size */)
-    binary.LittleEndian.Uint32(mem[4:])
-    return output, nil
-}
-\end{lstlisting}
+The full source code for the WASM inference backend can be found in the GitHub repository at \url{https://github.com/rsd/BurnNotice/tree/main/internal/wasm}.
 
 \subsection{Activation Scoring Engine}\label{sec:scoring}
 
@@ -244,66 +129,7 @@ This provides partial defense against activation-space obfuscation attacks~\cite
 
 Thresholds are optimized per-model via held-out ROC analysis to maximize F1, replacing the hardcoded thresholds of earlier versions. Baseline drift detection triggers automatic recalibration when score distributions shift.
 
-\begin{lstlisting}[language=Go, caption=Activation scoring with gonum linear algebra]
-package scoring
-
-import (
-    "gonum.org/v1/gonum/mat"
-    "sync"
-)
-
-type Scorer struct {
-    directions map[string]*mat.VecDense
-    mu         sync.RWMutex
-    pool       sync.Pool // Reusable vector buffers
-}
-
-func NewScorer() *Scorer {
-    return &Scorer{
-        directions: make(map[string]*mat.VecDense),
-        pool: sync.Pool{
-            New: func() interface{} {
-                return mat.NewVecDense(0, nil)
-            },
-        },
-    }
-}
-
-func (s *Scorer) RegisterDirection(name string, vec []float64) {
-    s.mu.Lock()
-    defer s.mu.Unlock()
-    s.directions[name] = mat.NewVecDense(len(vec), vec)
-}
-
-func (s *Scorer) Score(activation []float64) map[string]float64 {
-    s.mu.RLock()
-    defer s.mu.RUnlock()
-
-    act := mat.NewVecDense(len(activation), activation)
-    actNorm := mat.Norm(act, 2)
-    if actNorm < 1e-8 {
-        return nil
-    }
-
-    scores := make(map[string]float64, len(s.directions))
-    for name, dir := range s.directions {
-        dot := mat.Dot(act, dir)
-        dirNorm := mat.Norm(dir, 2)
-        scores[name] = dot / (actNorm * dirNorm)
-    }
-    return scores
-}
-
-func (s *Scorer) ScoreSubspace(activation []float64, basis []*mat.VecDense) float64 {
-    act := mat.NewVecDense(len(activation), activation)
-    var energy float64
-    for _, v := range basis {
-        proj := mat.Dot(act, v)
-        energy += proj * proj
-    }
-    return math.Sqrt(energy)
-}
-\end{lstlisting}
+The full source code for activation scoring with \texttt{gonum} linear algebra can be found in the GitHub repository at \url{https://github.com/rsd/BurnNotice/tree/main/internal/scoring}.
 
 \subsection{Steering Interventions}
 
@@ -338,83 +164,7 @@ a' = a - \frac{a \cdot v}{\|v\|^2} v
 
 We note that steering interventions carry inherent risks. \cite{korczikov2026rogue} demonstrate that steering vectors can function as universal jailbreak vectors when aggregated, and \cite{promptactivationduality2026} show that steering perturbations accumulate in the KV cache across multi-turn dialogue, causing coherence degradation. BurnNotice mitigates these risks through angle clamping, selective layer targeting, and capability preservation monitoring, but these are partial defenses.
 
-\begin{lstlisting}[language=Go, caption=Steering intervention implementations]
-package steering
-
-import (
-    "gonum.org/v1/gonum/mat"
-)
-
-type SteeringMethod int
-
-const (
-    ActAdd SteeringMethod = iota
-    Angular
-    Selective
-    Ablation
-)
-
-type SteeringConfig struct {
-    Method        SteeringMethod
-    Alpha         float64
-    Threshold     float64
-    TargetLayers  map[int]bool // For selective steering
-}
-
-func ApplySteering(activation *mat.VecDense, direction *mat.VecDense, cfg SteeringConfig) *mat.VecDense {
-    switch cfg.Method {
-    case ActAdd:
-        return actAdd(activation, direction, cfg.Alpha)
-    case Angular:
-        return angular(activation, direction, cfg.Alpha)
-    case Ablation:
-        return ablate(activation, direction)
-    default:
-        return activation
-    }
-}
-
-func actAdd(a, v *mat.VecDense, alpha float64) *mat.VecDense {
-    result := mat.NewVecDense(a.Len(), nil)
-    result.CopyVec(a)
-    result.AddScaledVec(a, alpha, v)
-    return result
-}
-
-func angular(a, v *mat.VecDense, alpha float64) *mat.VecDense {
-    aNorm := mat.Norm(a, 2)
-    dot := mat.Dot(a, v)
-    aNormSq := dot * dot / (mat.Norm(v, 2) * mat.Norm(v, 2))
-
-    // Component of a parallel to v
-    parallel := mat.NewVecDense(a.Len(), nil)
-    parallel.ScaleVec(dot/(mat.Norm(v, 2)*mat.Norm(v, 2)), v)
-
-    // Orthogonal component
-    ortho := mat.NewVecDense(a.Len(), nil)
-    ortho.SubVec(a, parallel)
-
-    // Rotate and renormalize
-    result := mat.NewVecDense(a.Len(), nil)
-    result.AddScaledVec(ortho, alpha, parallel)
-    resultNorm := mat.Norm(result, 2)
-    if resultNorm > 1e-8 {
-        result.ScaleVec(aNorm/resultNorm, result)
-    }
-    return result
-}
-
-func ablate(a, v *mat.VecDense) *mat.VecDense {
-    vNormSq := mat.Norm(v, 2) * mat.Norm(v, 2)
-    if vNormSq < 1e-8 {
-        return a
-    }
-    dot := mat.Dot(a, v)
-    result := mat.NewVecDense(a.Len(), nil)
-    result.AddScaledVec(a, -dot/vNormSq, v)
-    return result
-}
-\end{lstlisting}
+The full source code for steering intervention implementations can be found in the GitHub repository at \url{https://github.com/rsd/BurnNotice/tree/main/internal/steer}.
 
 \section{Model-Specific Profiling}
 
@@ -455,233 +205,19 @@ The whitening detector computes a covariance matrix for activation-space normali
 
 Profiles are serialized as Protocol Buffers and stored with version metadata:
 
-\begin{lstlisting}[language=Go, caption=Profile serialization and versioning]
-package profile
-
-type ModelProfile struct {
-    Version          string
-    ModelID          string
-    RefusalDir       map[int][]float64   // layer -> direction
-    DeceptionDir     map[int][]float64
-    ConflictSubspace map[int][][]float64 // layer -> basis vectors
-    TruthDir         map[int][]float64
-    TruthNeurons     map[int][]int       // layer -> neuron indices
-    PolicyViolation  map[int][]float64
-    SAEDeception     map[int][]int       // layer -> SAE feature indices
-    HallucinationLayers []int
-    SteeringConfig   SteeringConfig
-    Checkpoint       ProfileCheckpoint
-}
-
-func (p *ModelProfile) Save(path string) error {
-    pb := p.toProto()
-    data, err := proto.Marshal(pb)
-    if err != nil {
-        return err
-    }
-    return os.WriteFile(path, data, 0644)
-}
-
-func LoadProfile(path string) (*ModelProfile, error) {
-    data, err := os.ReadFile(path)
-    if err != nil {
-        return nil, err
-    }
-    var pb pb.ModelProfile
-    if err := proto.Unmarshal(data, &pb); err != nil {
-        return nil, err
-    }
-    return fromProto(&pb), nil
-}
-\end{lstlisting}
+The full source code for profile serialization and versioning can be found in the GitHub repository at \url{https://github.com/rsd/BurnNotice/tree/main/internal/profile}.
 
 \section{CLI Tool for Model Acquisition}\label{sec:cli}
 
 BurnNotice includes a CLI tool for downloading models from HuggingFace, converting them to ONNX format, and registering them for analysis.
 
-\begin{lstlisting}[language=Go, caption=CLI tool for HuggingFace model download and ONNX conversion]
-package main
-
-import (
-    "github.com/spf13/cobra"
-    "burnnotice/internal/downloader"
-    "burnnotice/internal/converter"
-)
-
-var rootCmd = &cobra.Command{
-    Use:   "burnnotice",
-    Short: "LLM Deception Detection and Alignment Monitoring",
-}
-
-var downloadCmd = &cobra.Command{
-    Use:   "download [model-id]",
-    Short: "Download a model from HuggingFace",
-    Args:  cobra.ExactArgs(1),
-    RunE: func(cmd *cobra.Command, args []string) error {
-        modelID := args[0]
-        outputDir, _ := cmd.Flags().GetString("output")
-        token, _ := cmd.Flags().GetString("token")
-
-        dl := downloader.NewHuggingFaceDownloader(token)
-        return dl.Download(modelID, outputDir)
-    },
-}
-
-var convertCmd = &cobra.Command{
-    Use:   "convert [model-dir]",
-    Short: "Convert a model to ONNX format",
-    Args:  cobra.ExactArgs(1),
-    RunE: func(cmd *cobra.Command, args []string) error {
-        modelDir := args[0]
-        output, _ := cmd.Flags().GetString("output")
-        opset, _ := cmd.Flags().GetInt("opset")
-        dynamicAxes, _ := cmd.Flags().GetBool("dynamic")
-
-        conv := converter.NewONNXConverter()
-        return conv.Convert(modelDir, output, converter.Options{
-            OpsetVersion: opset,
-            DynamicAxes:  dynamicAxes,
-        })
-    },
-}
-
-var profileCmd = &cobra.Command{
-    Use:   "profile [onnx-model]",
-    Short: "Generate a model profile for deception detection",
-    Args:  cobra.ExactArgs(1),
-    RunE: func(cmd *cobra.Command, args []string) error {
-        modelPath := args[0]
-        output, _ := cmd.Flags().GetString("output")
-        dataset, _ := cmd.Flags().GetString("dataset")
-
-        eng, err := engine.New(modelPath)
-        if err != nil {
-            return err
-        }
-
-        profiler := profiling.NewProfiler(eng)
-        profile, err := profiler.Run(dataset)
-        if err != nil {
-            return err
-        }
-
-        return profile.Save(output)
-    },
-}
-
-func init() {
-    downloadCmd.Flags().StringP("output", "o", "./models", "Output directory")
-    downloadCmd.Flags().StringP("token", "t", "", "HuggingFace API token")
-
-    convertCmd.Flags().StringP("output", "o", "./onnx", "ONNX output directory")
-    convertCmd.Flags().Int("opset", 17, "ONNX opset version")
-    convertCmd.Flags().Bool("dynamic", true, "Use dynamic axes")
-
-    profileCmd.Flags().StringP("output", "o", "./profiles", "Profile output directory")
-    profileCmd.Flags().String("dataset", "", "Path to profiling dataset")
-
-    rootCmd.AddCommand(downloadCmd, convertCmd, profileCmd)
-}
-
-func main() {
-    cobra.CheckErr(rootCmd.Execute())
-}
-\end{lstlisting}
+The full source code for the CLI tool handling HuggingFace model downloads and ONNX conversions can be found in the GitHub repository at \url{https://github.com/rsd/BurnNotice/tree/main/cmd/burnnotice}.
 
 \subsection{HuggingFace Downloader}
 
 The downloader supports authenticated access, resume on interruption, and model filtering by file type:
 
-\begin{lstlisting}[language=Go, caption=HuggingFace model downloader]
-package downloader
-
-import (
-    "encoding/json"
-    "io"
-    "net/http"
-    "os"
-    "path/filepath"
-    "sync"
-)
-
-type HuggingFaceDownloader struct {
-    token string
-    client *http.Client
-}
-
-func NewHuggingFaceDownloader(token string) *HuggingFaceDownloader {
-    return &HuggingFaceDownloader{
-        token: token,
-        client: &http.Client{},
-    }
-}
-
-func (d *HuggingFaceDownloader) Download(modelID, outputDir string) error {
-    files, err := d.listModelFiles(modelID)
-    if err != nil {
-        return err
-    }
-
-    var wg sync.WaitGroup
-    errCh := make(chan error, len(files))
-
-    for _, file := range files {
-        if !shouldDownload(file) {
-            continue
-        }
-
-        wg.Add(1)
-        go func(f string) {
-            defer wg.Done()
-            if err := d.downloadFile(modelID, f, outputDir); err != nil {
-                errCh <- err
-            }
-        }(file)
-    }
-
-    wg.Wait()
-    close(errCh)
-
-    for err := range errCh {
-        if err != nil {
-            return err
-        }
-    }
-    return nil
-}
-
-func (d *HuggingFaceDownloader) listModelFiles(modelID string) ([]string, error) {
-    url := "https://huggingface.co/api/models/" + modelID + "/tree/main"
-    req, _ := http.NewRequest("GET", url, nil)
-    if d.token != "" {
-        req.Header.Set("Authorization", "Bearer "+d.token)
-    }
-
-    resp, err := d.client.Do(req)
-    if err != nil {
-        return nil, err
-    }
-    defer resp.Body.Close()
-
-    var files []struct {
-        Path string `json:"path"`
-    }
-    if err := json.NewDecoder(resp.Body).Decode(&files); err != nil {
-        return nil, err
-    }
-
-    paths := make([]string, len(files))
-    for i, f := range files {
-        paths[i] = f.Path
-    }
-    return paths, nil
-}
-
-func shouldDownload(path string) bool {
-    ext := filepath.Ext(path)
-    return ext == ".bin" || ext == ".safetensors" || ext == ".json" || ext == ".model"
-}
-\end{lstlisting}
+The full source code for the HuggingFace model downloader can be found in the GitHub repository at \url{https://github.com/rsd/BurnNotice/tree/main/internal/downloader}.
 
 \section{Long-Running Monitoring Architecture}
 
@@ -690,48 +226,7 @@ BurnNotice is designed for continuous operation profiling and monitoring LLM dep
 \subsection{Memory Pooling}
 Activation slices are recycled via \texttt{sync.Pool} to avoid GC pressure during high-throughput inference:
 
-\begin{lstlisting}[language=Go, caption=Activation buffer pooling]
-package memory
-
-import "sync"
-
-type BufferPool struct {
-    pools map[int]*sync.Pool
-    mu    sync.RWMutex
-}
-
-func NewBufferPool(sizes []int) *BufferPool {
-    bp := &BufferPool{pools: make(map[int]*sync.Pool)}
-    for _, size := range sizes {
-        s := size
-        bp.pools[size] = &sync.Pool{
-            New: func() interface{} {
-                return make([]float64, s)
-            },
-        }
-    }
-    return bp
-}
-
-func (bp *BufferPool) Get(size int) []float64 {
-    bp.mu.RLock()
-    pool, ok := bp.pools[size]
-    bp.mu.RUnlock()
-    if !ok {
-        return make([]float64, size)
-    }
-    return pool.Get().([]float64)
-}
-
-func (bp *BufferPool) Put(buf []float64) {
-    bp.mu.RLock()
-    pool, ok := bp.pools[len(buf)]
-    bp.mu.RUnlock()
-    if ok {
-        pool.Put(buf)
-    }
-}
-\end{lstlisting}
+The full source code for activation buffer pooling can be found in the GitHub repository at \url{https://github.com/rsd/BurnNotice/tree/main/internal/memory}.
 
 \subsection{Layer Subsampling}
 For large models, monitoring all layers is computationally prohibitive. BurnNotice profiles all layers initially, then subsamples to the top-$k$ most discriminative layers for production monitoring.
@@ -739,139 +234,13 @@ For large models, monitoring all layers is computationally prohibitive. BurnNoti
 \subsection{Checkpointing}
 Profiles and monitoring state are periodically checkpointed to disk, enabling recovery after restart:
 
-\begin{lstlisting}[language=Go, caption=Checkpoint manager]
-package checkpoint
-
-import (
-    "encoding/gob"
-    "os"
-    "sync"
-    "time"
-)
-
-type Manager struct {
-    interval time.Duration
-    path     string
-    mu       sync.Mutex
-    stop     chan struct{}
-}
-
-func NewManager(path string, interval time.Duration) *Manager {
-    return &Manager{
-        path:     path,
-        interval: interval,
-        stop:     make(chan struct{}),
-    }
-}
-
-func (m *Manager) Start(state interface{}) {
-    go func() {
-        ticker := time.NewTicker(m.interval)
-        defer ticker.Stop()
-        for {
-            select {
-            case <-ticker.C:
-                m.save(state)
-            case <-m.stop:
-                return
-            }
-        }
-    }()
-}
-
-func (m *Manager) save(state interface{}) {
-    m.mu.Lock()
-    defer m.mu.Unlock()
-
-    f, err := os.Create(m.path + ".tmp")
-    if err != nil {
-        return
-    }
-    defer f.Close()
-
-    enc := gob.NewEncoder(f)
-    if err := enc.Encode(state); err != nil {
-        os.Remove(m.path + ".tmp")
-        return
-    }
-
-    os.Rename(m.path+".tmp", m.path)
-}
-
-func (m *Manager) Stop() {
-    close(m.stop)
-}
-\end{lstlisting}
+The full source code for the checkpoint manager can be found in the GitHub repository at \url{https://github.com/rsd/BurnNotice/tree/main/internal/checkpoint}.
 
 \section{Web Dashboard}
 
 The monitoring dashboard uses Go's \texttt{net/http} server, Templ for type-safe HTML templates, and HTMX for dynamic updates without a JavaScript framework. Real-time data flows via Server-Sent Events (SSE).
 
-\begin{lstlisting}[language=Go, caption=SSE event hub for real-time dashboard updates]
-package sse
-
-import (
-    "fmt"
-    "net/http"
-    "sync"
-)
-
-type Hub struct {
-    clients map[chan Event]bool
-    mu      sync.RWMutex
-}
-
-type Event struct {
-    Type  string
-    Data  interface{}
-}
-
-func NewHub() *Hub {
-    return &Hub{clients: make(map[chan Event]bool)}
-}
-
-func (h *Hub) Broadcast(event Event) {
-    h.mu.RLock()
-    defer h.mu.RUnlock()
-    for ch := range h.clients {
-        select {
-        case ch <- event:
-        default:
-            close(ch)
-            delete(h.clients, ch)
-        }
-    }
-}
-
-func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-    flusher, ok := w.(http.Flusher)
-    if !ok {
-        http.Error(w, "SSE not supported", http.StatusInternalServerError)
-        return
-    }
-
-    ch := make(chan Event, 64)
-    h.mu.Lock()
-    h.clients[ch] = true
-    h.mu.Unlock()
-
-    defer func() {
-        h.mu.Lock()
-        delete(h.clients, ch)
-        h.mu.Unlock()
-        close(ch)
-    }()
-
-    w.Header().Set("Content-Type", "text/event-stream")
-    w.Header().Set("Cache-Control", "no-cache")
-    w.Header().Set("Connection", "keep-alive")
-
-    for event := range ch {
-        fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event.Type, event.Data)
-        flusher.Flush()
-    }
-}
-\end{lstlisting}
+The full source code for the SSE event hub driving real-time dashboard updates can be found in the GitHub repository at \url{https://github.com/rsd/BurnNotice/tree/main/internal/web}.
 
 \section{Evaluation}
 
