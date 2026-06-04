@@ -250,3 +250,4 @@ block.prof
 mutex.prof
 goroutine.prof
 threadcreate.prof
+models/

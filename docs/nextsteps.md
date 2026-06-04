@@ -52,10 +52,10 @@ Flat sequential priority list. Each step must be completed before moving to the 
 ## Tier 2 — Core Direction Extraction Pipeline
 
 ### Step 7: Whitened SVD Extraction
-- [ ] **7.1** Implement covariance estimation on collected activations (shrinkage estimator for small-sample rank safety)
-- [ ] **7.2** Implement ZCA whitening transform `X_white = X · cov^{-1/2}`
-- [ ] **7.3** Perform SVD on whitened difference matrix, transform directions back: `V_orig = cov^{1/2} · V_white`
-- [ ] **7.4** Add `--whitened-svd` flag to profile CLI (default true for models > 7B)
+- [x] **7.1** Implement covariance estimation on collected activations (shrinkage estimator for small-sample rank safety)
+- [x] **7.2** Implement ZCA whitening transform `X_white = X · cov^{-1/2}`
+- [x] **7.3** Perform SVD on whitened difference matrix, transform directions back: `V_orig = cov^{1/2} · V_white`
+- [x] **7.4** Add `--whitened-svd` flag to profile CLI (default true for models > 7B)
 - [ ] **7.5** Compare singular-value decay rate: raw SVD vs whitened SVD
 
 ### Step 8: Concept Cone Geometry Analysis
