@@ -11,7 +11,7 @@ require (
 	github.com/tetratelabs/wazero v1.12.0
 	github.com/yalue/onnxruntime_go v1.30.1
 	go.opentelemetry.io/otel v1.44.0
-	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.43.0
+	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.44.0
 	go.opentelemetry.io/otel/sdk v1.44.0
 	go.opentelemetry.io/otel/sdk/metric v1.44.0
 	gonum.org/v1/gonum v0.17.0
@@ -53,8 +53,8 @@ require (
 	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/sys v0.45.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20260420184626-e10c466a9529 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260523011958-0a33c5d7ca68 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	google.golang.org/grpc v1.81.1 // indirect
 	modernc.org/libc v1.72.3 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
