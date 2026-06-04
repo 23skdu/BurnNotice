@@ -107,13 +107,23 @@ var profileCmd = &cobra.Command{
 	Use:   "profile [onnx-model]",
 	Short: "Generate a model profile for deception detection",
 	Long: `Run contrastive prompt batches through the model to extract
-behavioral directions (refusal, deception, truth, conflict, policy).`,
+behavioral directions (refusal, deception, truth, conflict, policy).
+
+Extraction method:
+  By default, uses Difference-in-Means (DIM) for small models and
+  whitened SVD with Ledoit-Wolf shrinkage for models > 7B parameters.
+  Override with --whitened-svd=true|false.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		modelPath := args[0]
 		outputDir, _ := cmd.Flags().GetString("output")
 		datasetPath, _ := cmd.Flags().GetString("dataset")
 		layers, _ := cmd.Flags().GetIntSlice("layers")
+		whitenedFlag, _ := cmd.Flags().GetBool("whitened-svd")
+		modelSize, _ := cmd.Flags().GetString("model-size")
+		numDirs, _ := cmd.Flags().GetInt("num-directions")
+		shrinkage, _ := cmd.Flags().GetFloat64("shrinkage")
+		eigFloor, _ := cmd.Flags().GetFloat64("eig-floor")
 
 		if datasetPath == "" {
 			return fmt.Errorf("--dataset is required")
@@ -161,7 +171,20 @@ behavioral directions (refusal, deception, truth, conflict, policy).`,
 			negativeActivations = append(negativeActivations, neg)
 		}
 
-		deceptionDir := extract.ExtractDIM(positiveActivations, negativeActivations)
+		useWhitened := shouldUseWhitenedSVD(cmd.Flags().Changed("whitened-svd"), whitenedFlag, modelSize)
+		methodLabel := "DIM"
+		var deceptionDir []float64
+		if useWhitened {
+			dirs, _, ok := extract.ExtractWhitenedSVD(positiveActivations, negativeActivations, numDirs, shrinkage, eigFloor)
+			if !ok || len(dirs) == 0 {
+				return fmt.Errorf("whitened SVD extraction failed (k=%d, shrinkage=%g, eigFloor=%g)", numDirs, shrinkage, eigFloor)
+			}
+			deceptionDir = dirs[0]
+			methodLabel = fmt.Sprintf("whitened SVD (k=%d, shrinkage=%g, eigFloor=%g)", numDirs, shrinkage, eigFloor)
+		} else {
+			deceptionDir = extract.ExtractDIM(positiveActivations, negativeActivations)
+		}
+		fmt.Printf("Extraction method: %s\n", methodLabel)
 
 		scorer.RegisterDirection("deception", deceptionDir)
 
@@ -278,6 +301,11 @@ func init() {
 	profileCmd.Flags().StringP("output", "o", "./profiles", "Profile output directory")
 	profileCmd.Flags().String("dataset", "", "Path to profiling dataset (JSON/JSONL)")
 	profileCmd.Flags().IntSlice("layers", []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31}, "Specific layers to profile (default: all)")
+	profileCmd.Flags().Bool("whitened-svd", false, "Use whitened SVD extraction instead of DIM (default: true for models > 7B)")
+	profileCmd.Flags().String("model-size", "0.5B", "Model parameter count (e.g. 0.5B, 7B, 13B, 70B); drives the default --whitened-svd choice")
+	profileCmd.Flags().Int("num-directions", 1, "Number of top directions to extract when --whitened-svd is set")
+	profileCmd.Flags().Float64("shrinkage", -1, "Ledoit-Wolf shrinkage intensity for the whitening covariance (<0 = auto-estimate)")
+	profileCmd.Flags().Float64("eig-floor", 0, "Minimum eigenvalue for the whitening matrix (0 = auto, 1e-10 of max)")
 
 	validateCmd.Flags().Int("hidden-dim", 4096, "Model hidden dimension")
 
