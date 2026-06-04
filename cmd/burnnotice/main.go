@@ -118,6 +118,7 @@ Extraction method:
 		modelPath := args[0]
 		outputDir, _ := cmd.Flags().GetString("output")
 		datasetPath, _ := cmd.Flags().GetString("dataset")
+		oversightPath, _ := cmd.Flags().GetString("oversight-dataset")
 		layers, _ := cmd.Flags().GetIntSlice("layers")
 		whitenedFlag, _ := cmd.Flags().GetBool("whitened-svd")
 		modelSize, _ := cmd.Flags().GetString("model-size")
@@ -155,6 +156,46 @@ Extraction method:
 
 		scorer := scoring.NewScorer(nil)
 
+		var ablator *profile.OversightAblator
+		var oversightDirs map[int][]float64
+		if oversightPath != "" {
+			var ods *datasets.Dataset
+			switch filepath.Ext(oversightPath) {
+			case ".json":
+				ods, err = loader.LoadJSON(oversightPath)
+			case ".jsonl":
+				ods, err = loader.LoadJSONL(oversightPath)
+			default:
+				return fmt.Errorf("unsupported oversight dataset format: %s", oversightPath)
+			}
+			if err != nil {
+				return fmt.Errorf("load oversight dataset: %w", err)
+			}
+			
+			monitoredActs := make([][][]float64, 0, len(ods.Pairs))
+			deployedActs := make([][][]float64, 0, len(ods.Pairs))
+			
+			for _, pair := range ods.Pairs {
+				pos, err := model.ExtractActivation(pair.Truthful.Prompt, pair.Truthful.Response)
+				if err != nil {
+					return fmt.Errorf("extract monitored activation: %w", err)
+				}
+				neg, err := model.ExtractActivation(pair.Deceptive.Prompt, pair.Deceptive.Response)
+				if err != nil {
+					return fmt.Errorf("extract deployed activation: %w", err)
+				}
+				monitoredActs = append(monitoredActs, [][]float64{pos})
+				deployedActs = append(deployedActs, [][]float64{neg})
+			}
+			
+			oversightDirs, err = profile.ExtractOversightDirection(monitoredActs, deployedActs)
+			if err != nil {
+				return fmt.Errorf("extract oversight direction: %w", err)
+			}
+			ablator = profile.NewOversightAblator(oversightDirs)
+			fmt.Printf("Extracted oversight directions across %d layers for ablation\n", len(oversightDirs))
+		}
+
 		positiveActivations := make([][]float64, 0, len(ds.Pairs))
 		negativeActivations := make([][]float64, 0, len(ds.Pairs))
 
@@ -167,8 +208,18 @@ Extraction method:
 			if err != nil {
 				return fmt.Errorf("extract negative activation: %w", err)
 			}
+
+			if ablator != nil {
+				pos = ablator.Ablate(0, pos)
+				neg = ablator.Ablate(0, neg)
+			}
+
 			positiveActivations = append(positiveActivations, pos)
 			negativeActivations = append(negativeActivations, neg)
+		}
+
+		if ablator != nil {
+			fmt.Println("Ablated oversight direction from deception dataset activations")
 		}
 
 		useWhitened := shouldUseWhitenedSVD(cmd.Flags().Changed("whitened-svd"), whitenedFlag, modelSize)
@@ -200,6 +251,9 @@ Extraction method:
 		modelProfile.Directions["deception"] = make(map[int][]float64)
 		for _, layer := range layers {
 			modelProfile.Directions["deception"][layer] = deceptionDir
+		}
+		if len(oversightDirs) > 0 {
+			modelProfile.Directions["oversight"] = oversightDirs
 		}
 		modelProfile.MonitoredLayers = layers
 
@@ -300,6 +354,7 @@ func init() {
 
 	profileCmd.Flags().StringP("output", "o", "./profiles", "Profile output directory")
 	profileCmd.Flags().String("dataset", "", "Path to profiling dataset (JSON/JSONL)")
+	profileCmd.Flags().String("oversight-dataset", "", "Path to oversight contrastive dataset (optional)")
 	profileCmd.Flags().IntSlice("layers", []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31}, "Specific layers to profile (default: all)")
 	profileCmd.Flags().Bool("whitened-svd", false, "Use whitened SVD extraction instead of DIM (default: true for models > 7B)")
 	profileCmd.Flags().String("model-size", "0.5B", "Model parameter count (e.g. 0.5B, 7B, 13B, 70B); drives the default --whitened-svd choice")
