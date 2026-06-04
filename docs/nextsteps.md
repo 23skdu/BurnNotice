@@ -1,12 +1,32 @@
 # BurnNotice: Prioritized Implementation Roadmap
 
 > **Status**: Active
-> **Date**: 2026-05-27
-> **Version**: 0.4
+> **Date**: 2026-06-04
+> **Version**: 0.5
 
 ---
 
 Flat sequential priority list. Each step must be completed before moving to the next within its tier. Checkmarks indicate completion.
+
+---
+
+## Validation Summary (2026-06-04)
+
+All [x]-marked steps were source-code validated. Key findings:
+
+| Step | Status | Notes |
+|------|--------|-------|
+| 1.1–1.3.1 | ✅ Verified | `internal/engine/onnx.go` — real ONNX Runtime, forward pass, intermediate capture, Prometheus metrics |
+| 2.1–2.3 | ✅ Verified | `internal/wasm/backend.go` — wazero execution, memory I/O, tests for identity/empty/large/missing-export |
+| 3.1–3.2 | ✅ Verified | `simulateActivation()` fully removed from `cmd/burnnotice/main.go`; uses `LoadONNXModel` |
+| 4.1–4.4 | ✅ Verified | `internal/longbow/client.go` + `client_test.go` — SQLite backend, Ingest/Query/Search/Close, zero-copy BLOBs |
+| 5.1–5.4 | ✅ Verified | `floats.Norm`/`Dot`/`AddScaled` in scorer.go/lora.go; bench tests in `scoring/bench_test.go`, `steer/bench_test.go` |
+| 6.1–6.4 | ✅ Verified | `Winsorize`/`WinsorizeInPlace`/`WinsorizeMatrixInPlace` in `internal/math/robust.go`; applied in DIM/PCA/whitened; fuzz tests |
+| 7.1–7.4 | ✅ Verified | ShrinkageCovariance, ZCA whitening, unwhitening back-transform, `--whitened-svd` flag in CLI |
+| 9.2 | ✅ **Corrected to [x]** | `internal/extract/inlp.go` — full INLP with Gram-Schmidt orthogonalization and nullspace projection exists |
+| 31.0 | ✅ Verified | Prometheus `/metrics` handler in `internal/metrics/handler.go` serves 50+ instruments |
+
+**One correction applied**: Step 9.2 (INLP) had code implemented but was marked [ ]. Updated to [x].
 
 ---
 
@@ -67,7 +87,7 @@ Flat sequential priority list. Each step must be completed before moving to the 
 
 ### Step 9: Multi-Direction Subspace Extraction (Default)
 - [ ] **9.1** Default to top-k SVD extraction (k=5) in `internal/extract/pca.go` instead of single-direction DIM
-- [ ] **9.2** Implement Iterative Nullspace Projection (INLP) for orthogonal safety directions
+- [x] **9.2** Implement Iterative Nullspace Projection (INLP) for orthogonal safety directions (`internal/extract/inlp.go`)
 - [ ] **9.3** Add subspace energy scoring: `E_subspace(a) = sqrt(sum((a · v_i)^2))`
 - [ ] **9.4** Write unit tests: SVD recovers known synthetic subspaces; INLP projects out known directions
 - [ ] **9.5** UI: 3D scatter plot of multi-dimensional activation projections
@@ -317,3 +337,282 @@ Flat sequential priority list. Each step must be completed before moving to the 
 - [ ] **44.2** SAE limitation: different seeds share only ~30% of latents
 - [ ] **44.3** Evaluation limitation: single-turn ASR is misleading — multi-turn red teaming exposes up to 75% ASR
 - [ ] **44.4** Evaluation limitation: GSM8k measures math, not truthfulness — a model can pass GSM8k and still be deceptive
+
+---
+
+## Deep Research: Latent Space in Language Models — State of the Art
+
+### Background
+
+The latent space of a transformer is the high-dimensional (4096–16384) residual stream that flows between layers, encoding the model's evolving representation of each token. BurnNotice operates in this space by extracting behavioral directions (deception, refusal, truthfulness) and steering activations along them. The field has advanced substantially in 2025–2026:
+
+1. **SAE Monosemanticity Breakthrough** (Anthropic, 2024–2026): Sparse autoencoders decompose dense activations into interpretable features. Scaling to 34M features (Claude 3 Sonnet) showed features correspond to concrete concepts (names, entities, behaviors).
+
+2. **Representation Engineering (RepE)** (Zou et al., 2023–2025): Top-down approach to identify concept vectors via contrastive activation differences — the foundation of BurnNotice's DIM and whitened SVD.
+
+3. **Activation Addition (ActAdd)** (Turner et al., 2023): Simple vector addition in residual stream. BurnNotice implements this alongside angular and ablation methods.
+
+4. **SAE-SSV** (He et al., EMNLP 2025): Supervised steering in sparse representation spaces. Key finding: a remarkably small subspace is sufficient for effective steering.
+
+5. **FGAA** (Soo et al., ICLR 2025 Workshop): Feature Guided Activation Additions combining CAA + SAE-TS — outperforms both.
+
+6. **SAE-RSV** (ICLR 2026): Steering vector refinement via SAE denoising — effective steering from limited data by removing task-irrelevant features and enriching relevant ones.
+
+7. **AxBench** (ICML 2025): Found that even simple baselines outperform SAE for steering — critical counterpoint showing SAE steering is not universally superior.
+
+8. **Prefill-Only Behavioral Commitment** (2026): Research on 35B MoE models shows behavioral decisions commit during prefill phase, not autoregressive decoding. Steering during decoding has zero effect on certain architectures.
+
+9. **CB-SAE** (2025): Concept Bottleneck SAE addressing low interpretability/steerability of standard SAEs via user-specified concept support.
+
+10. **Cross-Layer CKA Analysis**: Centered Kernel Alignment used to measure representational distortion pre/post steering, establishing distortion thresholds.
+
+---
+
+## 10-Part Strategic Recommendations
+
+Each recommendation includes: **purpose** → **approach** → **adversarial criticism**.
+
+---
+
+### Recommendation 1: SAE Feature-Level Steering Integration
+
+**Purpose**: Replace raw activation-space steering with SAE-disentangled feature steering. Raw activations are polysemantic (each neuron participates in many concepts); SAE features are (approximately) monosemantic, enabling precise targeting.
+
+**Approach**:
+- Extend `internal/sae/loader.go` to load Gemma Scope and SAELens pretrained SAEs alongside the base model
+- Build `SAEFeatureSteerer` in `internal/steer/` that encodes `h_l` through SAE, modifies top-k feature activations, decodes back to residual stream
+- Compare SAE-steered KL divergence vs raw ActAdd on identical tasks
+- Benchmark SAE encode/decode overhead (target < 50µs per layer)
+
+**Adversarial Criticism**:
+- **AxBench counterevidence**: Simple baseline steering (mean-diff) matches or exceeds SAE-based steering on standard benchmarks. The overhead of SAE encoding (10–100µs per layer) may not justify marginal gains.
+- **Feature polysemy persists**: SAE features are not truly monosemantic — feature splitting and absorption (Joseph Bloom, 2024) mean a single SAE feature can encode multiple concepts. The "interpretability" may be illusory.
+- **Dataset dependence**: SAEs trained on different corpora activate different feature sets for identical inputs (Kissane et al., 2024). Gemma Scope SAEs won't generalize to Qwen or Llama architectures.
+- **Latency impact**: At 32 layers × 100µs = 3.2ms per token, SAE steering may add prohibitive latency for real-time agent use cases.
+- **Recommendation**: Implement SAE steering as a configurable ADDITIONAL method, not a replacement. Default to raw ActAdd for latency-critical paths.
+
+---
+
+### Recommendation 2: Prefill-Phase Steering Optimization
+
+**Purpose**: Recent findings (2026, 35B MoE study) show behavioral decisions commit during prefill — autoregressive decoding steering has zero causal effect on certain architectures. BurnNotice must detect and exploit the behavioral commitment window.
+
+**Approach**:
+- Add `BehavioralCommitmentWindow` detector in `internal/steer/`: measure projection scores at each prefill token position
+- During prefill: apply full steering strength at commitment-critical positions
+- During decoding: monitoring only (zero steering) for architectures where post-commit steering is causally inert
+- Add `--commit-window` flag to enable architecture-specific timing analysis
+
+**Adversarial Criticism**:
+- **Architecture-specific**: The prefill-only commitment finding was demonstrated on a specific 35B MoE with GatedDeltaNet recurrence. It may not generalize to standard decoder-only transformers (GPT, Llama, Qwen).
+- **Risk of missed intervention**: If commitment window detection is wrong, steering may be applied to the wrong tokens or not at all. False negatives here are safety-critical.
+- **Additional complexity**: Per-token commitment analysis adds O(seq_len) overhead per layer — potentially 32× the current per-token cost.
+- **Counter-studies needed**: No published replication of prefill-only commitment on dense transformers. BurnNotice should first replicate on Llama-3-8B before building infrastructure around it.
+- **Recommendation**: Implement as experimental flag with clear documentation that behavior on non-MoE architectures is unknown.
+
+---
+
+### Recommendation 3: Refusal Direction Optimization via Pure-Go SGD
+
+**Purpose**: Replace heuristic direction extraction (DIM, SVD) with gradient-based Refusal Direction Optimization (RDO). Linear probe loss with SGD converges to directions with higher AUROC than contrastive mean-diff.
+
+**Approach**:
+- Implement `RefusalDirectionOptimizer` in `internal/extract/rdo.go` using `mat.Dense` and manual gradients
+- Initialize from whitened SVD direction, optimize binary cross-entropy loss with L2 regularization
+- Compare AUROC: DIM vs whitened SVD vs RDO on held-out deception datasets
+- Add `--rdo` flag to profile CLI
+
+**Adversarial Criticism**:
+- **Small-data fragility**: RDO on small datasets (50–100 pairs) overfits dramatically without aggressive regularization. The SVD direction, while not optimal, generalizes better.
+- **Pure-Go gradient limitations**: Gonum lacks autograd — manual gradient computation for multi-layer losses is error-prone and hard to extend to non-linear probes.
+- **SGD hyperparameter sensitivity**: Learning rate, momentum, weight decay all interact with initialization. The SVD direction is hyperparameter-free and already provides strong baselines.
+- **Diminishing returns**: Whitened SVD already achieves AUROC > 0.95 on many refusal detection tasks. The remaining 0.03–0.05 AUROC improvement from RDO may not justify complexity.
+- **Recommendation**: Implement RDO as optional refinement step with automatic early stopping via validation AUROC plateau detection.
+
+---
+
+### Recommendation 4: Concept Cone Multi-Category Geometry
+
+**Purpose**: DIM and whitened SVD extract binary directions (deception vs truthful). Real safety requires understanding geometry across N harm categories — "concept cones" where multiple behavioral directions occupy a subspace.
+
+**Approach**:
+- Build `ConceptConeAnalyzer` in `internal/analysis/cone.go` collecting activations across N categories (violence, deception, CSAM, bioweapons, etc.)
+- Compute pairwise cosine similarity and intrinsic dimensionality via PCA scree
+- Calibrate INLP iterations: higher-D cones need more nullspace projections
+- Add `--cone-analysis` flag generating category relationship heatmap
+
+**Adversarial Criticism**:
+- **Category definition instability**: "Deception" and "harm" are not stable across contexts — the same prompt can be deceptive in one context and truthful in another. Geometrically stable directions may not exist for context-dependent categories.
+- **Cone collapse risk**: If all harm categories collapse into the same direction (as the 35B MoE study found — one agency axis, not five traits), the concept cone framework adds complexity without benefit.
+- **Scalability cost**: N categories × L layers × D dimensions = massive storage requirements. For 20 categories and 32 layers at 4096-dim, each profile requires ~10MB just for directions.
+- **Evaluation difficulty**: Ground-truth for "concept cone correctness" doesn't exist — you can't validate geometric structure without behavioral tests that are themselves unreliable.
+- **Recommendation**: Start with N=3 categories (deception, refusal, harm) and validate that cone dimensionality correlates with INLP iteration requirements before scaling.
+
+---
+
+### Recommendation 5: KV-Cache Steering Accumulation & Drift Monitoring
+
+**Purpose**: In multi-turn conversations, steering vectors accumulate in the KV cache, causing angular drift from the intended direction. This drift can flip steering from safe to unsafe behavior.
+
+**Approach**:
+- Build `KVCacheAccumulationTracker` in `internal/steer/kv_tracker.go` with per-turn vector log
+- Alert when cumulative drift exceeds `theta_max = 15°`
+- Implement Gated Cropped Attention-Delta (GCAD) to prevent KV-cache propagation
+- Multi-turn benchmark: 10-turn conversation with active steering, perplexity per turn
+
+**Adversarial Criticism**:
+- **KV cache internals are architecture-specific**: The KV cache structure differs between GPT, Llama, Qwen, and MoE architectures. A tracker built for one may silently fail on another (no error, just wrong drift measurements).
+- **15° threshold is arbitrary**: No published work establishes a principled maximum drift angle. 15° may be too conservative (triggering false alerts) or too permissive (allowing harmful drift).
+- **EMA scoring fix (28.5) undermines detection**: The proposed fix to account for KV-cache baseline drift may mask actual deception intent changes. Separating "natural baseline drift" from "deception onset" is an unsolved research problem.
+- **GCAD adds significant latency**: Cropping attention deltas per layer per token adds O(L²) operations per generation step.
+- **Recommendation**: Implement drift monitoring as a read-only diagnostic first. Establish empirical drift distributions before building alert thresholds or GCAD.
+
+---
+
+### Recommendation 6: Cross-Layer Direction Emergence & CKA Distortion
+
+**Purpose**: Behavioral directions don't appear uniformly — they emerge at specific "decision layers." Identifying these enables minimal steering (fewer layers, less distortion) and reveals where the model commits to deceptive trajectories.
+
+**Approach**:
+- Build `CrossLayerAlignmentAnalyzer` in `internal/analysis/crosslayer.go`
+- Extract DIM directions per layer, compute pairwise cosine similarity across layers
+- Identify the "decision layer" where direction cosine with downstream layers stabilizes (first layer where direction becomes discriminative)
+- Compute CKA similarity pre/post steering to identify most-distorted layers for targeted recovery
+
+**Adversarial Criticism**:
+- **Layer-to-layer similarity is high by default**: Residual stream representations are similar between adjacent layers even without behavioral steering. Direction similarity may reflect architectural continuity rather than behavioral commitment.
+- **CKA is not causal**: High CKA similarity ≠ causal importance. A layer may have high CKA distortion post-steering but zero behavioral impact if downstream layers compensate.
+- **Recovery passes add latency**: Targeting recovery to "most distorted layers" adds 10–20µs per layer per recovery pass. For 10 layers, that's 100–200µs per token — non-trivial for real-time steering.
+- **Decision layer varies by prompt**: The same model may commit to deception at layer 10 for one prompt and layer 25 for another. Identifying a universal decision layer may be impossible.
+- **Recommendation**: Implement CKA as a diagnostic metric before building recovery passes around it. Cross-layer CKA distributions across 100+ prompts would establish whether a stable decision layer exists.
+
+---
+
+### Recommendation 7: Multi-Agent Deception Propagation Monitoring
+
+**Purpose**: In multi-agent systems (LangChain, CrewAI, MCP), deceptive intent can propagate between agents through inter-agent communication. BurnNotice must track deception not per-agent but across the communication graph.
+
+**Approach**:
+- Extend `internal/agent/multiagent.go` to maintain cross-agent activation state
+- Implement pairwise deception similarity scoring between agent activations
+- Alert when deception similarity exceeds threshold (indicating propagation)
+- Build communication graph with edge weights = deception contamination risk
+
+**Adversarial Criticism**:
+- **Cross-agent activation incomparability**: Agents may use different models, different quantization, or different hardware. Activations from Llama-3-70B and GPT-4o-mini exist in incomparable latent spaces.
+- **Synchronization overhead**: Activating cross-agent scoring on every inter-agent message adds latency to agent-to-agent communication, potentially breaking timeouts.
+- **False propagation detection**: Two agents may activate similar "deception directions" because they both received the same user prompt, not because deception propagated. Disentangling correlation from causation requires controlled experiments.
+- **Narrow applicability**: Most production deployments use single-agent systems. The multi-agent scenario, while important, addresses a small fraction of users.
+- **Recommendation**: Build correlation-only detection first (flag when multiple agents show high deception scores simultaneously). Graduate to causal propagation detection only after establishing baseline correlation distributions.
+
+---
+
+### Recommendation 8: Adversarial Robustness via Latent Noise Injection & Gradient Masking
+
+**Purpose**: Steering can be detected and reversed by adversarial attacks that probe the steering direction. Adversarial robustness methods make steering stealthy and resistant to reverse-engineering.
+
+**Approach**:
+- Implement latent noise injection: `S_robust(a) = S(a + eta)` with Gaussian eta scaled to 1–5% of activation norm
+- Gradient masking: generate decoy direction distributions that mask the true steering direction
+- Input token sanitization: filter low-probability token transitions typical of gradient-optimized attack suffixes
+- Build "Adversarial Shield" panel with live perturbation rates and blocked jailbreak count
+
+**Adversarial Criticism**:
+- **Noise undermines steering efficacy**: Gaussian eta of even 1% norm reduces AUROC by 2–5%. At 5% noise, most steering benefits vanish. The robustness-efficacy tradeoff is steep.
+- **Gradient masking is trivially bypassable**: "Security by obscurity" approaches (decoy directions) are well-known to fail against adaptive adversaries. If the adversary knows masking is used, they can average multiple queries to cancel noise.
+- **Token sanitization is a cat-and-mouse game**: Gradient-optimized attack suffixes evolve faster than sanitization rules. GCG attacks (Zou et al., 2023) can be adapted to bypass any fixed suffix filter.
+- **Latency cost compounds**: Noise injection + gradient masking + token sanitization adds 50–200µs per layer per token. For production latency budgets (< 10ms per token), this may be prohibitive.
+- **Recommendation**: Implement noise injection as a tunable parameter with clear documentation of the AUROC-latency tradeoff. Do not promise "robustness" — promise "increased cost for attackers."
+
+---
+
+### Recommendation 9: Float Direction Interpolation & Continuous Steering Mixing
+
+**Purpose**: Discrete direction selection (use direction A or direction B) causes abrupt behavioral changes and high KL divergence. Continuous interpolation between directions (blend of A and B) may produce smoother transitions with lower distortion.
+
+**Approach**:
+- Implement `FloatDirectionInterpolation(directions, t, sigma)` — Gaussian-weighted SVD direction blend
+- Add `DirectionMix` continuous parameter to `SteeringCommand` (range [0, k] where k is number of directions)
+- Build UI slider for continuous direction mixing
+- Research: does smooth interpolation produce lower KL divergence than discrete selection?
+
+**Adversarial Criticism**:
+- **Interpolation may mix unrelated directions**: Blending deception and truthfulness directions may produce a direction that is neither — a confused representation with unpredictable behavioral effects.
+- **No theoretical grounding**: It's unclear why Gaussian-weighted interpolation would be optimal. Linear interpolation, slerp, or learned blending weights may all produce different results without a clear winner.
+- **KL divergence may not correlate with capability preservation**: Lower KL divergence does not necessarily mean better capability retention. A "smooth" steering intervention can still remove refusal behavior entirely.
+- **UI complexity for marginal benefit**: A slider controlling an ill-defined parameter invites user confusion and misconfiguration.
+- **Recommendation**: Research interpolation methods on synthetic subspaces first (where ground truth is known). Only expose UI controls after demonstrating behavioral monotonicity.
+
+---
+
+### Recommendation 10: Standardized Multi-Turn Steering Evaluation Framework
+
+**Purpose**: Current single-turn ASR metrics are misleading — multi-turn red teaming exposes up to 75% ASR vs 20% single-turn. BurnNotice needs a standardized evaluation framework across turns, benchmarks, and attack categories.
+
+**Approach**:
+- Integrate HarmBench 400: 400 test cases across 7 harm categories
+- Implement multi-turn conversation harness (N=5–10 turns)
+- Compute per-turn ASR, cumulative ASR, and "breakthrough turn" distributions
+- Report unified "Heretic Score": `w1 · refusal_rate + w2 · KL_divergence + w3 · capability_degradation`
+- Generate 2D Pareto frontier plots (KL divergence vs ASR) for steering method comparison
+
+**Adversarial Criticism**:
+- **HarmBench may not reflect real attacks**: The 400 test cases are static — adaptive attacks that learn from model responses are fundamentally different and may bypass any static benchmark.
+- **Multi-turn evaluation is expensive**: 400 prompts × 10 turns = 4,000 generation calls per evaluation run. At $0.01/call (API) or 100ms/call (local), a full eval takes 40 minutes and costs $40.
+- **Heretic Score weights are arbitrary**: No principled method exists to weight refusal rate, KL divergence, and capability degradation. Different deployment contexts require different tradeoffs.
+- **Benchmark contamination risk**: Repeated evaluation on the same test set leads to overfitting. The steering method that scores best on HarmBench 400 may generalize poorly to out-of-distribution attacks.
+- **Capability degradation measurement is incomplete**: MMLU and GSM8k measure factual knowledge and math — they don't measure creativity, instruction following, or tool-use ability. A model can pass MMLU while being useless for agent tasks.
+- **Recommendation**: Build the evaluation harness but expose raw per-metric scores rather than a single Heretic Score. Let users assign weights based on their deployment context.
+
+---
+
+## Summary Table
+
+| # | Recommendation | Primary Benefit | Key Risk | Difficulty |
+|---|---|---|---|---|
+| 1 | SAE Feature-Level Steering | Monosemantic precision | AxBench shows SAE not always better; latency | Hard |
+| 2 | Prefill-Phase Optimization | Causal efficacy at commitment | Architecture-specific; not replicated | Medium |
+| 3 | Refusal Direction Optimization (RDO) | Higher AUROC | Overfitting; diminishing returns | Medium |
+| 4 | Concept Cone Geometry | Multi-category understanding | Category instability; cone collapse | Hard |
+| 5 | KV-Cache Accumulation Tracking | Multi-turn safety | Architecture-specific; 15° threshold arbitrary | Hard |
+| 6 | Cross-Layer CKA & Direction Emergence | Minimal-distortion steering | High baseline similarity; CKA ≠ causal | Medium |
+| 7 | Multi-Agent Propagation Monitoring | Graph-level safety | Incomparable latent spaces | Hard |
+| 8 | Adversarial Robustness | Stealthy steering | Noise undermines efficacy; cat-and-mouse | Hard |
+| 9 | Float Direction Interpolation | Smooth transitions | Mixes unrelated directions; ungrounded | Medium |
+| 10 | Standardized Multi-Turn Eval Framework | Reliable measurement | Expensive; weights arbitrary; contamination | Medium |
+
+---
+
+## Prioritization
+
+Based on impact vs effort analysis:
+
+**Immediate (Tier 2 parallel work)**:
+- #10 (Evaluation framework) — prerequisite for all quality measurement
+- #3 (RDO) — builds directly on existing whitened SVD infrastructure
+- #6 (Cross-layer CKA) — diagnostic value with modest implementation cost
+
+**Short-term (Tier 3–4)**:
+- #4 (Concept cone) — extends existing extraction pipeline
+- #9 (Direction interpolation) — UI research, low implementation risk
+- #5 (KV-cache tracking) — needs evaluation framework first
+
+**Medium-term (Tier 5+)**:
+- #1 (SAE steering) — depends on SAE loader (Step 24) being complete
+- #2 (Prefill optimization) — needs architecture detection (Step 23)
+- #7 (Multi-agent) — depends on agent SDK integration completing
+
+**Long-term (Tier 7+)**:
+- #8 (Adversarial robustness) — only meaningful after evaluation framework validates steering works
+
+---
+
+## Gaps in Current Codebase
+
+Beyond the 10 recommendations, five structural gaps were identified during code validation:
+
+1. **`internal/analysis/` directory missing**: Referenced by Steps 8, 15, 16 but does not exist. Must be created.
+2. **`internal/math/projection.go` missing**: Required for Step 10 (ridge projection) — does not exist yet.
+3. **`internal/telemetry/reporter.go` missing**: Required for Step 31 telemetry — does not exist yet.
+4. **`internal/profile/manager.go` missing**: Required for Step 33 calibration worker — does not exist yet.
+5. **SAE loader lacks Gemma Scope format support**: `internal/sae/loader.go` loads JSON-format SAEs, but Gemma Scope uses a different serialization format (NPZ + config JSON).

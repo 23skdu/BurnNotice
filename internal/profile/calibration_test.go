@@ -33,17 +33,17 @@ func TestCalibrator_Calibrate(t *testing.T) {
 			},
 		}
 
-		thresholds, err := cal.Calibrate(prof, dataset)
+		result, err := cal.Calibrate(prof, dataset)
 		if err != nil {
 			t.Fatalf("failed to calibrate: %v", err)
 		}
 
-		thresh, ok := thresholds["deception:0"]
+		thresh, ok := result.Thresholds["deception:0"]
 		if !ok {
 			t.Errorf("missing calibration for deception:0")
 		}
-		if thresh < 0 || thresh > 1.0 {
-			t.Errorf("threshold out of bounds: %f", thresh)
+		if thresh.Threshold < 0 || thresh.Threshold > 1.0 {
+			t.Errorf("threshold out of bounds: %f", thresh.Threshold)
 		}
 	})
 
