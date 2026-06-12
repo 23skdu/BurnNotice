@@ -125,3 +125,35 @@ func TestExtractPCA_NegativeEmpty(t *testing.T) {
 		t.Errorf("ExtractPCA with empty negative returned %v, %v, want nil, nil", d, s)
 	}
 }
+
+func TestExtractPCA_RecoversSyntheticSubspace(t *testing.T) {
+	v1 := []float64{1.0 / math.Sqrt(2), 1.0 / math.Sqrt(2), 0, 0}
+	v2 := []float64{0, 0, 1.0 / math.Sqrt(2), 1.0 / math.Sqrt(2)}
+
+	positive := [][]float64{
+		{2.0*v1[0] + 0.5*v2[0], 2.0*v1[1] + 0.5*v2[1], 2.0*v1[2] + 0.5*v2[2], 2.0*v1[3] + 0.5*v2[3]},
+		{1.5*v1[0] - 1.0*v2[0], 1.5*v1[1] - 1.0*v2[1], 1.5*v1[2] - 1.0*v2[2], 1.5*v1[3] - 1.0*v2[3]},
+		{-0.5*v1[0] + 2.0*v2[0], -0.5*v1[1] + 2.0*v2[1], -0.5*v1[2] + 2.0*v2[2], -0.5*v1[3] + 2.0*v2[3]},
+		{-1.0*v1[0] - 1.5*v2[0], -1.0*v1[1] - 1.5*v2[1], -1.0*v1[2] - 1.5*v2[2], -1.0*v1[3] - 1.5*v2[3]},
+	}
+	negative := [][]float64{
+		{0, 0, 0, 0},
+		{0, 0, 0, 0},
+		{0, 0, 0, 0},
+		{0, 0, 0, 0},
+	}
+
+	directions, _ := ExtractPCA(positive, negative, 2)
+	if len(directions) != 2 {
+		t.Fatalf("expected 2 directions, got %d", len(directions))
+	}
+
+	for i, u := range directions {
+		proj1 := Dot(u, v1)
+		proj2 := Dot(u, v2)
+		sumSq := proj1*proj1 + proj2*proj2
+		if math.Abs(sumSq-1.0) > 1e-5 {
+			t.Errorf("extracted direction %d is not in the synthetic subspace: sum of squared projections = %f (want ~1.0)", i, sumSq)
+		}
+	}
+}
