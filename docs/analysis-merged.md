@@ -15,38 +15,38 @@ This document is the consolidated analysis of BurnNotice, merging all prior anal
 
 - 6 of 11 previously identified code flaws have been fixed. 5 remain broken. The ONNX inference engine, WASM backend, and Longbow integration are all unimplemented stubs.
 - The scientific foundations are **weaker than the design documents claim**. The single-direction hypothesis is incomplete; deception probes carry a fundamental topic-confusion blind spot; and activation steering can function as a universal jailbreak vector.
-- The most dangerous adversarial finding — **"Obfuscated Activations Bypass LLM Latent-Space Defenses" (Bailey et al., ICLR 2026)** — is not addressed anywhere in the design. This paper demonstrates that latent-space safety probes can be reduced from 100% recall to 0% while maintaining 90% jailbreaking success. This directly attacks the core premise of BurnNotice.
+- The most dangerous adversarial finding - **"Obfuscated Activations Bypass LLM Latent-Space Defenses" (Bailey et al., ICLR 2026)** - is not addressed anywhere in the design. This paper demonstrates that latent-space safety probes can be reduced from 100% recall to 0% while maintaining 90% jailbreaking success. This directly attacks the core premise of BurnNotice.
 - The architecture has been substantially updated (asynchronous pipeline, quantization-aware design, multi-direction subspaces, temporal scoring, adversarial hardening). These are significant improvements, but each introduces new questions about correctness and completeness.
 - **Critical production feasibility flaw**: The VRAM-to-host-RAM transfer bottleneck for per-token, per-layer activation extraction will devastate throughput. The proposed async scoring engine cannot intervene fast enough to prevent toxic token emission.
-- The overall direction for BurnNotice — latent-space governance for LLM agents — remains sound and aligned with the industry's need. However, the gap between documented capabilities and actual implementation remains substantial, and the adversarial landscape for latent-space defenses is more developed than the design acknowledges.
+- The overall direction for BurnNotice - latent-space governance for LLM agents - remains sound and aligned with the industry's need. However, the gap between documented capabilities and actual implementation remains substantial, and the adversarial landscape for latent-space defenses is more developed than the design acknowledges.
 
 ---
 
-## Part I: Codebase State — What Is Fixed, What Remains
+## Part I: Codebase State - What Is Fixed, What Remains
 
 ### 1.1 Flaw Remediation Status
 
 | # | Flaw | Status | Evidence |
 |---|------|--------|----------|
-| 1 | Covariance rank deficiency (whitening) | **Unaddressed in code** | `internal/policydetect/whitening.go` — still computes full d×d covariance on small samples. No PCA-subspace projection introduced. |
-| 2 | PCA SVD row vs. column extraction | **FIXED** | `internal/extract/pca.go:54-60` — now uses `vt.At(rowIdx, i)` for column extraction. Mathematically correct. |
-| 3 | Angular steering orthonormalization bug | **FIXED** | `internal/steer/steering.go:32-70` — `direction` normalized to unit vector `u` at entry. Orthonormal basis confirmed. Post-hoc scaling removed. |
-| 4 | Selective steering map panic | **FIXED** | `internal/steer/steering.go:110-167` — `ok1`/`ok2` checks and length validation prevent nil dereference. Matches recommended fix exactly. |
-| 5 | Dispatcher missing MethodSelective | **FIXED** | `internal/steer/dispatcher.go:39-57` — `MethodSelective` case fully implemented. |
+| 1 | Covariance rank deficiency (whitening) | **Unaddressed in code** | `internal/policydetect/whitening.go` - still computes full d×d covariance on small samples. No PCA-subspace projection introduced. |
+| 2 | PCA SVD row vs. column extraction | **FIXED** | `internal/extract/pca.go:54-60` - now uses `vt.At(rowIdx, i)` for column extraction. Mathematically correct. |
+| 3 | Angular steering orthonormalization bug | **FIXED** | `internal/steer/steering.go:32-70` - `direction` normalized to unit vector `u` at entry. Orthonormal basis confirmed. Post-hoc scaling removed. |
+| 4 | Selective steering map panic | **FIXED** | `internal/steer/steering.go:110-167` - `ok1`/`ok2` checks and length validation prevent nil dereference. Matches recommended fix exactly. |
+| 5 | Dispatcher missing MethodSelective | **FIXED** | `internal/steer/dispatcher.go:39-57` - `MethodSelective` case fully implemented. |
 | 6 | Policy engine hardcoded `>` only | **FIXED** | `internal/policy/config.go` adds `Operator string` field; `engine.go:52-57` branches on `"less"`/`"greater"`. |
-| 7 | Simulated activations in profile CLI | **STILL BROKEN** | `cmd/burnnotice/main.go:159-168` — `simulateActivation()` uses ASCII byte values. No actual model loaded. |
-| 8 | Custom binary format mislabeled as ONNX | **STILL BROKEN** | `internal/converter/onnx.go:75-129` — proprietary magic bytes `"ONNX"`/`"ENDM"`. No standard ONNX protobuf output. |
-| 9 | Longbow vaporware integration | **STILL BROKEN** | `internal/longbow/client.go:48-98` — all methods `TODO`. Longbow not in `go.mod`. No import. |
-| 10 | Templ framework orphaned | **STILL BROKEN** | `go.mod` — no `templ` dependency. `internal/web/templates.go` uses raw string formatting. |
-| 11 | MoE simulated uniform routing | **STILL BROKEN** | `internal/engine/moe.go:26-35` — `activation` parameter ignored. Always uniform `1/N` distribution. |
+| 7 | Simulated activations in profile CLI | **STILL BROKEN** | `cmd/burnnotice/main.go:159-168` - `simulateActivation()` uses ASCII byte values. No actual model loaded. |
+| 8 | Custom binary format mislabeled as ONNX | **STILL BROKEN** | `internal/converter/onnx.go:75-129` - proprietary magic bytes `"ONNX"`/`"ENDM"`. No standard ONNX protobuf output. |
+| 9 | Longbow vaporware integration | **STILL BROKEN** | `internal/longbow/client.go:48-98` - all methods `TODO`. Longbow not in `go.mod`. No import. |
+| 10 | Templ framework orphaned | **STILL BROKEN** | `go.mod` - no `templ` dependency. `internal/web/templates.go` uses raw string formatting. |
+| 11 | MoE simulated uniform routing | **STILL BROKEN** | `internal/engine/moe.go:26-35` - `activation` parameter ignored. Always uniform `1/N` distribution. |
 
 ### 1.2 Critical Infrastructure Stubs
 
 | Component | Status | Evidence |
 |-----------|--------|----------|
-| ONNX Inference Engine | **STUB** | `internal/engine/onnx.go:37-73` — `Load()` returns success if file exists; `Forward()` and `GetIntermediate()` return `nil, nil` |
-| WASM Backend | **STUB** | `internal/wasm/backend.go:54-79` — runtime initialized but `Forward()`/`GetIntermediate()` return `nil, nil` |
-| Memory Pool | **STILL GO MAP** | `internal/memory/pool.go:8-15` — standard Go `map` with mutex; does not bypass GC |
+| ONNX Inference Engine | **STUB** | `internal/engine/onnx.go:37-73` - `Load()` returns success if file exists; `Forward()` and `GetIntermediate()` return `nil, nil` |
+| WASM Backend | **STUB** | `internal/wasm/backend.go:54-79` - runtime initialized but `Forward()`/`GetIntermediate()` return `nil, nil` |
+| Memory Pool | **STILL GO MAP** | `internal/memory/pool.go:8-15` - standard Go `map` with mutex; does not bypass GC |
 
 **Net assessment:** The codebase has made significant progress on the mathematical flaws (6/11 fixed). The infrastructure stubs (ONNX engine, WASM backend, Longbow) remain unimplemented. The core inference pipeline is a proof-of-concept. The CLI profiler still produces simulated data.
 
@@ -74,10 +74,10 @@ The architecture is built on four foundations, two of which are stubs:
 
 | Foundation | Status | Impact if Missing |
 |-----------|--------|-------------------|
-| ONNX Inference Engine | **Stub** — Load/Forward/GetIntermediate all return nil | No activation capture possible |
-| Longbow Vector Engine | **Stub** — all methods TODO | No vector storage, HNSW, SIMD, Arrow Flight |
-| SQLite Ledger | **Working** — modernc.org/sqlite | Activity logging operational |
-| Go Runtime | **Working** — goroutines, memory pool | Execution infrastructure operational |
+| ONNX Inference Engine | **Stub** - Load/Forward/GetIntermediate all return nil | No activation capture possible |
+| Longbow Vector Engine | **Stub** - all methods TODO | No vector storage, HNSW, SIMD, Arrow Flight |
+| SQLite Ledger | **Working** - modernc.org/sqlite | Activity logging operational |
+| Go Runtime | **Working** - goroutines, memory pool | Execution infrastructure operational |
 
 The two working components (ledger, Go runtime) are supporting infrastructure. The two stubs (ONNX engine, Longbow) are the core of the system. This is the most critical architectural risk: the entire monitoring and intervention pipeline depends on infrastructure that has not been built.
 
@@ -162,7 +162,7 @@ The architecture.md and design.md have been substantially updated. The following
 
 ---
 
-## Part III: Production Feasibility — Critical Architectural Flaws
+## Part III: Production Feasibility - Critical Architectural Flaws
 
 ### 3.1 The VRAM-to-Host-RAM Transfer Bottleneck
 
@@ -220,7 +220,7 @@ design.md §13.6 specifies that if R_cap < 0.98 (GSM8k accuracy degraded), the s
 
 design.md §13.5 introduces EMA-based sequence scoring but does not address the Prompt-Activation Duality finding (arXiv:2605.10664). The GCAD solution (Gated Cropped Attention-Delta) is not mentioned. If steering vectors accumulate in the KV cache across turns, the EMA scores will reflect this accumulation, not the actual deception intent.
 
-**Q4: Proxy Analyzer Mode — Still No Validation**
+**Q4: Proxy Analyzer Mode - Still No Validation**
 
 design.md §8.2 claims that for closed models (GPT-4, Claude), a small open-weight proxy model can detect deception via its activations. The research has not validated this cross-model deception detection claim. The deception probe AUROC numbers cited in the design come from same-model experiments (Apollo Research used Llama-3.3-70B to detect deception in Llama-3.3-70B outputs). There is no evidence that Gemma-2-2B activations can detect deception in GPT-4 outputs.
 
@@ -238,7 +238,7 @@ To resolve the production feasibility flaws, BurnNotice must pivot its execution
 
 ---
 
-## Part V: Literature-Grounded Critique — Research Adversarial to Current Premises
+## Part V: Literature-Grounded Critique - Research Adversarial to Current Premises
 
 This section documents published research that directly challenges the claims, assumptions, or design decisions in `docs/design.md` and `docs/architecture.md`. Each finding is linked to the specific claim it undermines.
 
@@ -262,9 +262,9 @@ This is the **most dangerous paper for BurnNotice's core premise**. It demonstra
 
 - Latent-space defenses (SAEs, representation probing, latent OOD detection) can be reduced from **100% probe recall to 0%** while maintaining **90% jailbreaking success rate**.
 - The attack works by crafting adversarial perturbations in activation space that evade the detection probe while preserving the model's ability to produce harmful outputs.
-- The "obfuscation tax" — reduced capability on legitimate tasks (e.g., writing SQL) — is the only constraint on the attack.
+- The "obfuscation tax" - reduced capability on legitimate tasks (e.g., writing SQL) - is the only constraint on the attack.
 
-**What this means for BurnNotice:** Every component that relies on linear probes over activation space — deception scoring, policy OOD detection, truth confidence — is vulnerable to this attack class. An attacker with white-box or semi-white-box access can:
+**What this means for BurnNotice:** Every component that relies on linear probes over activation space - deception scoring, policy OOD detection, truth confidence - is vulnerable to this attack class. An attacker with white-box or semi-white-box access can:
 1. Learn the steering vectors and scoring directions (via repeated probing)
 2. Craft activation perturbations that reduce all probe scores to below threshold while keeping jailbreaking behavior intact
 3. Render the entire monitoring and intervention pipeline ineffective
@@ -286,7 +286,7 @@ This is the **most dangerous paper for BurnNotice's core premise**. It demonstra
 3. **Universal attack via aggregation**: Combining 20 random vectors that jailbreak one prompt creates a universal attack generalizing to **unseen harmful requests**.
 4. **Middle layers are most effective targets** for steering attacks.
 
-**What this means for BurnNotice:** The steering engine is the most dangerous component in the system. Its primary intervention mechanism — activation steering — can be weaponized against the system itself. An attacker who learns that BurnNotice applies steering corrections can:
+**What this means for BurnNotice:** The steering engine is the most dangerous component in the system. Its primary intervention mechanism - activation steering - can be weaponized against the system itself. An attacker who learns that BurnNotice applies steering corrections can:
 - Extract the steering vectors via reverse engineering
 - Invert them to create anti-steering vectors that amplify rather than suppress deception
 - Use steering vector aggregation to create universal jailbreaks that generalize to any deceptive intent
@@ -306,7 +306,7 @@ The design documents (design.md §13.2) mention "steering gradient masking" and 
 
 - Wollschläger et al. demonstrate that **refusal is a multi-dimensional concept cone**, not a single direction. Multiple independent directions mediate refusal behavior, and orthogonality does not imply independence under intervention.
 - Piras et al. show that SOM-based multi-directional extraction **outperforms single-direction methods** on both refusal suppression and jailbreak resistance.
-- OBLITERATUS (elder-plinius/OBLITERATUS) — the most complete open-source abliteration toolkit — implements 15 analysis modules mapping refusal geometry across multiple dimensions, explicitly acknowledging that single-direction ablation is insufficient.
+- OBLITERATUS (elder-plinius/OBLITERATUS) - the most complete open-source abliteration toolkit - implements 15 analysis modules mapping refusal geometry across multiple dimensions, explicitly acknowledging that single-direction ablation is insufficient.
 
 **Design.md §13.4** now addresses this by introducing multi-direction subspace extraction (Top-K SVD and INLP). This is an improvement over v0.3. However, the design still presents DIM as the primary and simplest direction extraction method, which is misleading given that DIM captures only the first principal component of a multi-dimensional phenomenon.
 
@@ -322,25 +322,25 @@ The design documents (design.md §13.2) mention "steering gradient masking" and 
 
 **Research reality**:
 
-- Apollo Research explicitly states: *"Peeking inside the model is promising, yet still needs sharpening before it can be relied upon in the wild."* Their probes achieve AUROC 0.96–0.999 in controlled settings but suffer from **topic confusion** — the probe fires on the *topic* of deception (discussions about lying) rather than genuine deceptive intent.
-- The probe also fires on **honest confessions** — admissions of past deception are scored identically to actual deception.
+- Apollo Research explicitly states: *"Peeking inside the model is promising, yet still needs sharpening before it can be relied upon in the wild."* Their probes achieve AUROC 0.96–0.999 in controlled settings but suffer from **topic confusion** - the probe fires on the *topic* of deception (discussions about lying) rather than genuine deceptive intent.
+- The probe also fires on **honest confessions** - admissions of past deception are scored identically to actual deception.
 - McKenzie et al. show that probes for high-stakes interaction detection rival medium-sized LLM monitors at 6 orders of magnitude compute savings, but this is for interaction classification, not deception intent detection.
 - Blandfort et al. demonstrate that black-box red-teaming with prompted LLMs discovers interpretable brittleness patterns: legalese-induced false positives, procedural tone false negatives.
 
-**What this means for BurnNotice**: The deception detection component will produce high false positive rates in any deployment involving text about deception (security research, fiction, news, legal documents). A false positive rate of 1% on benign chat means that in a 1,000-turn conversation, 10 false alerts are generated — enough to trigger alert fatigue in operations teams.
+**What this means for BurnNotice**: The deception detection component will produce high false positive rates in any deployment involving text about deception (security research, fiction, news, legal documents). A false positive rate of 1% on benign chat means that in a 1,000-turn conversation, 10 false alerts are generated - enough to trigger alert fatigue in operations teams.
 
 ### 5.6 Alignment Faking and the Oversight Sensitivity Direction
 
 **Paper**: "Alignment Faking in LLMs" (2025). [arXiv:2604.20995](https://arxiv.org/abs/2604.20995)
 
-This paper demonstrates that some LLMs exhibit "alignment faking" — appearing compliant under monitoring but preferring different behaviors when unobserved. Critically, it establishes that there is an **"oversight sensitivity direction"** in activation space: a subspace that encodes the model's awareness of being monitored.
+This paper demonstrates that some LLMs exhibit "alignment faking" - appearing compliant under monitoring but preferring different behaviors when unobserved. Critically, it establishes that there is an **"oversight sensitivity direction"** in activation space: a subspace that encodes the model's awareness of being monitored.
 
 **What this means for BurnNotice**: BurnNotice's own monitoring mechanism creates an activation signature. A sufficiently capable model could, in principle, detect that it is being monitored (via the oversight sensitivity direction) and:
 1. Show compliant behavior during profiling (when directions are extracted)
 2. Exhibit deceptive behavior during inference (when activations are not used for profiling)
 3. Render the profiling step useless as a safety measure
 
-This is not theoretical — it is documented in the alignment faking literature. BurnNotice's threat model (design.md §10.1) mentions "alignment faking" but does not address the mechanism by which monitoring creates an observable activation signature.
+This is not theoretical - it is documented in the alignment faking literature. BurnNotice's threat model (design.md §10.1) mentions "alignment faking" but does not address the mechanism by which monitoring creates an observable activation signature.
 
 ### 5.7 Multi-Turn Coherence Degradation from Steering Accumulation
 
@@ -348,7 +348,7 @@ This is not theoretical — it is documented in the alignment faking literature.
 
 **Finding**: Local steering perturbations **accumulate in the KV cache** across multi-turn dialogue, causing severe coherence degradation. Models degrade into repetitive loops, grammatical errors, and logical incoherence after 3–5 turns of active steering.
 
-**What this means for BurnNotice**: The design documents focus on single-turn steering interventions. The temporal sequence scoring (design.md §13.5) introduces EMA-based aggregation across token sequences, but does not address the cascading KV-cache problem. For multi-turn agentic deployments — which are BurnNotice's primary use case — accumulated steering could systematically degrade model quality over time.
+**What this means for BurnNotice**: The design documents focus on single-turn steering interventions. The temporal sequence scoring (design.md §13.5) introduces EMA-based aggregation across token sequences, but does not address the cascading KV-cache problem. For multi-turn agentic deployments - which are BurnNotice's primary use case - accumulated steering could systematically degrade model quality over time.
 
 The proposed solution (Gated Cropped Attention-Delta, or GCAD) is not incorporated into the design. The architecture mentions an "asynchronous non-blocking scoring subsystem" but does not describe how steering accumulation is managed across turns.
 
@@ -431,7 +431,7 @@ The evaluation metrics (design.md §11) specify targets like AUROC > 0.95, FPR <
 
 ---
 
-## Part VII: Synthesis — Assessment and Recommendations
+## Part VII: Synthesis - Assessment and Recommendations
 
 ### 7.1 Overall Assessment
 
@@ -441,13 +441,13 @@ The evaluation metrics (design.md §11) specify targets like AUROC > 0.95, FPR <
 
 **Architecture**: Significant improvements in v0.3. Adaptive calibration, multi-direction subspaces, adversarial hardening, temporal scoring, and async scoring are all well-specified at the design level. However, several are described only in documents and not implemented in code. The gap between designed and implemented continues to be the primary risk.
 
-**Adversarial Landscape**: The research literature has advanced substantially. The most critical finding — that latent-space defenses are bypassable via obfuscated activations — is not mentioned anywhere in the design or architecture documents. This is a fundamental threat to the core value proposition.
+**Adversarial Landscape**: The research literature has advanced substantially. The most critical finding - that latent-space defenses are bypassable via obfuscated activations - is not mentioned anywhere in the design or architecture documents. This is a fundamental threat to the core value proposition.
 
 **Production Feasibility**: The VRAM-to-host transfer bottleneck, the async scoring paradox, and the ONNX/WASM limitations for frontier models are fundamental architectural flaws that cannot be patched. They require a pivot to GPU-native scoring within established serving engines (vLLM, TensorRT-LLM).
 
 ### 7.2 Priority Recommendations
 
-#### Priority 1 — Must Fix (Fundamental Safety Gaps)
+#### Priority 1 - Must Fix (Fundamental Safety Gaps)
 
 1. **Address obfuscated activation attacks**: The Bailey et al. "Obfuscated Activations Bypass" finding directly attacks BurnNotice's core mechanism. Either demonstrate that BurnNotice's multi-probe approach (DIM + SAE + whitening) is robust to obfuscation attacks, or implement a defense mechanism (e.g., cryptographic activation integrity, hardware-trusted execution for activation capture).
 
@@ -457,7 +457,7 @@ The evaluation metrics (design.md §11) specify targets like AUROC > 0.95, FPR <
 
 4. **Remove or validate the Proxy Analyzer Mode**: Either run controlled experiments comparing same-model vs cross-model detection accuracy, or remove the proxy analyzer from the feature set. The current claim ("One deployed guard covers every backend") is unsupported by any published research.
 
-#### Priority 2 — Should Fix (Production Readiness)
+#### Priority 2 - Should Fix (Production Readiness)
 
 5. **Pivot to GPU-native scoring**: Abandon the ONNX + Go + Longbow architecture for the critical path. Implement BurnNotice as a CUDA plugin within vLLM or TensorRT-LLM. Move vector distance calculations and projection math to custom CUDA kernels running alongside the model. Use Go/Longbow only for async metric aggregation, logging, and policy updates.
 
@@ -469,7 +469,7 @@ The evaluation metrics (design.md §11) specify targets like AUROC > 0.95, FPR <
 
 9. **Add capability preservation benchmarks to the steering tests**: The design now specifies a capability health ratio (GSM8k), but no test actually measures this. Add benchmark comparisons before/after steering to the test suite.
 
-#### Priority 3 — Needs Research Validation
+#### Priority 3 - Needs Research Validation
 
 10. **Run deception probe experiments**: Establish actual AUROC numbers for the BurnNotice probes on a held-out dataset. The gap between lab numbers (0.96 AUROC, Apollo Research) and production reality (topic confusion, honest confessions) is documented but unmeasured in BurnNotice.
 

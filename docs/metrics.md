@@ -10,8 +10,8 @@
 
 BurnNotice exposes two observability backends:
 
-1. **Prometheus** — Pull-based metrics scraping via `/metrics` HTTP handler (50+ instruments)
-2. **OpenTelemetry (OTel)** — Push-based metric export via OTLP/HTTP to any compatible collector
+1. **Prometheus** - Pull-based metrics scraping via `/metrics` HTTP handler (50+ instruments)
+2. **OpenTelemetry (OTel)** - Push-based metric export via OTLP/HTTP to any compatible collector
 
 Both backends emit the same logical signals. Prometheus is enabled by default; OTel is opt-in via environment variables.
 
@@ -143,7 +143,7 @@ BurnNotice supports OTLP/HTTP metric export via the `internal/metrics/otel.go` m
 
 | Variable | Default | Description |
 |---|---|---|
-| `BURNNOTICE_OTEL_ENDPOINT` | *(empty — disabled)* | OTLP/HTTP collector endpoint (e.g., `http://otel-collector:4318`) |
+| `BURNNOTICE_OTEL_ENDPOINT` | *(empty - disabled)* | OTLP/HTTP collector endpoint (e.g., `http://otel-collector:4318`) |
 | `BURNNOTICE_OTEL_INSECURE` | `false` | Set `true` to disable TLS verification |
 | `BURNNOTICE_OTEL_EXPORT_INTERVAL` | `30s` | How often metrics are flushed to the collector |
 | `OTEL_SERVICE_NAME` | `burnnotice` | Service name reported to the collector |
