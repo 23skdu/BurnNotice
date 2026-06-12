@@ -89,7 +89,7 @@ All [x]-marked steps were source-code validated. Key findings:
 - [x] **9.1** Default to top-k SVD extraction (k=5) in `internal/extract/pca.go` instead of single-direction DIM
 - [x] **9.2** Implement Iterative Nullspace Projection (INLP) for orthogonal safety directions (`internal/extract/inlp.go`)
 - [x] **9.3** Add subspace energy scoring: `E_subspace(a) = sqrt(sum((a · v_i)^2))`
-- [ ] **9.4** Write unit tests: SVD recovers known synthetic subspaces; INLP projects out known directions
+- [x] **9.4** Write unit tests: SVD recovers known synthetic subspaces; INLP projects out known directions
 - [ ] **9.5** UI: 3D scatter plot of multi-dimensional activation projections
 
 ### Step 10: Ridge-Regularized Subspace Projection (Gabliteration)
