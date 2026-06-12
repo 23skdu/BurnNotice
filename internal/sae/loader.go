@@ -379,13 +379,14 @@ func readNpyHeader(data []byte) ([]int, bool, error) {
 		headerStr = string(data[12:headerEnd])
 	}
 
+	jsonStr := npyHeaderToJSON(headerStr)
 	var header struct {
-		Descr      string `json:"descr"`
-		FortranOrder bool `json:"fortran_order"`
-		Shape      []int  `json:"shape"`
+		Descr        string `json:"descr"`
+		FortranOrder bool   `json:"fortran_order"`
+		Shape        []int  `json:"shape"`
 	}
-	if err := json.Unmarshal([]byte(headerStr), &header); err != nil {
-		return nil, false, fmt.Errorf("parse npy header: %w", err)
+	if err := json.Unmarshal([]byte(jsonStr), &header); err != nil {
+		return nil, false, fmt.Errorf("parse npy header (sanitized JSON: %s): %w", jsonStr, err)
 	}
 
 	if header.Descr != "<f4" && header.Descr != "float32" {
@@ -393,6 +394,79 @@ func readNpyHeader(data []byte) ([]int, bool, error) {
 	}
 
 	return header.Shape, header.FortranOrder, nil
+}
+
+func npyHeaderToJSON(s string) string {
+	var buf bytes.Buffer
+	inString := false
+	var strChar rune
+
+	runes := []rune(s)
+	n := len(runes)
+	for i := 0; i < n; i++ {
+		r := runes[i]
+		if inString {
+			if r == strChar {
+				buf.WriteRune('"')
+				inString = false
+			} else {
+				if r == '"' {
+					buf.WriteString("\\\"")
+				} else {
+					buf.WriteRune(r)
+				}
+			}
+			continue
+		}
+
+		switch r {
+		case '\'', '"':
+			inString = true
+			strChar = r
+			buf.WriteRune('"')
+		case '(':
+			buf.WriteRune('[')
+		case ')':
+			buf.WriteRune(']')
+		case 'T', 'F':
+			if i+3 < n && string(runes[i:i+4]) == "True" {
+				buf.WriteString("true")
+				i += 3
+			} else if i+4 < n && string(runes[i:i+5]) == "False" {
+				buf.WriteString("false")
+				i += 4
+			} else {
+				buf.WriteRune(r)
+			}
+		default:
+			buf.WriteRune(r)
+		}
+	}
+
+	return cleanTrailingCommas(buf.String())
+}
+
+func cleanTrailingCommas(s string) string {
+	runes := []rune(s)
+	n := len(runes)
+	var out []rune
+	for i := 0; i < n; i++ {
+		if runes[i] == ',' {
+			nextNonWS := -1
+			for j := i + 1; j < n; j++ {
+				r := runes[j]
+				if r != ' ' && r != '\t' && r != '\r' && r != '\n' {
+					nextNonWS = j
+					break
+				}
+			}
+			if nextNonWS != -1 && (runes[nextNonWS] == ']' || runes[nextNonWS] == '}') {
+				continue
+			}
+		}
+		out = append(out, runes[i])
+	}
+	return string(out)
 }
 
 func findNpyDataOffset(data []byte) int {

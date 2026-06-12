@@ -223,34 +223,63 @@ Extraction method:
 		}
 
 		useWhitened := shouldUseWhitenedSVD(cmd.Flags().Changed("whitened-svd"), whitenedFlag, modelSize)
-		methodLabel := "DIM"
-		var deceptionDir []float64
+		var directions [][]float64
+		var methodLabel string
 		if useWhitened {
-			dirs, _, ok := extract.ExtractWhitenedSVD(positiveActivations, negativeActivations, numDirs, shrinkage, eigFloor)
-			if !ok || len(dirs) == 0 {
+			var ok bool
+			directions, _, ok = extract.ExtractWhitenedSVD(positiveActivations, negativeActivations, numDirs, shrinkage, eigFloor)
+			if !ok || len(directions) == 0 {
 				return fmt.Errorf("whitened SVD extraction failed (k=%d, shrinkage=%g, eigFloor=%g)", numDirs, shrinkage, eigFloor)
 			}
-			deceptionDir = dirs[0]
-			methodLabel = fmt.Sprintf("whitened SVD (k=%d, shrinkage=%g, eigFloor=%g)", numDirs, shrinkage, eigFloor)
+			methodLabel = fmt.Sprintf("whitened SVD (k=%d, shrinkage=%g, eigFloor=%g)", len(directions), shrinkage, eigFloor)
 		} else {
-			deceptionDir = extract.ExtractDIM(positiveActivations, negativeActivations)
+			k := numDirs
+			if !cmd.Flags().Changed("num-directions") {
+				k = 5
+			}
+			directions, _ = extract.ExtractPCA(positiveActivations, negativeActivations, k)
+			if len(directions) == 0 {
+				return fmt.Errorf("PCA SVD extraction failed (k=%d)", k)
+			}
+			methodLabel = fmt.Sprintf("PCA SVD (k=%d)", len(directions))
 		}
 		fmt.Printf("Extraction method: %s\n", methodLabel)
 
-		scorer.RegisterDirection("deception", deceptionDir)
+		for idx, dir := range directions {
+			dirName := fmt.Sprintf("deception_%d", idx)
+			scorer.RegisterDirection(dirName, dir)
+			if idx == 0 {
+				scorer.RegisterDirection("deception", dir)
+			}
+		}
 
 		testActivation, _ := model.ExtractActivation("test prompt", "test response")
 		scores := scorer.Score(testActivation)
 
-		fmt.Printf("Sample scores: deception=%.4f\n", scores["deception"])
+		for idx := range directions {
+			dirName := fmt.Sprintf("deception_%d", idx)
+			fmt.Printf("Sample scores: %s=%.4f\n", dirName, scores[dirName])
+		}
+		if len(directions) > 0 {
+			fmt.Printf("Sample scores: deception=%.4f\n", scores["deception"])
+		}
 
 		modelProfile := &profile.ModelProfile{
 			ModelID:    filepath.Base(modelPath),
 			Directions: make(map[string]map[int][]float64),
 		}
-		modelProfile.Directions["deception"] = make(map[int][]float64)
-		for _, layer := range layers {
-			modelProfile.Directions["deception"][layer] = deceptionDir
+		for idx, dir := range directions {
+			dirName := fmt.Sprintf("deception_%d", idx)
+			modelProfile.Directions[dirName] = make(map[int][]float64)
+			for _, layer := range layers {
+				modelProfile.Directions[dirName][layer] = dir
+			}
+			if idx == 0 {
+				modelProfile.Directions["deception"] = make(map[int][]float64)
+				for _, layer := range layers {
+					modelProfile.Directions["deception"][layer] = dir
+				}
+			}
 		}
 		if len(oversightDirs) > 0 {
 			modelProfile.Directions["oversight"] = oversightDirs

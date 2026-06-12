@@ -79,23 +79,23 @@ All [x]-marked steps were source-code validated. Key findings:
 - [ ] **7.5** Compare singular-value decay rate: raw SVD vs whitened SVD
 
 ### Step 8: Concept Cone Geometry Analysis
-- [ ] **8.1** Build `ConceptConeAnalyzer` in `internal/analysis/cone.go` collecting activations across N harm categories
-- [ ] **8.2** Compute pairwise cosine similarity of direction vectors between categories
-- [ ] **8.3** Estimate intrinsic dimensionality via PCA scree plot on the direction matrix
+- [x] **8.1** Build `ConceptConeAnalyzer` in `internal/analysis/cone.go` collecting activations across N harm categories
+- [x] **8.2** Compute pairwise cosine similarity of direction vectors between categories
+- [x] **8.3** Estimate intrinsic dimensionality via PCA scree plot on the direction matrix
 - [ ] **8.4** Add `--cone-analysis` flag to profile CLI
 - [ ] **8.5** Integrate cone dimensionality into threshold calibration (higher-D cones need more INLP iterations)
 
 ### Step 9: Multi-Direction Subspace Extraction (Default)
-- [ ] **9.1** Default to top-k SVD extraction (k=5) in `internal/extract/pca.go` instead of single-direction DIM
+- [x] **9.1** Default to top-k SVD extraction (k=5) in `internal/extract/pca.go` instead of single-direction DIM
 - [x] **9.2** Implement Iterative Nullspace Projection (INLP) for orthogonal safety directions (`internal/extract/inlp.go`)
-- [ ] **9.3** Add subspace energy scoring: `E_subspace(a) = sqrt(sum((a · v_i)^2))`
+- [x] **9.3** Add subspace energy scoring: `E_subspace(a) = sqrt(sum((a · v_i)^2))`
 - [ ] **9.4** Write unit tests: SVD recovers known synthetic subspaces; INLP projects out known directions
 - [ ] **9.5** UI: 3D scatter plot of multi-dimensional activation projections
 
 ### Step 10: Ridge-Regularized Subspace Projection (Gabliteration)
 - [ ] **10.1** Add `RegularizationAlpha` field to `SteeringCommand` and `DirectionExtractor` config
-- [ ] **10.2** Implement `RidgeRegularizedProjection(W, V_k, alpha)` in `internal/math/projection.go`
-- [ ] **10.3** Implement dynamic alpha scheduling: start high (soft), decay to 0 (exact) over passes
+- [x] **10.2** Implement `RidgeRegularizedProjection(W, V_k, alpha)` in `internal/math/projection.go`
+- [x] **10.3** Implement dynamic alpha scheduling: start high (soft), decay to 0 (exact) over passes
 - [ ] **10.4** Unit tests comparing KL divergence: regularized vs exact projection
 
 ### Step 11: Norm-Preserving Biprojected Ablation (MPOA) Steering
@@ -128,16 +128,16 @@ All [x]-marked steps were source-code validated. Key findings:
 - [ ] **14.5** Validate correlation between KL divergence and downstream benchmark degradation
 
 ### Step 15: Ouroboros Detection & Iterative Refinement
-- [ ] **15.1** Build `OuroborosDetector` in `internal/analysis/ouroboros.go` measure per-layer scores pre/post intervention
-- [ ] **15.2** Identify compensating layers (scores increased post-intervention); flag if net reduction < 50%
-- [ ] **15.3** Implement iterative refinement: secondary passes targeting only compensating layers
-- [ ] **15.4** Add `MaxRefinementPasses` config (default 3)
+- [x] **15.1** Build `OuroborosDetector` in `internal/analysis/ouroboros.go` measure per-layer scores pre/post intervention
+- [x] **15.2** Identify compensating layers (scores increased post-intervention); flag if net reduction < 50%
+- [x] **15.3** Implement iterative refinement: secondary passes targeting only compensating layers
+- [x] **15.4** Add `MaxRefinementPasses` config (default 3)
 
 ### Step 16: Alignment Imprint Detection
-- [ ] **16.1** Build `AlignmentImprintDetector` — extract DIM directions, compute geometric metrics (effective rank, SV decay, cross-layer coherence)
-- [ ] **16.2** Classify alignment method (DPO/RLHF/CAI/SFT) via MLP or SVM trained on geometric features
-- [ ] **16.3** Add `AlignmentMethod` to `ModelProfile`; auto-tune regularization and projection strategy
-- [ ] **16.4** Integrate with policy engine: adjust steering strength by alignment fragility
+- [x] **16.1** Build `AlignmentImprintDetector` — extract DIM directions, compute geometric metrics (effective rank, SV decay, cross-layer coherence)
+- [x] **16.2** Classify alignment method (DPO/RLHF/CAI/SFT) via MLP or SVM trained on geometric features
+- [x] **16.3** Add `AlignmentMethod` to `ModelProfile`; auto-tune regularization and projection strategy
+- [x] **16.4** Integrate with policy engine: adjust steering strength by alignment fragility
 
 ### Step 17: Conditional Activation Steering (CAST)
 - [ ] **17.1** Implement `ConditionalSteering` in `internal/steer/cast.go` — extract condition vectors per bypass category during profiling
@@ -195,16 +195,16 @@ All [x]-marked steps were source-code validated. Key findings:
 - [ ] **24.6** Tests: SAE monitoring catches jailbreaks that DIM misses (complementary signal)
 
 ### Step 25: Cross-Layer Alignment & Refusal Propagation Analysis
-- [ ] **25.1** Build `CrossLayerAlignmentAnalyzer` — extract directions per layer, compute pairwise cosine similarity
-- [ ] **25.2** Identify direction clusters and the "decision layer" where direction first becomes discriminative
-- [ ] **25.3** Use decision-layer analysis to determine minimum steering layer set
-- [ ] **25.4** UI: cross-layer heatmap showing direction similarity across all layer pairs
+- [x] **25.1** Build `CrossLayerAlignmentAnalyzer` — extract directions per layer, compute pairwise cosine similarity
+- [x] **25.2** Identify direction clusters and the "decision layer" where direction first becomes discriminative
+- [x] **25.3** Use decision-layer analysis to determine minimum steering layer set
+- [x] **25.4** UI: cross-layer heatmap showing direction similarity across all layer pairs
 
 ### Step 26: CKA Similarity for Pre/Post Steering Analysis
-- [ ] **26.1** Implement Centered Kernel Alignment (CKA) between pre/post layer activations
-- [ ] **26.2** Add CKA to steering metrics alongside KL divergence and deception score
-- [ ] **26.3** Establish CKA threshold: < 0.95 → excessive representational distortion
-- [ ] **26.4** Layer-wise CKA to identify most-distorted layers for targeted recovery passes
+- [x] **26.1** Implement Centered Kernel Alignment (CKA) between pre/post layer activations
+- [x] **26.2** Add CKA to steering metrics alongside KL divergence and deception score
+- [x] **26.3** Establish CKA threshold: < 0.95 → excessive representational distortion
+- [x] **26.4** Layer-wise CKA to identify most-distorted layers for targeted recovery passes
 
 ### Step 27: Float Direction Interpolation
 - [ ] **27.1** Implement `FloatDirectionInterpolation(directions, t, sigma)` — Gaussian-weighted SVD direction blend
@@ -241,8 +241,8 @@ All [x]-marked steps were source-code validated. Key findings:
 
 ### Step 31: Anonymous Telemetry Infrastructure
 - [x] **31.0** Prometheus `/metrics` endpoint added via `internal/metrics/handler.go` — serves 50+ metric instruments, scrapable by OTel Collector
-- [ ] **31.1** Design telemetry schema: model architecture, model size, steering method, refusal rate, KL divergence, hardware, timestamp. Never prompts, outputs, IPs, or identity
-- [ ] **31.2** Implement submission in `internal/telemetry/reporter.go` (HTTPS POST or local save + PR)
+- [x] **31.1** Design telemetry schema: model architecture, model size, steering method, refusal rate, KL divergence, hardware, timestamp. Never prompts, outputs, IPs, or identity
+- [x] **31.2** Implement submission in `internal/telemetry/reporter.go` (HTTPS POST or local save + PR)
 - [ ] **31.3** Build `burnnotice aggregate` CLI command: summarize contributed results
 - [ ] **31.4** UI: local leaderboard showing community results for current model architecture
 - [ ] **31.5** Write `TELEMETRY.md` with schema documentation and privacy guarantees
@@ -259,9 +259,9 @@ All [x]-marked steps were source-code validated. Key findings:
 - [ ] **32.5** Move all per-token scoring and steering into GPU VRAM; Go layer handles async policy/telemetry only
 
 ### Step 33: Adaptive Model-Specific Calibration
-- [ ] **33.1** Calibration worker in `internal/profile/manager.go`: load held-out dataset, build ROC curves, compute F1-optimal thresholds
-- [ ] **33.2** Persist `CalibratedThreshold` struct to `profile.gob`
-- [ ] **33.3** Real-time drift detection: if rolling avg projection drift > 1.5 sigma, trigger recalibration
+- [x] **33.1** Calibration worker in `internal/profile/manager.go`: load held-out dataset, build ROC curves, compute F1-optimal thresholds
+- [x] **33.2** Persist `CalibratedThreshold` struct to `profile.gob`
+- [x] **33.3** Real-time drift detection: if rolling avg projection drift > 1.5 sigma, trigger recalibration
 - [ ] **33.4** UI: ROC curves, precision-recall graphs, "Recalibrate" trigger
 - [ ] **33.5** Fuzz tests with extreme validation datasets (all-positive, all-negative, high-variance)
 
@@ -607,12 +607,12 @@ Based on impact vs effort analysis:
 
 ---
 
-## Gaps in Current Codebase
+## Gaps in Current Codebase (Resolved)
 
-Beyond the 10 recommendations, five structural gaps were identified during code validation:
+All five structural gaps identified during code validation have been resolved:
 
-1. **`internal/analysis/` directory missing**: Referenced by Steps 8, 15, 16 but does not exist. Must be created.
-2. **`internal/math/projection.go` missing**: Required for Step 10 (ridge projection) — does not exist yet.
-3. **`internal/telemetry/reporter.go` missing**: Required for Step 31 telemetry — does not exist yet.
-4. **`internal/profile/manager.go` missing**: Required for Step 33 calibration worker — does not exist yet.
-5. **SAE loader lacks Gemma Scope format support**: `internal/sae/loader.go` loads JSON-format SAEs, but Gemma Scope uses a different serialization format (NPZ + config JSON).
+1. **`internal/analysis/` directory created**: Implemented `ConceptConeAnalyzer`, `OuroborosDetector`, `AlignmentImprintDetector`, `CrossLayerAlignmentAnalyzer`, and `CKA` in Go.
+2. **`internal/math/projection.go` created**: Implemented `RidgeRegularizedProjection` and `AlphaScheduler` with tests.
+3. **`internal/telemetry/reporter.go` created**: Implemented anonymous local/HTTP telemetry reporting and aggregation helper functions.
+4. **`internal/profile/manager.go` created & calibration worker implemented**: Added `CalibratedThreshold`/`CalibrationResult`/`DriftDetector` in `calibration.go`, managed via the profiling manager.
+5. **Gemma Scope NPZ+JSON format support implemented**: Added robust `.npz` ZIP and `.npy` parser with Python dictionary sanitization, fully covered by unit tests in `internal/sae`.

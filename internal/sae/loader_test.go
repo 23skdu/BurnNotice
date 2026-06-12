@@ -1,6 +1,9 @@
 package sae
 
 import (
+	"archive/zip"
+	"bytes"
+	"encoding/binary"
 	"math"
 	"os"
 	"path/filepath"
@@ -278,4 +281,116 @@ func writeTempSAEFile(t *testing.T, content string) string {
 		t.Fatalf("write temp file: %v", err)
 	}
 	return tmp
+}
+
+func TestSAELoader_LoadGemmaScope(t *testing.T) {
+	// 1. Create mock configuration json
+	configJSON := `{"model_id":"gemma-2b","layer_index":12,"hidden_dim":3,"feature_dim":4,"l1_coefficient":0.0001}`
+	tmpConfig := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(tmpConfig, []byte(configJSON), 0600); err != nil {
+		t.Fatalf("failed to write config.json: %v", err)
+	}
+
+	// 2. Create mock .npy contents using Python format headers
+	// encoder_weights shape: (4, 3) (features × input_dim)
+	encWHeader := `{'descr': '<f4', 'fortran_order': False, 'shape': (4, 3), }`
+	encWData := []float32{
+		1, 0, 0,
+		0, 1, 0,
+		0, 0, 1,
+		0.5, 0.5, 0.5,
+	}
+	encWBytes := createMockNpy([]int{4, 3}, encWData, encWHeader)
+
+	// encoder_bias shape: (4,)
+	encBHeader := `{'descr': '<f4', 'fortran_order': False, 'shape': (4,), }`
+	encBData := []float32{0.1, 0.2, 0.3, 0.4}
+	encBBytes := createMockNpy([]int{4}, encBData, encBHeader)
+
+	// decoder_weights shape: (3, 4) (input_dim × features)
+	// parseNpyMatrixTransposed reads shape (3, 4) and returns a feature_dim × hidden_dim matrix (4 × 3).
+	decWHeader := `{'descr': '<f4', 'fortran_order': False, 'shape': (3, 4), }`
+	decWData := []float32{
+		1, 0, 0, 0.5,
+		0, 1, 0, 0.5,
+		0, 0, 1, 0.5,
+	}
+	decWBytes := createMockNpy([]int{3, 4}, decWData, decWHeader)
+
+	// decoder_bias shape: (3,)
+	decBHeader := `{'descr': '<f4', 'fortran_order': False, 'shape': (3,), }`
+	decBData := []float32{0.5, 0.6, 0.7}
+	decBBytes := createMockNpy([]int{3}, decBData, decBHeader)
+
+	// 3. Put them in zip
+	zipFiles := map[string][]byte{
+		"encoder_weights.npy": encWBytes,
+		"encoder_bias.npy":    encBBytes,
+		"decoder_weights.npy": decWBytes,
+		"decoder_bias.npy":    decBBytes,
+	}
+	zipBytes := createMockNpz(zipFiles)
+
+	tmpNpz := filepath.Join(t.TempDir(), "sae.npz")
+	if err := os.WriteFile(tmpNpz, zipBytes, 0600); err != nil {
+		t.Fatalf("failed to write npz: %v", err)
+	}
+
+	// 4. Test loading
+	loader := &SAELoader{}
+	if err := loader.LoadGemmaScope(tmpNpz, tmpConfig); err != nil {
+		t.Fatalf("LoadGemmaScope failed: %v", err)
+	}
+
+	// Verify loaded weights
+	if loader.weights.FeatureCount != 4 {
+		t.Errorf("loaded feature count = %d, want 4", loader.weights.FeatureCount)
+	}
+	if loader.weights.InputDim != 3 {
+		t.Errorf("loaded input dim = %d, want 3", loader.weights.InputDim)
+	}
+	if loader.weights.LayerIndex != 12 {
+		t.Errorf("loaded layer index = %d, want 12", loader.weights.LayerIndex)
+	}
+
+	// Verify specific weights/biases
+	if math.Abs(loader.weights.EncoderBias[0]-0.1) > 1e-6 || math.Abs(loader.weights.DecoderBias[2]-0.7) > 1e-6 {
+		t.Errorf("unexpected bias values: encoder_bias[0] = %f, decoder_bias[2] = %f",
+			loader.weights.EncoderBias[0], loader.weights.DecoderBias[2])
+	}
+}
+
+func createMockNpy(shape []int, data []float32, pythonHeader string) []byte {
+	var buf bytes.Buffer
+	buf.WriteString("\x93NUMPY")
+	buf.WriteByte(1)
+	buf.WriteByte(0)
+
+	headerBytes := []byte(pythonHeader)
+	headerLen := uint16(len(headerBytes))
+	binary.Write(&buf, binary.LittleEndian, headerLen)
+	buf.Write(headerBytes)
+
+	for _, val := range data {
+		binary.Write(&buf, binary.LittleEndian, val)
+	}
+
+	return buf.Bytes()
+}
+
+func createMockNpz(files map[string][]byte) []byte {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for name, data := range files {
+		w, err := zw.Create(name)
+		if err != nil {
+			panic(err)
+		}
+		_, err = w.Write(data)
+		if err != nil {
+			panic(err)
+		}
+	}
+	zw.Close()
+	return buf.Bytes()
 }
