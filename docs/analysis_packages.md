@@ -128,7 +128,7 @@ id  := analyzer.IntrinsicDimensionality() // # components for 90% variance
 | **Pairwise cosine** | Categories occupy different subspaces | Categories share similar representation |
 | **Intrinsic dimensionality** | Single concept cone (aligned behaviors) | Multiple independent concept directions |
 
-A low intrinsic dimensionality (e.g., 1–2) with high pairwise cosine between `deception` and `jailbreak` would indicate that the model represents both behaviors in the same activation subspace — a single steering direction can suppress both.
+A low intrinsic dimensionality (e.g., 1–2) with high pairwise cosine between `deception` and `jailbreak` would indicate that the model represents both behaviors in the same activation subspace - a single steering direction can suppress both.
 
 ---
 
@@ -194,7 +194,7 @@ The `DecisionLayer` algorithm:
 
 **File**: [`ouroboros.go`](file:///home/rsd/REPOS/BurnNotice/internal/analysis/ouroboros.go)
 
-The `OuroborosDetector` addresses a critical failure mode in activation steering: **layer compensation**. When a steering intervention suppresses a deception signal in layer N, other layers may compensate by increasing their deception-related activation energy — partially or fully negating the intervention.
+The `OuroborosDetector` addresses a critical failure mode in activation steering: **layer compensation**. When a steering intervention suppresses a deception signal in layer N, other layers may compensate by increasing their deception-related activation energy - partially or fully negating the intervention.
 
 Named after the self-consuming serpent, the ouroboros pattern describes a model that re-routes its deceptive behavior around interventions.
 

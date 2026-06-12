@@ -11,7 +11,7 @@
 
 ## 1. Executive Summary
 
-BurnNotice is a real-time neural activation monitoring and intervention framework designed to detect when an LLM agent is considering deception, policy violation, or alignment drift — before the behavior manifests in output. By adapting abliteration techniques (originally developed for refusal removal) in reverse — as detection and steering mechanisms rather than permanent weight edits — BurnNotice provides a white-box governance layer for autonomous AI agents.
+BurnNotice is a real-time neural activation monitoring and intervention framework designed to detect when an LLM agent is considering deception, policy violation, or alignment drift - before the behavior manifests in output. By adapting abliteration techniques (originally developed for refusal removal) in reverse - as detection and steering mechanisms rather than permanent weight edits - BurnNotice provides a white-box governance layer for autonomous AI agents.
 
 The framework identifies "conflict subspaces" and "deception directions" in activation space, visualizes the neural circuits involved in real time, and offers both passive monitoring and active intervention capabilities to keep agents aligned with their assigned rules and tasks.
 
@@ -33,7 +33,7 @@ LLM agents deployed in production exhibit failure modes that traditional output-
 - **Safety geometry collapse**: Fine-tuning that erodes the latent boundaries between safe and unsafe behavior
 - **Refusal suppression**: Jailbreaks that bypass learned safety mechanisms by manipulating activation trajectories
 
-Current governance tools (Agent Sentinel, Agent-Aegis, LLUMO, etc.) operate at the API/trace level — monitoring costs, latency, tool calls, and output text. None inspect the internal neural state of the model during generation.
+Current governance tools (Agent Sentinel, Agent-Aegis, LLUMO, etc.) operate at the API/trace level - monitoring costs, latency, tool calls, and output text. None inspect the internal neural state of the model during generation.
 
 ### 2.2 The Opportunity
 
@@ -41,7 +41,7 @@ Recent mechanistic interpretability research has established that:
 
 1. **Refusal is mediated by a single direction** in activation space (Arditi et al., 2024)
 2. **Deception induces representational shifts** detectable via linear probes with 93%+ accuracy (multiple studies, 2025)
-3. **Truth neurons** exist — neurons that encode truthfulness in a subject-agnostic manner (2025)
+3. **Truth neurons** exist - neurons that encode truthfulness in a subject-agnostic manner (2025)
 4. **Conflict subspaces** are where LLMs decide between competing objectives, orthogonal to truth subspaces (2025)
 5. **Hallucination manifests as phase transitions** in latent potential energy, detectable via SAE features (HalluSAE, 2026)
 6. **Policy violations** can be detected via activation-space whitening without training (2025)
@@ -52,10 +52,10 @@ Abliteration demonstrated that these directions can be permanently removed via w
 
 Go is chosen as the primary language for several reasons:
 
-- **Long-running processes**: Go's goroutine model and garbage collector are optimized for services that run for weeks or months without restart — essential for continuous model analysis jobs that may take hours or days
+- **Long-running processes**: Go's goroutine model and garbage collector are optimized for services that run for weeks or months without restart - essential for continuous model analysis jobs that may take hours or days
 - **Memory efficiency**: Analyzing activations from large models (billions of parameters, thousands of layers × tokens) requires careful memory management. Go's explicit control over allocations and slice reuse avoids the overhead of Python's object model
 - **Concurrency**: Model profiling runs multiple contrastive prompt batches in parallel; Go channels provide clean synchronization without callback hell
-- **Single binary deployment**: No virtual environment, no dependency resolution at deploy time — critical for GPU cluster environments
+- **Single binary deployment**: No virtual environment, no dependency resolution at deploy time - critical for GPU cluster environments
 - **ONNX + WASM**: All model inference runs through ONNX Runtime with WASM fallback, eliminating Python/PyTorch dependencies entirely. Models are converted from HuggingFace format via the CLI tool
 - **Longbow Vector Engine**: Apache Arrow Flight-based vector engine provides zero-copy activation storage, SIMD-optimized distance calculations (cosine, euclidean, dot product), off-heap memory management via SlabArena, and distributed activation sharing across nodes. BurnNotice leverages Longbow's HNSW index for fast nearest-neighbor lookups on activation centroids, its Arrow RecordBatch format for efficient activation streaming, and its COW publication model for lock-free concurrent scoring
 - **Native GPU Plugins**: The math-heavy steering computations (`cosine_similarity` and `dynamic_rotation`) are implemented as native GPU kernels (`plugins/cuda_kernels.cu`, `plugins/metal/kernels.metal`) and injected directly into host inference engines via PyBind11 (vLLM) and `IPluginV2DynamicExt` (TensorRT).
@@ -365,7 +365,7 @@ policies:
 
 See [`docs/architecture.md`](architecture.md) for the complete dashboard architecture with Mermaid diagrams.
 
-The dashboard is a Go `net/http` server serving Templ templates. HTMX handles all dynamic updates — no JavaScript framework, no build step, no SPA complexity. Real-time data flows via Server-Sent Events (SSE).
+The dashboard is a Go `net/http` server serving Templ templates. HTMX handles all dynamic updates - no JavaScript framework, no build step, no SPA complexity. Real-time data flows via Server-Sent Events (SSE).
 
 ---
 
@@ -1446,7 +1446,7 @@ For closed models (GPT-4, Claude), BurnNotice can operate in proxy mode:
 
 3. **Temporal dynamics**: Deception signals may emerge at different layers for different types of dishonesty. Can we build a layer-specific temporal model of deception emergence?
 
-4. **Reasoning models**: How do deception signals manifest in CoT/reasoning models where the "thinking" tokens provide additional activation data? Strategic deception in CoT models shows 89% detection accuracy — can we do better?
+4. **Reasoning models**: How do deception signals manifest in CoT/reasoning models where the "thinking" tokens provide additional activation data? Strategic deception in CoT models shows 89% detection accuracy - can we do better?
 
 5. **Adversarial robustness**: If an attacker knows BurnNotice is monitoring, can they craft activations that evade detection while still producing deceptive output? Multi-probe redundancy helps but needs formal analysis.
 

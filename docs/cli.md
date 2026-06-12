@@ -422,7 +422,7 @@ The ONNX file does not exist at the specified path. Verify the path and check th
 
 The ONNX Runtime could not load the model. Common causes:
 
-- The ONNX file is weight-only (exported by the built-in converter) — use `optimum-cli` instead
+- The ONNX file is weight-only (exported by the built-in converter) - use `optimum-cli` instead
 - The `ONNX_RUNTIME_LIB` environment variable points to a missing or incompatible library
 - The model uses operators not supported by your ONNX Runtime version
 
