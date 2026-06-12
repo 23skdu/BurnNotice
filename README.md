@@ -41,17 +41,70 @@ graph TD
 
 ```text
 ├── cmd/
-│   ├── burnnotice/       # CLI utility for steering, model conversion, and profiling
-│   └── dashboard/        # Live dashboard for real-time latent governance visualization
+│   ├── burnnotice/        # CLI: download, convert, profile, validate, recommend
+│   └── dashboard/         # Live dashboard: real-time latent governance visualization
 ├── docs/
-│   ├── analysis.md       # Deep theoretical analysis of latent alignment & audits
-│   └── architecture.md   # Overall system design and component definitions
+│   ├── architecture.md    # System design, component diagrams, tech stack
+│   ├── analysis_packages.md # internal/analysis: alignment, cone, cross-layer, ouroboros
+│   ├── cli.md             # Full CLI reference for all commands & flags
+│   ├── metrics.md         # All 50+ Prometheus metrics & OTel export config
+│   ├── testing.md         # Testing strategy, coverage, fuzz tests, benchmarks
+│   └── nextsteps.md       # Prioritized implementation roadmap
 ├── internal/
-│   ├── extract/          # DIM & PCA algorithms for singular vector extraction
-│   ├── policy/           # Policy engine, YAML config parser, & kill-switch guards
-│   ├── steer/            # Planar rotation, Selective Steering, and LoRA logic
-│   └── zjson/            # High-performance zero-copy JSON parser & encoders
+│   ├── agent/             # Agent monitoring hooks
+│   ├── analysis/          # Post-profile geometry: alignment imprint, concept cone, CKA
+│   ├── checkpoint/        # Job checkpoint manager (resume long-running profiling)
+│   ├── compliance/        # Regulatory compliance wrappers
+│   ├── converter/         # HuggingFace → ONNX format converter
+│   ├── datasets/          # Contrastive dataset loaders (JSON, JSONL)
+│   ├── downloader/        # Parallel HuggingFace Hub file downloader
+│   ├── engine/            # ONNX Runtime inference engine with forward hooks
+│   ├── extract/           # DIM, PCA, SVD, INLP, whitened direction extraction
+│   ├── hallucination/     # SAE-energy rolling-window hallucination detector
+│   ├── ledger/            # Activity ledger (async deception event log)
+│   ├── longbow/           # Vector store client (Longbow Flight + SQLite fallback)
+│   ├── math/              # Robust stats: winsorization, whitening, ZCA, projection
+│   ├── memory/            # sync.Pool activation buffer management
+│   ├── metrics/           # Prometheus instruments (50+) & OTel OTLP/HTTP exporter
+│   ├── onnxpb/            # ONNX protobuf bindings & getter helpers
+│   ├── policy/            # Policy engine, YAML parser, kill-switch guards
+│   ├── policydetect/      # Policy violation detector
+│   ├── profile/           # Model profile (gob/protobuf serialization & versioning)
+│   ├── profiler/          # Long-running profiler with GPU-aware scheduling
+│   ├── registry/          # Profile registry (load, save, list)
+│   ├── sae/               # Sparse Autoencoder loader (NPZ/NPY, Gemma Scope)
+│   ├── scheduler/         # Job queue with GPU memory-aware scheduling
+│   ├── scoring/           # Activation scoring pipeline (sync + async ring-buffer)
+│   ├── steer/             # Steering: ActAdd, LoRA, angular rotation, ablation
+│   ├── telemetry/         # Telemetry reporter (metrics push + file fallback)
+│   ├── tokenizer/         # Tokenizer interface
+│   ├── wasm/              # WASM inference backend (wazero)
+│   ├── web/               # SSE event hub & HTTP handlers for dashboard
+│   └── zjson/             # Zero-copy JSON tokenizer & encoder
+├── scripts/
+│   └── update_paper.py    # arXiv LaTeX post-processor (strips code blocks for submission)
+├── e2e/                   # End-to-end integration tests
+├── grafana/               # Pre-built Grafana dashboard JSON files
+├── helm/                  # Kubernetes Helm chart
+├── static/                # Static web assets (CSS, JS, uPlot)
+├── templates/             # Templ HTML templates for the web dashboard
+├── Dockerfile             # Standard CPU container
+├── Dockerfile.cuda        # CUDA GPU container
+├── Dockerfile.metal       # Apple Metal container
+└── docker-compose.yml     # Full local stack (BurnNotice + Prometheus + Grafana)
 ```
+
+---
+
+## 📖 Documentation
+
+| Doc | Description |
+|---|---|
+| [architecture.md](docs/architecture.md) | System design, Mermaid diagrams, deployment topology |
+| [cli.md](docs/cli.md) | Full CLI reference for all commands and flags |
+| [metrics.md](docs/metrics.md) | All Prometheus metrics + OTel export configuration |
+| [testing.md](docs/testing.md) | Testing strategy, coverage, fuzz tests, benchmarks |
+| [analysis_packages.md](docs/analysis_packages.md) | Alignment imprint, concept cone, cross-layer, ouroboros |
 
 ---
 
