@@ -348,21 +348,19 @@ func readNpyHeader(data []byte) ([]int, bool, error) {
 	if string(data[:6]) != "\x93NUMPY" {
 		return nil, false, fmt.Errorf("invalid npy magic bytes")
 	}
-	majorVer := int(data[6])
-	_ = majorVer
-
 	var headerLen int64
-	if data[6] == 1 {
+	switch data[6] {
+	case 1:
 		if len(data) < 10 {
 			return nil, false, fmt.Errorf("npy v1 header too short")
 		}
 		headerLen = int64(binary.LittleEndian.Uint16(data[8:10]))
-	} else if data[6] == 2 {
+	case 2:
 		if len(data) < 12 {
 			return nil, false, fmt.Errorf("npy v2 header too short")
 		}
 		headerLen = int64(binary.LittleEndian.Uint32(data[8:12]))
-	} else {
+	default:
 		return nil, false, fmt.Errorf("unsupported npy version: %d", data[6])
 	}
 

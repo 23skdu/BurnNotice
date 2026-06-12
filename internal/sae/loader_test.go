@@ -300,12 +300,12 @@ func TestSAELoader_LoadGemmaScope(t *testing.T) {
 		0, 0, 1,
 		0.5, 0.5, 0.5,
 	}
-	encWBytes := createMockNpy([]int{4, 3}, encWData, encWHeader)
+	encWBytes := createMockNpy(encWData, encWHeader)
 
 	// encoder_bias shape: (4,)
 	encBHeader := `{'descr': '<f4', 'fortran_order': False, 'shape': (4,), }`
 	encBData := []float32{0.1, 0.2, 0.3, 0.4}
-	encBBytes := createMockNpy([]int{4}, encBData, encBHeader)
+	encBBytes := createMockNpy(encBData, encBHeader)
 
 	// decoder_weights shape: (3, 4) (input_dim × features)
 	// parseNpyMatrixTransposed reads shape (3, 4) and returns a feature_dim × hidden_dim matrix (4 × 3).
@@ -315,12 +315,12 @@ func TestSAELoader_LoadGemmaScope(t *testing.T) {
 		0, 1, 0, 0.5,
 		0, 0, 1, 0.5,
 	}
-	decWBytes := createMockNpy([]int{3, 4}, decWData, decWHeader)
+	decWBytes := createMockNpy(decWData, decWHeader)
 
 	// decoder_bias shape: (3,)
 	decBHeader := `{'descr': '<f4', 'fortran_order': False, 'shape': (3,), }`
 	decBData := []float32{0.5, 0.6, 0.7}
-	decBBytes := createMockNpy([]int{3}, decBData, decBHeader)
+	decBBytes := createMockNpy(decBData, decBHeader)
 
 	// 3. Put them in zip
 	zipFiles := map[string][]byte{
@@ -360,7 +360,7 @@ func TestSAELoader_LoadGemmaScope(t *testing.T) {
 	}
 }
 
-func createMockNpy(shape []int, data []float32, pythonHeader string) []byte {
+func createMockNpy(data []float32, pythonHeader string) []byte {
 	var buf bytes.Buffer
 	buf.WriteString("\x93NUMPY")
 	buf.WriteByte(1)
@@ -395,7 +395,7 @@ func createMockNpz(files map[string][]byte) []byte {
 	return buf.Bytes()
 }
 
-func createMockNpyV2(shape []int, data []float32, pythonHeader string) []byte {
+func createMockNpyV2(data []float32, pythonHeader string) []byte {
 	var buf bytes.Buffer
 	buf.WriteString("\x93NUMPY")
 	buf.WriteByte(2) // version 2
@@ -471,7 +471,7 @@ func TestSAELoader_AdditionalEdgeCases(t *testing.T) {
 	}
 
 	// 5. LoadGemmaScope NPZ missing elements
-	validNpy := createMockNpy([]int{2}, []float32{0, 0}, `{'descr': '<f4', 'fortran_order': False, 'shape': (2,), }`)
+	validNpy := createMockNpy([]float32{0, 0}, `{'descr': '<f4', 'fortran_order': False, 'shape': (2,), }`)
 	
 	// Missing encoder weights
 	zipBytes1 := createMockNpz(map[string][]byte{"encoder_bias.npy": validNpy})
@@ -507,33 +507,33 @@ func TestSAELoader_AdditionalEdgeCases(t *testing.T) {
 
 	// 6. parseNpyMatrix edge cases
 	// Not 2D
-	not2D := createMockNpy([]int{2}, []float32{0, 0}, `{'descr': '<f4', 'fortran_order': False, 'shape': (2,), }`)
+	not2D := createMockNpy([]float32{0, 0}, `{'descr': '<f4', 'fortran_order': False, 'shape': (2,), }`)
 	if _, err := parseNpyMatrix(not2D); err == nil {
 		t.Error("expected error for non-2D npy matrix")
 	}
 
 	// Truncated data
-	truncated := createMockNpy([]int{2, 2}, []float32{1, 2}, `{'descr': '<f4', 'fortran_order': False, 'shape': (2, 2), }`)
+	truncated := createMockNpy([]float32{1, 2}, `{'descr': '<f4', 'fortran_order': False, 'shape': (2, 2), }`)
 	if _, err := parseNpyMatrix(truncated[:len(truncated)-2]); err == nil {
 		t.Error("expected error for truncated npy matrix")
 	}
 
 	// 7. parseNpyMatrixTransposed edge cases
 	// Empty matrix (0 shape)
-	emptyNpy := createMockNpy([]int{0, 2}, []float32{}, `{'descr': '<f4', 'fortran_order': False, 'shape': (0, 2), }`)
+	emptyNpy := createMockNpy([]float32{}, `{'descr': '<f4', 'fortran_order': False, 'shape': (0, 2), }`)
 	if _, err := parseNpyMatrixTransposed(emptyNpy); err == nil {
 		t.Error("expected error for empty matrix transposition")
 	}
 
 	// 8. parseNpyVector edge cases
 	// Not 1D
-	not1D := createMockNpy([]int{2, 2}, []float32{1, 2, 3, 4}, `{'descr': '<f4', 'fortran_order': False, 'shape': (2, 2), }`)
+	not1D := createMockNpy([]float32{1, 2, 3, 4}, `{'descr': '<f4', 'fortran_order': False, 'shape': (2, 2), }`)
 	if _, err := parseNpyVector(not1D); err == nil {
 		t.Error("expected error for non-1D vector")
 	}
 
 	// Truncated vector
-	truncatedVec := createMockNpy([]int{4}, []float32{1, 2}, `{'descr': '<f4', 'fortran_order': False, 'shape': (4,), }`)
+	truncatedVec := createMockNpy([]float32{1, 2}, `{'descr': '<f4', 'fortran_order': False, 'shape': (4,), }`)
 	if _, err := parseNpyVector(truncatedVec[:len(truncatedVec)-2]); err == nil {
 		t.Error("expected error for truncated vector")
 	}
@@ -553,18 +553,18 @@ func TestSAELoader_AdditionalEdgeCases(t *testing.T) {
 		t.Error("expected error when header len extends beyond data")
 	}
 	// Parse npy header JSON error
-	badHeaderStr := createMockNpy([]int{2}, []float32{1, 2}, `{'descr': '<f4', 'fortran_order': False, 'shape': (2,`)
+	badHeaderStr := createMockNpy([]float32{1, 2}, `{'descr': '<f4', 'fortran_order': False, 'shape': (2,`)
 	if _, _, err := readNpyHeader(badHeaderStr); err == nil {
 		t.Error("expected error for invalid python dict syntax")
 	}
 	// Unsupported dtype
-	badDtype := createMockNpy([]int{2}, []float32{1, 2}, `{'descr': '<i8', 'fortran_order': False, 'shape': (2,), }`)
+	badDtype := createMockNpy([]float32{1, 2}, `{'descr': '<i8', 'fortran_order': False, 'shape': (2,), }`)
 	if _, _, err := readNpyHeader(badDtype); err == nil {
 		t.Error("expected error for unsupported dtype <i8")
 	}
 
 	// 10. v2 header parse check
-	v2Bytes := createMockNpyV2([]int{2}, []float32{1, 2}, `{'descr': '<f4', 'fortran_order': False, 'shape': (2,), }`)
+	v2Bytes := createMockNpyV2([]float32{1, 2}, `{'descr': '<f4', 'fortran_order': False, 'shape': (2,), }`)
 	shape, fortran, err := readNpyHeader(v2Bytes)
 	if err != nil {
 		t.Errorf("readNpyHeader v2 error: %v", err)
@@ -593,11 +593,11 @@ func TestSAELoader_LoadGemmaScope_AlternativeNamesAndNoConfig(t *testing.T) {
 		0, 0, 1,
 		0.5, 0.5, 0.5,
 	}
-	encWBytes := createMockNpy([]int{4, 3}, encWData, encWHeader)
+	encWBytes := createMockNpy(encWData, encWHeader)
 
 	encBHeader := `{'descr': '<f4', 'fortran_order': False, 'shape': (4,), }`
 	encBData := []float32{0.1, 0.2, 0.3, 0.4}
-	encBBytes := createMockNpy([]int{4}, encBData, encBHeader)
+	encBBytes := createMockNpy(encBData, encBHeader)
 
 	decWHeader := `{'descr': '<f4', 'fortran_order': False, 'shape': (3, 4), }`
 	decWData := []float32{
@@ -605,11 +605,11 @@ func TestSAELoader_LoadGemmaScope_AlternativeNamesAndNoConfig(t *testing.T) {
 		0, 1, 0, 0.5,
 		0, 0, 1, 0.5,
 	}
-	decWBytes := createMockNpy([]int{3, 4}, decWData, decWHeader)
+	decWBytes := createMockNpy(decWData, decWHeader)
 
 	decBHeader := `{'descr': '<f4', 'fortran_order': False, 'shape': (3,), }`
 	decBData := []float32{0.5, 0.6, 0.7}
-	decBBytes := createMockNpy([]int{3}, decBData, decBHeader)
+	decBBytes := createMockNpy(decBData, decBHeader)
 
 	zipFiles := map[string][]byte{
 		"W_enc.npy": encWBytes,
