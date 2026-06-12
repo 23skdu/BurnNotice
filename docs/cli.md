@@ -1,7 +1,7 @@
 # BurnNotice CLI Reference
 
-> **Version**: 0.2.0
-> **Updated**: 2026-05-27
+> **Version**: 0.6.0
+> **Updated**: 2026-06-12
 
 ## Overview
 
@@ -171,6 +171,13 @@ burnnotice profile [onnx-model] [flags]
 | `--output` | `-o` | `./profiles` | Profile output directory |
 | `--dataset` | | *(required)* | Path to profiling dataset (JSON or JSONL format) |
 | `--layers` | | *(all 0-31)* | Specific layers to profile (comma-separated indices) |
+| `--oversight-dataset` | | *(empty)* | Path to oversight contrastive dataset (optional) |
+| `--whitened-svd` | | `false` | Use whitened SVD extraction instead of DIM (default: true for models > 7B) |
+| `--model-size` | | `0.5B` | Model parameter count (e.g. 0.5B, 7B, 13B, 70B); drives the default --whitened-svd choice |
+| `--num-directions` | | `1` | Number of top directions to extract when --whitened-svd is set |
+| `--shrinkage` | | `-1` | Ledoit-Wolf shrinkage intensity for the whitening covariance (<0 = auto-estimate) |
+| `--eig-floor` | | `0` | Minimum eigenvalue for the whitening matrix (0 = auto, 1e-10 of max) |
+
 
 **Examples:**
 
@@ -378,10 +385,13 @@ burnnotice profile ./onnx/llama3/model.onnx \
 ## Environment Variables
 
 | Variable | Description |
-|----------|-------------|
+|----------|--------------|
 | `HF_TOKEN` | HuggingFace API token (alternative to `--token`) |
 | `ONNX_RUNTIME_LIB` | Path to ONNX Runtime shared library (e.g., `/usr/lib/libonnxruntime.so`) |
 | `BURNNOTICE_MODEL_DIR` | Default model directory (overrides `--output` defaults) |
+| `BURNNOTICE_OTEL_ENDPOINT` | OTLP/HTTP endpoint for OpenTelemetry metric export (e.g., `http://otel-collector:4318`). Empty = disabled. |
+| `BURNNOTICE_OTEL_INSECURE` | Set `true` to disable TLS for OTel export |
+| `OTEL_SERVICE_NAME` | Service name reported by the OTel exporter (default: `burnnotice`) |
 
 ---
 

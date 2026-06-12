@@ -1,8 +1,8 @@
 # BurnNotice: Architecture Overview
 
-> **Status**: Draft
-> **Date**: 2026-05-18
-> **Version**: 0.1
+> **Status**: Current
+> **Date**: 2026-06-12
+> **Version**: 0.6
 
 ---
 
@@ -25,6 +25,14 @@ graph TB
         SCORE["Scoring Engine"]
         STEER["Steering Engine"]
         POLICY["Policy Engine"]
+        HALL["Hallucination Detector"]
+    end
+
+    subgraph Analysis["Post-Profile Analysis"]
+        ALIGN["AlignmentImprintDetector"]
+        CONE["ConceptConeAnalyzer"]
+        CROSS["CrossLayerAnalyzer"]
+        OURO["OuroborosDetector"]
     end
 
     subgraph Longbow["Longbow Vector Engine"]
@@ -40,6 +48,11 @@ graph TB
         TEMPL["Templ Templates"]
         HTMX["HTMX UI"]
         SSE["SSE Hub"]
+    end
+
+    subgraph Observability["Observability"]
+        PROM["Prometheus /metrics"]
+        OTEL["OTel OTLP/HTTP Export"]
     end
 
     subgraph Storage["Storage"]
@@ -65,6 +78,12 @@ graph TB
     SCORE --> STEER
     SCORE --> POLICY
     POLICY --> STEER
+    SCORE --> HALL
+
+    PROFILES --> ALIGN
+    PROFILES --> CONE
+    PROFILES --> CROSS
+    STEER --> OURO
 
     MON --> SSE
     SCORE --> SSE
@@ -75,6 +94,10 @@ graph TB
     PROFILES --> SCORE
     CHECKPOINTS --> PROF
     LEDGER --> POLICY
+
+    SCORE --> PROM
+    STEER --> PROM
+    PROM --> OTEL
 ```
 
 ---
@@ -287,7 +310,7 @@ graph TB
 
 ### Model Profiling Pipeline
 
-Each model requires a profile that identifies its unique activation-space geometry. The profiling pipeline extracts behavioral directions, subspaces, and truth neurons.
+Each model requires a profile that identifies its unique activation-space geometry. The profiling pipeline extracts behavioral directions, subspaces, and truth neurons. After profiling, the `internal/analysis` package provides higher-order geometric inspection.
 
 ```mermaid
 graph TB
@@ -301,6 +324,12 @@ graph TB
         PERSIST["Persist Profile"]
     end
 
+    subgraph PostAnalysis["Post-Profile Analysis"]
+        ALIGN["AlignmentImprintDetector<br/>(DPO / RLHF / CAI / SFT)"]
+        CONE["ConceptConeAnalyzer<br/>(harm subspace geometry)"]
+        CROSS["CrossLayerAnalyzer<br/>(decision layer + CKA)"]
+    end
+
     LOAD --> HOOK
     HOOK --> BATCH
     BATCH --> COLLECT
@@ -309,6 +338,9 @@ graph TB
     VALIDATE --> PERSIST
 
     PERSIST --> PROFILE["Model Profile<br/>(Protobuf/gob)"]
+    PROFILE --> ALIGN
+    PROFILE --> CONE
+    PROFILE --> CROSS
 ```
 
 ### Long-Running Architecture
@@ -411,6 +443,8 @@ sequenceDiagram
 | **Off-Heap Memory** | Longbow SlabArena | 1MB slab allocation, NUMA-aware, bypasses Go GC |
 | **Distance Kernels** | Longbow SIMD (AVX2/AVX-512/NEON) | 3-8x faster cosine, euclidean, dot product |
 | **Linear Algebra** | gonum.org/v1/gonum | Direction extraction (DIM, PCA, SVD, whitening) |
+| **Analysis** | `internal/analysis` | Alignment imprint, concept cone, cross-layer CKA, ouroboros detection |
+| **Hallucination Detection** | `internal/hallucination` | SAE-energy rolling-window spike detection |
 | **CLI Framework** | cobra | HuggingFace download, ONNX conversion, profiling |
 | **Web Server** | net/http | Built-in HTTP server |
 | **Templates** | Templ | Type-safe HTML generation |
@@ -418,6 +452,8 @@ sequenceDiagram
 | **Real-time** | Server-Sent Events | Live score streaming to dashboard |
 | **Serialization** | Protocol Buffers / gob | Profile storage, checkpointing |
 | **Charting** | uPlot | Lightweight activation visualizations |
+| **Metrics** | Prometheus + OTel OTLP/HTTP | 50+ instruments; push/pull dual-backend observability |
+| **Scripts** | Python 3 (`scripts/`) | Research utilities (arxiv paper post-processing) |
 
 ---
 
