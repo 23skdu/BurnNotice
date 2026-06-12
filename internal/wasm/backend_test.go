@@ -264,3 +264,599 @@ func dumpModuleHex(t *testing.T, data []byte) {
 	}
 	fmt.Fprintln(os.Stderr)
 }
+
+func buildTestModuleWithIntermediate() []byte {
+	var buf bytes.Buffer
+
+	// Preamble
+	buf.Write([]byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00})
+
+		// Type section (id=1): two types
+	// Type 0: (i32) -> (i32)
+	// Type 1: (i32) -> (i32, i32)
+	typeContent := []byte{
+		0x02,                                // 2 types
+		0x60, 0x01, 0x7f, 0x01, 0x7f,        // Type 0
+		0x60, 0x01, 0x7f, 0x02, 0x7f, 0x7f,  // Type 1
+	}
+	buf.WriteByte(1)
+	buf.Write(leb128(uint32(len(typeContent))))
+	buf.Write(typeContent)
+
+	// Function section (id=3): 2 functions, type index 0 and 1
+	funcContent := []byte{0x02, 0x00, 0x01}
+	buf.WriteByte(3)
+	buf.Write(leb128(uint32(len(funcContent))))
+	buf.Write(funcContent)
+
+	// Memory section (id=5): 1 memory, min 1 page
+	memContent := []byte{0x01, 0x00, 0x01}
+	buf.WriteByte(5)
+	buf.Write(leb128(uint32(len(memContent))))
+	buf.Write(memContent)
+
+	// Export section (id=7): memory, forward, get_intermediate
+	exportContent := []byte{
+		0x03,                                                 // 3 exports
+		0x06, 'm', 'e', 'm', 'o', 'r', 'y', 0x02, 0x00,      // "memory"
+		0x07, 'f', 'o', 'r', 'w', 'a', 'r', 'd', 0x00, 0x00,  // "forward"
+		0x10, 'g', 'e', 't', '_', 'i', 'n', 't', 'e', 'r', 'm', 'e', 'd', 'i', 'a', 't', 'e', 0x00, 0x01, // "get_intermediate"
+	}
+	buf.WriteByte(7)
+	buf.Write(leb128(uint32(len(exportContent))))
+	buf.Write(exportContent)
+
+	// Code section (id=10): 2 bodies
+	codeContent := []byte{
+		0x02, // 2 bodies
+		// body 0 (forward): size 4
+		0x04, 0x00, 0x20, 0x00, 0x0b,
+		// body 1 (get_intermediate): size 6 (locals=0, i32.const 0, i32.const 4, end)
+		0x06, 0x00, 0x41, 0x00, 0x41, 0x04, 0x0b,
+	}
+	buf.WriteByte(10)
+	buf.Write(leb128(uint32(len(codeContent))))
+	buf.Write(codeContent)
+
+	// Data section (id=11): active segment setting memory offset 0 to [1.0, 2.0, 3.0, 4.0]
+	dataContent := []byte{
+		0x01,             // 1 segment
+		0x00,             // active, memory 0
+		0x41, 0x00, 0x0b, // offset 0
+		0x10,             // 16 bytes
+		0x00, 0x00, 0x80, 0x3f, // 1.0
+		0x00, 0x00, 0x00, 0x40, // 2.0
+		0x00, 0x00, 0x40, 0x40, // 3.0
+		0x00, 0x00, 0x80, 0x40, // 4.0
+	}
+	buf.WriteByte(11)
+	buf.Write(leb128(uint32(len(dataContent))))
+	buf.Write(dataContent)
+
+	return buf.Bytes()
+}
+
+func TestGetIntermediate_Success(t *testing.T) {
+	testMod := buildTestModuleWithIntermediate()
+	path := writeTestModule(t, testMod)
+	backend, err := NewWASMBackend(path)
+	if err != nil {
+		t.Fatalf("NewWASMBackend failed: %v", err)
+	}
+	defer backend.Close()
+
+	// Extract intermediate (which should point to offset 0, length 4)
+	out, err := backend.GetIntermediate(0)
+	if err != nil {
+		t.Fatalf("GetIntermediate failed: %v", err)
+	}
+	expected := []float32{1.0, 2.0, 3.0, 4.0}
+	if len(out) != len(expected) {
+		t.Fatalf("got %d outputs, want %d", len(out), len(expected))
+	}
+	for i := range expected {
+		if out[i] != expected[i] {
+			t.Errorf("out[%d] = %f, want %f", i, out[i], expected[i])
+		}
+	}
+}
+
+func TestForward_InputTooLarge(t *testing.T) {
+	backend := &WASMBackend{loaded: true}
+	largeInput := make([]float32, (1<<24)+1)
+	_, err := backend.Forward(largeInput)
+	if err == nil {
+		t.Error("expected error for too large input")
+	}
+}
+
+func TestGetIntermediate_NegativeLayerIndex(t *testing.T) {
+	testMod := buildTestModuleWithIntermediate()
+	path := writeTestModule(t, testMod)
+	backend, err := NewWASMBackend(path)
+	if err != nil {
+		t.Fatalf("NewWASMBackend failed: %v", err)
+	}
+	defer backend.Close()
+
+	_, err = backend.GetIntermediate(-1)
+	if err == nil {
+		t.Error("expected error for negative layer index")
+	}
+}
+
+func TestNewWASMBackend_InvalidWasmFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "invalid.wasm")
+	err := os.WriteFile(path, []byte("not valid wasm bytes"), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = NewWASMBackend(path)
+	if err == nil {
+		t.Error("expected error compiling invalid WASM file")
+	}
+}
+
+func TestForward_MissingMemoryExport(t *testing.T) {
+	var buf bytes.Buffer
+	buf.Write([]byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00})
+	typeContent := []byte{0x01, 0x60, 0x01, 0x7f, 0x01, 0x7f}
+	buf.WriteByte(1)
+	buf.Write(leb128(uint32(len(typeContent))))
+	buf.Write(typeContent)
+	funcContent := []byte{0x01, 0x00}
+	buf.WriteByte(3)
+	buf.Write(leb128(uint32(len(funcContent))))
+	buf.Write(funcContent)
+	exportContent := []byte{
+		0x01, // 1 export
+		0x07, 'f', 'o', 'r', 'w', 'a', 'r', 'd', 0x00, 0x00,
+	}
+	buf.WriteByte(7)
+	buf.Write(leb128(uint32(len(exportContent))))
+	buf.Write(exportContent)
+	codeContent := []byte{0x01, 0x04, 0x00, 0x20, 0x00, 0x0b}
+	buf.WriteByte(10)
+	buf.Write(leb128(uint32(len(codeContent))))
+	buf.Write(codeContent)
+
+	path := writeTestModule(t, buf.Bytes())
+	backend, err := NewWASMBackend(path)
+	if err != nil {
+		t.Fatalf("NewWASMBackend failed: %v", err)
+	}
+	defer backend.Close()
+
+	_, err = backend.Forward([]float32{1.0})
+	if err == nil {
+		t.Error("expected error for missing memory export")
+	}
+}
+
+func TestForward_MissingForwardExport(t *testing.T) {
+	var buf bytes.Buffer
+	buf.Write([]byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00})
+	typeContent := []byte{0x01, 0x60, 0x01, 0x7f, 0x01, 0x7f}
+	buf.WriteByte(1)
+	buf.Write(leb128(uint32(len(typeContent))))
+	buf.Write(typeContent)
+	funcContent := []byte{0x01, 0x00}
+	buf.WriteByte(3)
+	buf.Write(leb128(uint32(len(funcContent))))
+	buf.Write(funcContent)
+	memContent := []byte{0x01, 0x00, 0x01}
+	buf.WriteByte(5)
+	buf.Write(leb128(uint32(len(memContent))))
+	buf.Write(memContent)
+	exportContent := []byte{
+		0x01, // 1 export
+		0x06, 'm', 'e', 'm', 'o', 'r', 'y', 0x02, 0x00,
+	}
+	buf.WriteByte(7)
+	buf.Write(leb128(uint32(len(exportContent))))
+	buf.Write(exportContent)
+	codeContent := []byte{0x01, 0x04, 0x00, 0x20, 0x00, 0x0b}
+	buf.WriteByte(10)
+	buf.Write(leb128(uint32(len(codeContent))))
+	buf.Write(codeContent)
+
+	path := writeTestModule(t, buf.Bytes())
+	backend, err := NewWASMBackend(path)
+	if err != nil {
+		t.Fatalf("NewWASMBackend failed: %v", err)
+	}
+	defer backend.Close()
+
+	_, err = backend.Forward([]float32{1.0})
+	if err == nil {
+		t.Error("expected error for missing forward export")
+	}
+}
+
+func TestForward_LargeOutputLen(t *testing.T) {
+	var buf bytes.Buffer
+	buf.Write([]byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00})
+	typeContent := []byte{0x01, 0x60, 0x01, 0x7f, 0x01, 0x7f}
+	buf.WriteByte(1)
+	buf.Write(leb128(uint32(len(typeContent))))
+	buf.Write(typeContent)
+	funcContent := []byte{0x01, 0x00}
+	buf.WriteByte(3)
+	buf.Write(leb128(uint32(len(funcContent))))
+	buf.Write(funcContent)
+	memContent := []byte{0x01, 0x00, 0x01}
+	buf.WriteByte(5)
+	buf.Write(leb128(uint32(len(memContent))))
+	buf.Write(memContent)
+	exportContent := []byte{
+		0x02,
+		0x06, 'm', 'e', 'm', 'o', 'r', 'y', 0x02, 0x00,
+		0x07, 'f', 'o', 'r', 'w', 'a', 'r', 'd', 0x00, 0x00,
+	}
+	buf.WriteByte(7)
+	buf.Write(leb128(uint32(len(exportContent))))
+	buf.Write(exportContent)
+	codeContent := []byte{0x01, 0x07, 0x00, 0x41, 0x81, 0x80, 0x80, 0x08, 0x0b}
+	buf.WriteByte(10)
+	buf.Write(leb128(uint32(len(codeContent))))
+	buf.Write(codeContent)
+
+	path := writeTestModule(t, buf.Bytes())
+	backend, err := NewWASMBackend(path)
+	if err != nil {
+		t.Fatalf("NewWASMBackend failed: %v", err)
+	}
+	defer backend.Close()
+
+	_, err = backend.Forward([]float32{1.0})
+	if err == nil {
+		t.Error("expected error for too large output length")
+	}
+}
+
+func TestGetIntermediate_InvalidResultCount(t *testing.T) {
+	var buf bytes.Buffer
+	buf.Write([]byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00})
+	typeContent := []byte{
+		0x02,
+		0x60, 0x01, 0x7f, 0x01, 0x7f,
+		0x60, 0x01, 0x7f, 0x01, 0x7f,
+	}
+	buf.WriteByte(1)
+	buf.Write(leb128(uint32(len(typeContent))))
+	buf.Write(typeContent)
+	funcContent := []byte{0x02, 0x00, 0x01}
+	buf.WriteByte(3)
+	buf.Write(leb128(uint32(len(funcContent))))
+	buf.Write(funcContent)
+	memContent := []byte{0x01, 0x00, 0x01}
+	buf.WriteByte(5)
+	buf.Write(leb128(uint32(len(memContent))))
+	buf.Write(memContent)
+	exportContent := []byte{
+		0x03,
+		0x06, 'm', 'e', 'm', 'o', 'r', 'y', 0x02, 0x00,
+		0x07, 'f', 'o', 'r', 'w', 'a', 'r', 'd', 0x00, 0x00,
+		0x10, 'g', 'e', 't', '_', 'i', 'n', 't', 'e', 'r', 'm', 'e', 'd', 'i', 'a', 't', 'e', 0x00, 0x01,
+	}
+	buf.WriteByte(7)
+	buf.Write(leb128(uint32(len(exportContent))))
+	buf.Write(exportContent)
+	codeContent := []byte{
+		0x02,
+		0x04, 0x00, 0x20, 0x00, 0x0b,
+		0x04, 0x00, 0x41, 0x00, 0x0b,
+	}
+	buf.WriteByte(10)
+	buf.Write(leb128(uint32(len(codeContent))))
+	buf.Write(codeContent)
+
+	path := writeTestModule(t, buf.Bytes())
+	backend, err := NewWASMBackend(path)
+	if err != nil {
+		t.Fatalf("NewWASMBackend failed: %v", err)
+	}
+	defer backend.Close()
+
+	_, err = backend.GetIntermediate(0)
+	if err == nil {
+		t.Error("expected error when get_intermediate returns only 1 value")
+	}
+}
+
+func TestGetIntermediate_ResultOutOfBounds(t *testing.T) {
+	var buf bytes.Buffer
+	buf.Write([]byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00})
+	typeContent := []byte{
+		0x02,
+		0x60, 0x01, 0x7f, 0x01, 0x7f,
+		0x60, 0x01, 0x7f, 0x02, 0x7f, 0x7f,
+	}
+	buf.WriteByte(1)
+	buf.Write(leb128(uint32(len(typeContent))))
+	buf.Write(typeContent)
+	funcContent := []byte{0x02, 0x00, 0x01}
+	buf.WriteByte(3)
+	buf.Write(leb128(uint32(len(funcContent))))
+	buf.Write(funcContent)
+	memContent := []byte{0x01, 0x00, 0x01}
+	buf.WriteByte(5)
+	buf.Write(leb128(uint32(len(memContent))))
+	buf.Write(memContent)
+	exportContent := []byte{
+		0x03,
+		0x06, 'm', 'e', 'm', 'o', 'r', 'y', 0x02, 0x00,
+		0x07, 'f', 'o', 'r', 'w', 'a', 'r', 'd', 0x00, 0x00,
+		0x10, 'g', 'e', 't', '_', 'i', 'n', 't', 'e', 'r', 'm', 'e', 'd', 'i', 'a', 't', 'e', 0x00, 0x01,
+	}
+	buf.WriteByte(7)
+	buf.Write(leb128(uint32(len(exportContent))))
+	buf.Write(exportContent)
+	codeContent := []byte{
+		0x02,
+		0x04, 0x00, 0x20, 0x00, 0x0b,
+		0x09, 0x00, 0x41, 0x81, 0x80, 0x80, 0x08, 0x41, 0x00, 0x0b,
+	}
+	buf.WriteByte(10)
+	buf.Write(leb128(uint32(len(codeContent))))
+	buf.Write(codeContent)
+
+	path := writeTestModule(t, buf.Bytes())
+	backend, err := NewWASMBackend(path)
+	if err != nil {
+		t.Fatalf("NewWASMBackend failed: %v", err)
+	}
+	defer backend.Close()
+
+	_, err = backend.GetIntermediate(0)
+	if err == nil {
+		t.Error("expected error when get_intermediate returns too large offset")
+	}
+}
+
+func TestGetIntermediate_ZeroLength(t *testing.T) {
+	var buf bytes.Buffer
+	buf.Write([]byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00})
+	typeContent := []byte{
+		0x02,
+		0x60, 0x01, 0x7f, 0x01, 0x7f,
+		0x60, 0x01, 0x7f, 0x02, 0x7f, 0x7f,
+	}
+	buf.WriteByte(1)
+	buf.Write(leb128(uint32(len(typeContent))))
+	buf.Write(typeContent)
+	funcContent := []byte{0x02, 0x00, 0x01}
+	buf.WriteByte(3)
+	buf.Write(leb128(uint32(len(funcContent))))
+	buf.Write(funcContent)
+	memContent := []byte{0x01, 0x00, 0x01}
+	buf.WriteByte(5)
+	buf.Write(leb128(uint32(len(memContent))))
+	buf.Write(memContent)
+	exportContent := []byte{
+		0x03,
+		0x06, 'm', 'e', 'm', 'o', 'r', 'y', 0x02, 0x00,
+		0x07, 'f', 'o', 'r', 'w', 'a', 'r', 'd', 0x00, 0x00,
+		0x10, 'g', 'e', 't', '_', 'i', 'n', 't', 'e', 'r', 'm', 'e', 'd', 'i', 'a', 't', 'e', 0x00, 0x01,
+	}
+	buf.WriteByte(7)
+	buf.Write(leb128(uint32(len(exportContent))))
+	buf.Write(exportContent)
+	codeContent := []byte{
+		0x02,
+		0x04, 0x00, 0x20, 0x00, 0x0b,
+		0x06, 0x00, 0x41, 0x00, 0x41, 0x00, 0x0b,
+	}
+	buf.WriteByte(10)
+	buf.Write(leb128(uint32(len(codeContent))))
+	buf.Write(codeContent)
+
+	path := writeTestModule(t, buf.Bytes())
+	backend, err := NewWASMBackend(path)
+	if err != nil {
+		t.Fatalf("NewWASMBackend failed: %v", err)
+	}
+	defer backend.Close()
+
+	out, err := backend.GetIntermediate(0)
+	if err != nil {
+		t.Fatalf("GetIntermediate error: %v", err)
+	}
+	if len(out) != 0 {
+		t.Errorf("expected empty intermediate, got %v", out)
+	}
+}
+
+func TestNewWASMBackend_IsDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+	_, err := NewWASMBackend(tmpDir)
+	if err == nil {
+		t.Error("expected error loading directory as WASM file")
+	}
+}
+
+func TestForward_MemWriteFailed(t *testing.T) {
+	var buf bytes.Buffer
+	buf.Write([]byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00})
+	typeContent := []byte{0x01, 0x60, 0x01, 0x7f, 0x01, 0x7f}
+	buf.WriteByte(1)
+	buf.Write(leb128(uint32(len(typeContent))))
+	buf.Write(typeContent)
+	funcContent := []byte{0x01, 0x00}
+	buf.WriteByte(3)
+	buf.Write(leb128(uint32(len(funcContent))))
+	buf.Write(funcContent)
+	memContent := []byte{0x01, 0x00, 0x00}
+	buf.WriteByte(5)
+	buf.Write(leb128(uint32(len(memContent))))
+	buf.Write(memContent)
+	exportContent := []byte{
+		0x02,
+		0x06, 'm', 'e', 'm', 'o', 'r', 'y', 0x02, 0x00,
+		0x07, 'f', 'o', 'r', 'w', 'a', 'r', 'd', 0x00, 0x00,
+	}
+	buf.WriteByte(7)
+	buf.Write(leb128(uint32(len(exportContent))))
+	buf.Write(exportContent)
+	codeContent := []byte{0x01, 0x04, 0x00, 0x20, 0x00, 0x0b}
+	buf.WriteByte(10)
+	buf.Write(leb128(uint32(len(codeContent))))
+	buf.Write(codeContent)
+
+	path := writeTestModule(t, buf.Bytes())
+	backend, err := NewWASMBackend(path)
+	if err != nil {
+		t.Fatalf("NewWASMBackend failed: %v", err)
+	}
+	defer backend.Close()
+
+	_, err = backend.Forward([]float32{1.0})
+	if err == nil {
+		t.Error("expected error when writing input to 0-page memory fails")
+	}
+}
+
+func TestForward_Trap(t *testing.T) {
+	var buf bytes.Buffer
+	buf.Write([]byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00})
+	typeContent := []byte{0x01, 0x60, 0x01, 0x7f, 0x01, 0x7f}
+	buf.WriteByte(1)
+	buf.Write(leb128(uint32(len(typeContent))))
+	buf.Write(typeContent)
+	funcContent := []byte{0x01, 0x00}
+	buf.WriteByte(3)
+	buf.Write(leb128(uint32(len(funcContent))))
+	buf.Write(funcContent)
+	memContent := []byte{0x01, 0x00, 0x01}
+	buf.WriteByte(5)
+	buf.Write(leb128(uint32(len(memContent))))
+	buf.Write(memContent)
+	exportContent := []byte{
+		0x02,
+		0x06, 'm', 'e', 'm', 'o', 'r', 'y', 0x02, 0x00,
+		0x07, 'f', 'o', 'r', 'w', 'a', 'r', 'd', 0x00, 0x00,
+	}
+	buf.WriteByte(7)
+	buf.Write(leb128(uint32(len(exportContent))))
+	buf.Write(exportContent)
+	codeContent := []byte{0x01, 0x03, 0x00, 0x00, 0x0b}
+	buf.WriteByte(10)
+	buf.Write(leb128(uint32(len(codeContent))))
+	buf.Write(codeContent)
+
+	path := writeTestModule(t, buf.Bytes())
+	backend, err := NewWASMBackend(path)
+	if err != nil {
+		t.Fatalf("NewWASMBackend failed: %v", err)
+	}
+	defer backend.Close()
+
+	_, err = backend.Forward([]float32{1.0})
+	if err == nil {
+		t.Error("expected error when forward execution traps")
+	}
+}
+
+func TestGetIntermediate_Trap(t *testing.T) {
+	var buf bytes.Buffer
+	buf.Write([]byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00})
+	typeContent := []byte{
+		0x02,
+		0x60, 0x01, 0x7f, 0x01, 0x7f,
+		0x60, 0x01, 0x7f, 0x02, 0x7f, 0x7f,
+	}
+	buf.WriteByte(1)
+	buf.Write(leb128(uint32(len(typeContent))))
+	buf.Write(typeContent)
+	funcContent := []byte{0x02, 0x00, 0x01}
+	buf.WriteByte(3)
+	buf.Write(leb128(uint32(len(funcContent))))
+	buf.Write(funcContent)
+	memContent := []byte{0x01, 0x00, 0x01}
+	buf.WriteByte(5)
+	buf.Write(leb128(uint32(len(memContent))))
+	buf.Write(memContent)
+	exportContent := []byte{
+		0x03,
+		0x06, 'm', 'e', 'm', 'o', 'r', 'y', 0x02, 0x00,
+		0x07, 'f', 'o', 'r', 'w', 'a', 'r', 'd', 0x00, 0x00,
+		0x10, 'g', 'e', 't', '_', 'i', 'n', 't', 'e', 'r', 'm', 'e', 'd', 'i', 'a', 't', 'e', 0x00, 0x01,
+	}
+	buf.WriteByte(7)
+	buf.Write(leb128(uint32(len(exportContent))))
+	buf.Write(exportContent)
+	codeContent := []byte{
+		0x02,
+		0x04, 0x00, 0x20, 0x00, 0x0b,
+		0x03, 0x00, 0x00, 0x0b,
+	}
+	buf.WriteByte(10)
+	buf.Write(leb128(uint32(len(codeContent))))
+	buf.Write(codeContent)
+
+	path := writeTestModule(t, buf.Bytes())
+	backend, err := NewWASMBackend(path)
+	if err != nil {
+		t.Fatalf("NewWASMBackend failed: %v", err)
+	}
+	defer backend.Close()
+
+	_, err = backend.GetIntermediate(0)
+	if err == nil {
+		t.Error("expected error when get_intermediate execution traps")
+	}
+}
+
+func TestGetIntermediate_ReadMemFailed(t *testing.T) {
+	var buf bytes.Buffer
+	buf.Write([]byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00})
+	typeContent := []byte{
+		0x02,
+		0x60, 0x01, 0x7f, 0x01, 0x7f,
+		0x60, 0x01, 0x7f, 0x02, 0x7f, 0x7f,
+	}
+	buf.WriteByte(1)
+	buf.Write(leb128(uint32(len(typeContent))))
+	buf.Write(typeContent)
+	funcContent := []byte{0x02, 0x00, 0x01}
+	buf.WriteByte(3)
+	buf.Write(leb128(uint32(len(funcContent))))
+	buf.Write(funcContent)
+	memContent := []byte{0x01, 0x00, 0x01}
+	buf.WriteByte(5)
+	buf.Write(leb128(uint32(len(memContent))))
+	buf.Write(memContent)
+	exportContent := []byte{
+		0x03,
+		0x06, 'm', 'e', 'm', 'o', 'r', 'y', 0x02, 0x00,
+		0x07, 'f', 'o', 'r', 'w', 'a', 'r', 'd', 0x00, 0x00,
+		0x10, 'g', 'e', 't', '_', 'i', 'n', 't', 'e', 'r', 'm', 'e', 'd', 'i', 'a', 't', 'e', 0x00, 0x01,
+	}
+	buf.WriteByte(7)
+	buf.Write(leb128(uint32(len(exportContent))))
+	buf.Write(exportContent)
+	codeContent := []byte{
+		0x02,
+		0x04, 0x00, 0x20, 0x00, 0x0b,
+		0x08, 0x00, 0x41, 0x80, 0x80, 0x04, 0x41, 0x01, 0x0b,
+	}
+	buf.WriteByte(10)
+	buf.Write(leb128(uint32(len(codeContent))))
+	buf.Write(codeContent)
+
+	path := writeTestModule(t, buf.Bytes())
+	backend, err := NewWASMBackend(path)
+	if err != nil {
+		t.Fatalf("NewWASMBackend failed: %v", err)
+	}
+	defer backend.Close()
+
+	_, err = backend.GetIntermediate(0)
+	if err == nil {
+		t.Error("expected error when reading intermediate from memory bounds fails")
+	}
+}
+
+

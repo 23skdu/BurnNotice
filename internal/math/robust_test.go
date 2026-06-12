@@ -94,3 +94,59 @@ func TestClampToFloat64(t *testing.T) {
 		t.Errorf("result[4] = %f, want -2", result[4])
 	}
 }
+
+func TestWinsorizeMatrixInPlace(t *testing.T) {
+	// 3 samples, 2 features
+	data := [][]float64{
+		{1.0, 10.0},
+		{2.0, 20.0},
+		{3.0, 30.0},
+	}
+	// Winsorize each column with lower=0.3, upper=0.7
+	// Column 0: [1, 2, 3] -> n=3. loIdx=int(3*0.3)=0 (val 1.0), hiIdx=int(3*0.7)-1=1 (val 2.0)
+	// Column 1: [10, 20, 30] -> loIdx=0 (val 10.0), hiIdx=1 (val 20.0)
+	WinsorizeMatrixInPlace(data, 0.3, 0.7)
+
+	if data[0][0] != 1.0 || data[1][0] != 2.0 || data[2][0] != 2.0 {
+		t.Errorf("unexpected column 0 winsorized: %v", data)
+	}
+	if data[0][1] != 10.0 || data[1][1] != 20.0 || data[2][1] != 20.0 {
+		t.Errorf("unexpected column 1 winsorized: %v", data)
+	}
+
+	// Empty matrix
+	WinsorizeMatrixInPlace(nil, 0.1, 0.9)
+	WinsorizeMatrixInPlace([][]float64{}, 0.1, 0.9)
+}
+
+func TestWinsorize_ExtremeQuantiles(t *testing.T) {
+	input := []float64{1, 2, 3}
+	// lower < 0, upper > 1
+	r := Winsorize(input, -0.5, 1.5)
+	if r[0] != 1 || r[2] != 3 {
+		t.Errorf("expected no winsorization for extreme quantiles, got %v", r)
+	}
+
+	// lower > 1, upper < 0
+	r2 := Winsorize(input, 1.5, -0.5)
+	if len(r2) != 3 {
+		t.Fatal("expected length 3")
+	}
+}
+
+func TestWinsorizeInPlace_ExtremeClamping(t *testing.T) {
+	// lower < 0, upper > 1
+	input1 := []float64{1, 2, 3}
+	WinsorizeInPlace(input1, -0.5, 1.5)
+	if input1[0] != 1 || input1[2] != 3 {
+		t.Errorf("expected unmodified for lower<0 upper>1, got %v", input1)
+	}
+
+	// lower > 1, upper < 0
+	input2 := []float64{1, 2, 3}
+	WinsorizeInPlace(input2, 1.5, -0.5)
+	if input2[0] != 3 || input2[1] != 3 || input2[2] != 3 {
+		t.Errorf("expected all clamped to loVal, got %v", input2)
+	}
+}
+

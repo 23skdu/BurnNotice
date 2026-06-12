@@ -302,3 +302,89 @@ func TestZCAWhitening_RejectsBadInput(t *testing.T) {
 		t.Error("ZCAWhitening(ragged) should return ok=false")
 	}
 }
+
+func TestWhitening_EdgeCases(t *testing.T) {
+	// 1. WhiteningMatrix and UnwhiteningMatrix nil/empty/ragged covariance
+	if _, ok := WhiteningMatrix(nil, 0); ok {
+		t.Error("expected !ok for nil cov")
+	}
+	if _, ok := WhiteningMatrix([][]float64{}, 0); ok {
+		t.Error("expected !ok for empty cov")
+	}
+	if _, ok := WhiteningMatrix([][]float64{{1, 2}, {3}}, 0); ok {
+		t.Error("expected !ok for ragged cov")
+	}
+	if _, ok := UnwhiteningMatrix(nil, 0); ok {
+		t.Error("expected !ok for nil cov")
+	}
+	if _, ok := UnwhiteningMatrix([][]float64{}, 0); ok {
+		t.Error("expected !ok for empty cov")
+	}
+	if _, ok := UnwhiteningMatrix([][]float64{{1, 2}, {3}}, 0); ok {
+		t.Error("expected !ok for ragged cov")
+	}
+
+	// 2. Non-finite values in covariance
+	nonFiniteCov := [][]float64{
+		{1, math.NaN()},
+		{math.NaN(), 1},
+	}
+	if _, ok := WhiteningMatrix(nonFiniteCov, 0); ok {
+		t.Error("expected !ok for non-finite covariance matrix")
+	}
+
+	// 3. Asymmetric covariance for UnwhiteningMatrix
+	asymCov := [][]float64{
+		{1, 2},
+		{3, 1},
+	}
+	if _, ok := UnwhiteningMatrix(asymCov, 0); ok {
+		t.Error("expected !ok for asymmetric covariance in UnwhiteningMatrix")
+	}
+
+	// 4. eigFloor < 0
+	cov := [][]float64{
+		{1, 0},
+		{0, 1},
+	}
+	if _, ok := WhiteningMatrix(cov, -1.0); !ok {
+		t.Error("expected ok for negative eigFloor")
+	}
+	if _, ok := UnwhiteningMatrix(cov, -1.0); !ok {
+		t.Error("expected ok for negative eigFloor")
+	}
+
+	// 5. floor <= 0 and maxLambda <= 0 (e.g., zero or negative eigenvalues)
+	zeroCov := [][]float64{
+		{0, 0},
+		{0, 0},
+	}
+	if _, ok := WhiteningMatrix(zeroCov, 0); ok {
+		t.Error("expected !ok for all-zero covariance matrix (maxLambda <= 0)")
+	}
+	if _, ok := UnwhiteningMatrix(zeroCov, 0); ok {
+		t.Error("expected !ok for all-zero covariance matrix (maxLambda <= 0)")
+	}
+
+	// 6. ApplyWhitening row size mismatch
+	W := [][]float64{{1, 0}, {0, 1}}
+	X_ragged := [][]float64{{1, 2}, {3}}
+	if got := ApplyWhitening(X_ragged, W); got != nil {
+		t.Errorf("expected nil for ragged rows in ApplyWhitening, got %v", got)
+	}
+
+	// 7. ZCAWhitening column size mismatch
+	raggedData := [][]float64{{1, 2}, {3}}
+	if _, _, _, ok := ZCAWhitening(raggedData, 0, 0); ok {
+		t.Error("expected !ok for ZCAWhitening with ragged data")
+	}
+
+	// 8. sqrt helper function edge cases (specifically <= 0 input)
+	if s := sqrt(0); s != 0 {
+		t.Errorf("expected sqrt(0) == 0, got %f", s)
+	}
+	if s := sqrt(-5.5); s != 0 {
+		t.Errorf("expected sqrt(negative) == 0, got %f", s)
+	}
+}
+
