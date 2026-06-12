@@ -57,4 +57,78 @@ func TestEstimateCovariance(t *testing.T) {
 	if math.Abs(partialCov.At(0, 0)-expectedPartialVar1) > 1e-5 {
 		t.Errorf("Expected Partial Var1 %.4f, got %.4f", expectedPartialVar1, partialCov.At(0, 0))
 	}
+
+	// Test optimal Ledoit-Wolf shrinkage (alpha < 0)
+	lwCov := EstimateCovariance(X, -1.0)
+	if lwCov == nil {
+		t.Fatal("Expected Ledoit-Wolf covariance matrix, got nil")
+	}
+
+	// Test empty/nil inputs
+	if EstimateCovariance(nil, 0.5) != nil {
+		t.Error("expected nil for nil matrix")
+	}
+	if EstimateCovariance([][]float64{}, 0.5) != nil {
+		t.Error("expected nil for empty matrix")
+	}
+	if EstimateCovariance([][]float64{{}}, 0.5) != nil {
+		t.Error("expected nil for matrix with empty row")
+	}
+
+	// Test zero variance input (leads to diffNormSq == 0)
+	zeroVarX := [][]float64{
+		{1.0, 2.0},
+		{1.0, 2.0},
+		{1.0, 2.0},
+	}
+	zeroCov := EstimateCovariance(zeroVarX, -1.0)
+	if zeroCov == nil {
+		t.Fatal("Expected zero covariance matrix, got nil")
+	}
 }
+
+func TestCovariance_EdgeCases(t *testing.T) {
+	// Covariance and ShrinkageCovariance edge cases
+	if Covariance(nil) != nil {
+		t.Error("expected nil for nil input in Covariance")
+	}
+	if Covariance([][]float64{}) != nil {
+		t.Error("expected nil for empty input in Covariance")
+	}
+	if Covariance([][]float64{{1, 2}}) != nil {
+		t.Error("expected nil for single row in Covariance")
+	}
+	if Covariance([][]float64{{1, 0}, {1}}) != nil {
+		t.Error("expected nil for ragged input in Covariance")
+	}
+	if Covariance([][]float64{{}, {}}) != nil {
+		t.Error("expected nil for empty cols in Covariance")
+	}
+
+	if ShrinkageCovariance(nil, 0.5) != nil {
+		t.Error("expected nil for nil input in ShrinkageCovariance")
+	}
+	if ShrinkageCovariance([][]float64{}, 0.5) != nil {
+		t.Error("expected nil for empty input in ShrinkageCovariance")
+	}
+	if ShrinkageCovariance([][]float64{{1, 2}}, 0.5) != nil {
+		t.Error("expected nil for single row in ShrinkageCovariance")
+	}
+	if ShrinkageCovariance([][]float64{{1, 0}, {1}}, 0.5) != nil {
+		t.Error("expected nil for ragged input in ShrinkageCovariance")
+	}
+	if ShrinkageCovariance([][]float64{{}, {}}, 0.5) != nil {
+		t.Error("expected nil for empty cols in ShrinkageCovariance")
+	}
+
+	// columnMean edge cases
+	if columnMean(nil) != nil {
+		t.Error("expected nil for nil input in columnMean")
+	}
+
+	// AverageVariance edge cases
+	if AverageVariance(nil) != 0 {
+		t.Error("expected 0 for nil input in AverageVariance")
+	}
+}
+

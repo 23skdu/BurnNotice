@@ -79,7 +79,7 @@ func (b *WASMBackend) Forward(input []float32) ([]float32, error) {
 	}
 	defer mod.Close(ctx)
 
-	mem := mod.Memory()
+	mem := mod.ExportedMemory("memory")
 	if mem == nil {
 		return nil, fmt.Errorf("module has no exported memory")
 	}
@@ -156,7 +156,7 @@ func (b *WASMBackend) GetIntermediate(layerIdx int) ([]float32, error) {
 		return nil, nil
 	}
 
-	mem := mod.Memory()
+	mem := mod.ExportedMemory("memory")
 	if mem == nil {
 		return nil, fmt.Errorf("module has no exported memory")
 	}

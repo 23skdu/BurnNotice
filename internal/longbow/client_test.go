@@ -224,3 +224,72 @@ func TestClient_ZeroDowntimeHotSwap(t *testing.T) {
 	}
 }
 
+func TestClient_AdditionalEdgeCases(t *testing.T) {
+	ctx := context.Background()
+
+	// 1. Invalid SQLite path should trigger fallback
+	cBadSqlite := NewClient(Config{
+		Addr:    "/nonexistent_dir/vectors.db",
+		Dim:     3,
+		Backend: "sqlite",
+	})
+	if !cBadSqlite.IsFallbackActive() {
+		t.Error("expected fallback mode to be active for invalid SQLite path")
+	}
+
+	// 2. SetFallbackMode(false)
+	cBadSqlite.SetFallbackMode(false)
+	if cBadSqlite.IsFallbackActive() {
+		t.Error("expected fallback mode to be inactive after SetFallbackMode(false)")
+	}
+
+	// 3. Manual mock of Client with fallbackMode=0 and sc=nil
+	cMock := &Client{
+		dim:          3,
+		fallbackMode: 0,
+		sc:           nil,
+	}
+	err := cMock.Ingest(ctx, [][]float32{{1.0, 2.0, 3.0}}, []uint64{10})
+	if err != nil {
+		t.Fatalf("Ingest on mock client failed: %v", err)
+	}
+	if !cMock.IsFallbackActive() {
+		t.Error("expected Ingest to activate fallback mode when sc is nil")
+	}
+
+	// 4. Closed SQLite database errors
+	cSqlite := NewClient(Config{Dim: 3, Backend: "sqlite", Addr: "file::memory:?cache=shared"})
+	cSqlite.Close() // Close immediately
+
+	// Ingest on closed SQLite db should fail
+	err = cSqlite.Ingest(ctx, [][]float32{{1, 2, 3}}, []uint64{10})
+	if err == nil {
+		t.Error("expected error for Ingest on closed SQLite database")
+	}
+
+	// Query on closed SQLite db should fail
+	_, err = cSqlite.Query(ctx, []uint64{10})
+	if err == nil {
+		t.Error("expected error for Query on closed SQLite database")
+	}
+
+	// Search on closed SQLite db should fail
+	_, _, err = cSqlite.Search(ctx, []float32{1, 2, 3}, 5)
+	if err == nil {
+		t.Error("expected error for Search on closed SQLite database")
+	}
+
+	// 5. placeholders(0)
+	ph := placeholders(0)
+	if ph != "" {
+		t.Errorf("expected empty string for placeholders(0), got %q", ph)
+	}
+
+	// 6. cosineSimilarity32 with zero-norm vectors
+	sim := cosineSimilarity32([]float32{0, 0, 0}, []float32{1, 2, 3})
+	if sim != 0 {
+		t.Errorf("expected 0 similarity for zero vector, got %f", sim)
+	}
+}
+
+

@@ -53,6 +53,9 @@ func (d *AlignmentImprintDetector) Metrics() AlignmentMetrics {
 
 // ClassifyAlignment predicts the alignment training method based on geometric features.
 func (d *AlignmentImprintDetector) ClassifyAlignment() AlignmentMethod {
+	if len(d.layerDirections) == 0 {
+		return AlignmentUnknown
+	}
 	metrics := d.Metrics()
 
 	if metrics.EffectiveRank > 0.7 && metrics.SVDDecayRate > 0.5 && metrics.CrossLayerCoherence > 0.8 {

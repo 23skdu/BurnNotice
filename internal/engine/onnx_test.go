@@ -1,9 +1,13 @@
 package engine
 
 import (
+	"burnnotice/internal/onnxpb"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"google.golang.org/protobuf/proto"
 )
 
 func TestNewONNXEngine(t *testing.T) {
@@ -113,8 +117,12 @@ func TestLoad_InvalidONNX(t *testing.T) {
 		HiddenDim: 4096,
 	})
 	err := e.Load()
-	if err == nil {
-		t.Skip("onnx runtime accepted invalid file - may be using a relaxed parser")
+	if err != nil {
+		if strings.Contains(err.Error(), "onnxruntime") || strings.Contains(err.Error(), "shared library") {
+			t.Skip("skipping test because ONNX shared library is not available")
+		}
+	} else {
+		t.Error("expected error for invalid ONNX file")
 	}
 }
 
@@ -135,5 +143,182 @@ func TestEngine_ConfigAccess(t *testing.T) {
 	}
 	if got.AttentionHeadCount != cfg.AttentionHeadCount {
 		t.Errorf("AttentionHeadCount = %d, want %d", got.AttentionHeadCount, cfg.AttentionHeadCount)
+	}
+}
+
+func createDummyONNXModel(hiddenDim int) ([]byte, error) {
+	model := &onnxpb.ModelProto{
+		IrVersion: pbPtr(int64(8)),
+		OpsetImport: []*onnxpb.OperatorSetIdProto{
+			{
+				Domain:  pbPtr(""),
+				Version: pbPtr(int64(15)),
+			},
+		},
+		Graph: &onnxpb.GraphProto{
+			Name: pbPtr("dummy_graph"),
+			Node: []*onnxpb.NodeProto{
+				{
+					OpType: pbPtr("Gather"),
+					Input:  []string{"embedding_weight", "input_ids"},
+					Output: []string{"hidden_states"},
+					Attribute: []*onnxpb.AttributeProto{
+						{
+							Name: pbPtr("axis"),
+							Type: onnxpb.AttributeProto_INT.Enum(),
+							I:    pbPtr(int64(0)),
+						},
+					},
+				},
+			},
+			Initializer: []*onnxpb.TensorProto{
+				{
+					Dims:     []int64{10, int64(hiddenDim)},
+					DataType: pbPtr(int32(1)), // FLOAT = 1
+					Name:     pbPtr("embedding_weight"),
+					FloatData: []float32{
+						0.1, 0.2, 0.3, 0.4,
+						0.5, 0.6, 0.7, 0.8,
+						0.9, 1.0, 1.1, 1.2,
+						1.3, 1.4, 1.5, 1.6,
+						1.7, 1.8, 1.9, 2.0,
+						2.1, 2.2, 2.3, 2.4,
+						2.5, 2.6, 2.7, 2.8,
+						2.9, 3.0, 3.1, 3.2,
+						3.3, 3.4, 3.5, 3.6,
+						3.7, 3.8, 3.9, 4.0,
+					},
+				},
+			},
+			Input: []*onnxpb.ValueInfoProto{
+				{
+					Name: pbPtr("input_ids"),
+					Type: &onnxpb.TypeProto{
+						Value: &onnxpb.TypeProto_TensorType{
+							TensorType: &onnxpb.TypeProto_Tensor{
+								ElemType: pbPtr(int32(7)), // INT64 = 7
+								Shape: &onnxpb.TensorShapeProto{
+									Dim: []*onnxpb.TensorShapeProto_Dimension{
+										{Value: &onnxpb.TensorShapeProto_Dimension_DimValue{DimValue: 1}},
+										{Value: &onnxpb.TensorShapeProto_Dimension_DimValue{DimValue: 3}},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			Output: []*onnxpb.ValueInfoProto{
+				{
+					Name: pbPtr("hidden_states"),
+					Type: &onnxpb.TypeProto{
+						Value: &onnxpb.TypeProto_TensorType{
+							TensorType: &onnxpb.TypeProto_Tensor{
+								ElemType: pbPtr(int32(1)), // FLOAT = 1
+								Shape: &onnxpb.TensorShapeProto{
+									Dim: []*onnxpb.TensorShapeProto_Dimension{
+										{Value: &onnxpb.TensorShapeProto_Dimension_DimValue{DimValue: 1}},
+										{Value: &onnxpb.TensorShapeProto_Dimension_DimValue{DimValue: 3}},
+										{Value: &onnxpb.TensorShapeProto_Dimension_DimValue{DimValue: int64(hiddenDim)}},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	return proto.Marshal(model)
+}
+
+func pbPtr[T any](v T) *T {
+	return &v
+}
+
+func TestONNXEngine_EndToEnd(t *testing.T) {
+	hiddenDim := 4
+	modelBytes, err := createDummyONNXModel(hiddenDim)
+	if err != nil {
+		t.Fatalf("failed to create dummy ONNX model: %v", err)
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "model.onnx")
+	if err := os.WriteFile(path, modelBytes, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := ModelConfig{
+		HiddenDim:          hiddenDim,
+		NumLayers:          1,
+		LayerNames:         []string{"hidden_states"},
+		AttentionHeadCount: 1,
+	}
+
+	e := NewONNXEngine(path, cfg)
+	defer e.Close()
+
+	if err := e.Load(); err != nil {
+		if strings.Contains(err.Error(), "onnxruntime") || strings.Contains(err.Error(), "shared library") {
+			t.Skipf("skipping end-to-end test because ONNX shared library is not available: %v", err)
+		}
+		t.Fatalf("Load() failed: %v", err)
+	}
+
+	// 1 sample, 3 tokens
+	input := []int64{0, 1, 2}
+	shape := []int64{1, 3}
+
+	// Test Forward
+	out, err := e.Forward(input, shape)
+	if err != nil {
+		t.Fatalf("Forward() failed: %v", err)
+	}
+
+	// Expected output shape is [1, 3, 4] -> size 12
+	if len(out) != 12 {
+		t.Fatalf("len(out) = %d, want 12", len(out))
+	}
+
+	// Check if output is non-empty/non-zero
+	hasNonZero := false
+	for _, val := range out {
+		if val != 0 {
+			hasNonZero = true
+			break
+		}
+	}
+	if !hasNonZero {
+		t.Error("Forward output was all zeros, expected gathered embedding values")
+	}
+
+	// Test GetIntermediate
+	interOut, err := e.GetIntermediate("hidden_states", input, shape)
+	if err != nil {
+		t.Fatalf("GetIntermediate() failed: %v", err)
+	}
+	if len(interOut) != 12 {
+		t.Fatalf("len(interOut) = %d, want 12", len(interOut))
+	}
+
+	// Test error paths
+	// 1. Forward with mismatching input size / shape
+	_, err = e.Forward([]int64{1, 2}, []int64{1, 3})
+	if err == nil {
+		t.Error("expected error for size/shape mismatch in Forward")
+	}
+
+	// 2. GetIntermediate with mismatching input size / shape
+	_, err = e.GetIntermediate("hidden_states", []int64{1, 2}, []int64{1, 3})
+	if err == nil {
+		t.Error("expected error for size/shape mismatch in GetIntermediate")
+	}
+
+	// 3. GetIntermediate with non-existent layer name
+	_, err = e.GetIntermediate("non_existent_layer", input, shape)
+	if err == nil {
+		t.Error("expected error for non-existent layer in GetIntermediate")
 	}
 }

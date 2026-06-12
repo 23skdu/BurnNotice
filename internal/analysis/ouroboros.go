@@ -58,6 +58,9 @@ func (d *OuroborosDetector) NetReduction() float64 {
 
 // RequiresRefinement returns true if net reduction is below the threshold.
 func (d *OuroborosDetector) RequiresRefinement(threshold float64) bool {
+	if len(d.preScores) == 0 {
+		return false
+	}
 	return d.NetReduction() < threshold
 }
 
