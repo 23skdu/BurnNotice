@@ -290,3 +290,95 @@ func TestAngular_ZeroOrthoNorm(t *testing.T) {
 	}
 }
 
+func TestNormPreservingAblation_PreservesNormAndRemovesDirection(t *testing.T) {
+	act := []float64{3.0, 4.0, 0.0}
+	dir := []float64{1.0, 0.0, 0.0}
+
+	origNorm := vecNorm(act) // sqrt(9 + 16) = 5.0
+	res := NormPreservingAblation(act, dir, 1.0, 0.0)
+
+	// 1. Result norm must equal original norm exactly (norm preservation)
+	resNorm := vecNorm(res)
+	if math.Abs(resNorm-origNorm) > 1e-6 {
+		t.Errorf("MPOA norm = %f, want %f", resNorm, origNorm)
+	}
+
+	// 2. Result must be orthogonal to direction
+	dot := vecDot(res, dir)
+	if math.Abs(dot) > 1e-6 {
+		t.Errorf("MPOA result not orthogonal: dot = %f", dot)
+	}
+
+	// 3. Expected vector: [0, 5, 0]
+	if math.Abs(res[0]) > 1e-6 || math.Abs(res[1]-5.0) > 1e-6 {
+		t.Errorf("unexpected MPOA vector: %v", res)
+	}
+}
+
+func TestNormPreservingAblation_RegularizationAndAlpha(t *testing.T) {
+	act := []float64{3.0, 4.0, 0.0}
+	dir := []float64{1.0, 0.0, 0.0}
+
+	// Alpha = 0 returns original
+	res0 := NormPreservingAblation(act, dir, 0.0, 0.0)
+	if math.Abs(res0[0]-act[0]) > 1e-6 {
+		t.Errorf("alpha=0 did not return original: %v", res0)
+	}
+
+	// With regularization > 0, projection is softer
+	resReg := NormPreservingAblation(act, dir, 1.0, 1.0)
+	if math.Abs(vecNorm(resReg)-vecNorm(act)) > 1e-6 {
+		t.Errorf("regularized MPOA should still preserve norm")
+	}
+
+	// Edge cases: zero activation and zero direction
+	zeroAct := []float64{0.0, 0.0}
+	if r := NormPreservingAblation(zeroAct, dir, 1.0, 0.0); len(r) != 2 {
+		t.Errorf("failed on zero activation")
+	}
+	zeroDir := []float64{0.0, 0.0, 0.0}
+	if r := NormPreservingAblation(act, zeroDir, 1.0, 0.0); math.Abs(r[0]-act[0]) > 1e-6 {
+		t.Errorf("zero direction should return original activation")
+	}
+}
+
+func TestApplyCommand(t *testing.T) {
+	act := []float64{1.0, 2.0, 3.0}
+	dir := []float64{0.0, 1.0, 0.0}
+
+	// 1. MethodAddition
+	cmdAdd := Command{Vector: dir, Strength: 2.0, Method: MethodAddition}
+	resAdd := ApplyCommand(act, cmdAdd)
+	if resAdd[1] != 4.0 {
+		t.Errorf("MethodAddition failed: %v", resAdd)
+	}
+
+	// 2. MethodAngular
+	cmdAng := Command{Vector: dir, Strength: 0.1, Method: MethodAngular}
+	resAng := ApplyCommand(act, cmdAng)
+	if math.Abs(vecNorm(resAng)-vecNorm(act)) > 1e-6 {
+		t.Errorf("MethodAngular norm not preserved")
+	}
+
+	// 3. MethodAblation
+	cmdAbl := Command{Vector: dir, Method: MethodAblation}
+	resAbl := ApplyCommand(act, cmdAbl)
+	if math.Abs(resAbl[1]) > 1e-6 {
+		t.Errorf("MethodAblation failed: %v", resAbl)
+	}
+
+	// 4. MethodNormPreserving
+	cmdMPOA := Command{
+		Vector:              dir,
+		Strength:            1.0,
+		Method:              MethodNormPreserving,
+		RegularizationAlpha: 0.01,
+		AttentionStrength:   1.0,
+		MLPStrength:         0.5,
+	}
+	resMPOA := ApplyCommand(act, cmdMPOA)
+	if math.Abs(vecNorm(resMPOA)-vecNorm(act)) > 1e-6 {
+		t.Errorf("MethodNormPreserving norm not preserved")
+	}
+}
+

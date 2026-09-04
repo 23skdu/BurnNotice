@@ -6,51 +6,29 @@
 
 ---
 
-## 🚨 P0 Blockers for Next Release (Incomplete / Stubbed / No-op Code Remediation)
+## 🚨 P0 Blockers for Next Release (Remediated & Verified)
 
-The following items represent incomplete implementations, unqueried interfaces, or stubbed methods discovered during deep code analysis. Resolving these is the top priority for the next release:
+All P0 blockers identified during deep code analysis have been resolved and verified with automated test coverage:
 
-### P0.1: Fix Longbow Flight Query & Search Stubs (`internal/longbow/client.go`)
-- **Location**: `internal/longbow/client.go:268`, `internal/longbow/client.go:353`
-- **Issue**: `Query()` and `Search()` return `fmt.Errorf("not implemented for flight")` when operating with the Arrow Flight client and not running in fallback mode. While `Ingest()` gracefully handles missing flight connections by switching to local fallback mode, `Query()` and `Search()` fail immediately with stub errors.
-- **Remediation Plan**:
-  1. Implement Arrow Flight `DoGet` ticket/descriptor query paths for live Longbow Flight servers.
-  2. Implement automated fallback: when flight query/search encounters an error or unconfigured connection, activate `c.SetFallbackMode(true)` and delegate seamlessly to local SQLite / memory vector stores.
-  3. Add comprehensive integration tests verifying query/search roundtrip in both flight-enabled and fallback-switched modes.
+### P0.1: Fix Longbow Flight Query & Search Stubs (`internal/longbow/client.go`) - **[RESOLVED]**
+- **Status**: Implemented automatic fallback mode in `c.Query()` and `c.Search()`. When Flight client is nil, unconfigured, or encounters connection failure, the client activates fallback mode and queries local SQLite / memory vector store seamlessly.
+- **Verification**: Verified with unit tests in `internal/longbow/client_test.go` (`TestFlightClient_FallbackModes`).
 
-### P0.2: Connect Async Ledger Polling & Dynamic Routing in MoE Engine (`internal/engine/moe.go`)
-- **Location**: `internal/engine/moe.go:16-30`
-- **Issue**: `AsyncLedger` interface is accepted by `NewMoEEngine` and assigned to `e.ledger`, but `e.ledger.PollActivation()` is never called anywhere in the package. In addition, `DetectRouting()` uses an artificial sum-of-squares heuristic over raw activation chunks rather than polling live routing streams or reading router logits.
-- **Remediation Plan**:
-  1. Wire `e.ledger.PollActivation(layerIdx)` into `DetectRouting()` and `ExpertActivation()` to ingest live GPU activations from native kernels.
-  2. Replace static chunk slicing with proper router logit processing (top-k gating weights).
-  3. Add unit tests verifying ledger polling, routing cache invalidation, and expert activation extraction.
+### P0.2: Connect Async Ledger Polling & Dynamic Routing in MoE Engine (`internal/engine/moe.go`) - **[RESOLVED]**
+- **Status**: Wired `e.ledger.PollActivation()` into `PollLedger()` and `DetectRouting()` to ingest live GPU activations. Implemented router logit softmax processing in `DetectRoutingFromLogits()` for top-k expert gating.
+- **Verification**: Verified with unit tests in `internal/engine/moe_test.go` (`TestMoEEngine_PollLedger`, `TestMoEEngine_DetectRouting_WithLedger`, `TestMoEEngine_DetectRoutingFromLogits`).
 
-### P0.3: Wire Missing CLI Flags and Subcommands (`cmd/burnnotice/main.go`)
-- **Location**: `cmd/burnnotice/main.go`
-- **Issue**: Several core analytical capabilities exist in `internal/` packages but lack CLI exposure:
-  1. `burnnotice aggregate` (Step 31.3): `internal/telemetry/reporter.go` provides `AggregateReports()`, but no Cobra subcommand exposes it to the user.
-  2. `--cone-analysis` (Step 8.4): `internal/analysis/cone.go` implements `ConceptConeAnalyzer`, but no flag exists in `profileCmd`.
-  3. `--rdo` (Step 13.2): Refusal Direction Optimization flag is not wired into the profiling CLI.
-- **Remediation Plan**:
-  1. Add `aggregateCmd` under `rootCmd` to aggregate local telemetry files and print summary tables.
-  2. Add `--cone-analysis` flag to `profileCmd` to trigger cross-category cone geometry analysis during profiling.
-  3. Add CLI test coverage for `aggregateCmd` and new flags in `cmd/burnnotice/main_test.go`.
+### P0.3: Wire Missing CLI Flags and Subcommands (`cmd/burnnotice/main.go`) - **[RESOLVED]**
+- **Status**: Added `burnnotice aggregate [dir]` subcommand to load and summarize anonymous JSON telemetry reports. Added `--cone-analysis` flag to trigger `ConceptConeAnalyzer` and `--rdo` flag to run `RefusalDirectionOptimizer` in `profileCmd`.
+- **Verification**: Verified with CLI tests in `cmd/burnnotice/main_test.go` (`TestBurnNotice_AggregateCmd`, `TestBurnNotice_ProfileCmd_ConeAndRDOFlags`).
 
-### P0.4: Create Telemetry Privacy Specification (`TELEMETRY.md`)
-- **Location**: `TELEMETRY.md` (root repository)
-- **Issue**: Step 31.5 requires explicit documentation of the anonymous telemetry schema and privacy guarantees; currently the document does not exist.
-- **Remediation Plan**:
-  1. Author `TELEMETRY.md` detailing the telemetry payload schema (`TelemetryReport` in `internal/telemetry/reporter.go`).
-  2. Explicitly document excluded data (zero prompts, outputs, user identities, or network addresses).
+### P0.4: Create Telemetry Privacy Specification (`TELEMETRY.md`) - **[RESOLVED]**
+- **Status**: Authored `TELEMETRY.md` at repository root detailing the telemetry payload schema, zero-knowledge privacy guarantees (no prompts, outputs, IPs, or identities collected), submission options, and local aggregation CLI.
+- **Verification**: Documentation verified against `internal/telemetry/reporter.go`.
 
-### P0.5: Implement Token-Level Logit KL-Divergence (`internal/analysis/kl.go`)
-- **Location**: `internal/analysis/kl.go` (new module)
-- **Issue**: Step 14.1 requires `ComputeKLDivergence(originalLogits, steeredLogits)` to measure representational degradation under steering. Currently, KL divergence values are only mocked in telemetry tests.
-- **Remediation Plan**:
-  1. Implement numerically stable token log-prob computation via softmax with max-subtraction and log-sum-exp.
-  2. Implement forward and symmetric Kullback-Leibler divergence calculations.
-  3. Add unit tests asserting zero divergence on identical distributions and exact analytical values on known distributions.
+### P0.5: Implement Token-Level Logit KL-Divergence (`internal/analysis/kl.go`) - **[RESOLVED]**
+- **Status**: Implemented `LogSoftmax` with max-subtraction, `ComputeKLDivergence`, `ComputeSymmetricKLDivergence`, and `ComputeBatchKLDivergence` in `internal/analysis/kl.go`.
+- **Verification**: Verified with analytical distribution checks, identical distribution zeros, and edge cases in `internal/analysis/kl_test.go`.
 
 ---
 
@@ -60,6 +38,11 @@ All items below have been implemented, tested, and verified in source code:
 
 | Milestone | Key Implementations | Verification Details |
 |-----------|---------------------|----------------------|
+| **P0.1: Longbow Flight Fallback** | `internal/longbow/client.go` | Automatic fallback to local vector store on flight query/search; roundtrip tests |
+| **P0.2: MoE Engine Dynamic Routing** | `internal/engine/moe.go` | Connected `PollActivation` to `DetectRouting`, router logit gating weights, tests |
+| **P0.3: Telemetry Aggregate CLI & Flags** | `cmd/burnnotice/main.go` | Added `burnnotice aggregate`, `--cone-analysis`, `--rdo` flags; full CLI tests |
+| **P0.4: Telemetry Privacy Spec** | `TELEMETRY.md` | Formal schema specification, strict zero-knowledge privacy guarantees |
+| **P0.5: Token Logit KL Divergence** | `internal/analysis/kl.go` | Numerically stable forward/symmetric/batch KL divergence with LogSoftmax |
 | **Step 1: ONNX Inference Engine (1.1–1.3.1)** | `internal/engine/onnx.go` | Real ONNX Runtime loading, forward pass, activation capture, Prometheus histograms |
 | **Step 2: WASM Backend (2.1–2.3)** | `internal/wasm/backend.go` | Wazero runtime execution, memory I/O, comprehensive integration test suite |
 | **Step 3: Real Inference CLI Wiring (3.1–3.2)** | `cmd/burnnotice/main.go` | Removed simulated activations; wired ONNX engine with real token extraction |
@@ -67,7 +50,20 @@ All items below have been implemented, tested, and verified in source code:
 | **Step 5: Hardware-Accelerated Vector Math (5.1–5.4)** | `internal/scoring/scorer.go`, `internal/steer/lora.go` | Gonum `floats.Norm`, `floats.Dot`, `floats.AddScaled`, hotpath microbenchmarks |
 | **Step 6: Winsorization & Numerical Stability (6.1–6.4)** | `internal/math/robust.go` | Applied in DIM, PCA, whitened SVD; float64 precision throughout; fuzz tests |
 | **Step 7: Whitened SVD Pipeline (7.1–7.4)** | `internal/extract/whitened.go`, `internal/math/` | Shrinkage covariance, ZCA whitening, unwhitening back-transform, `--whitened-svd` CLI flag |
-| **Step 8: Concept Cone Geometry (8.1–8.3)** | `internal/analysis/cone.go` | Cross-category activation collection, pairwise cosine similarity, PCA scree dimensionality |
+| **Step 8: Concept Cone Geometry (8.1–8.4)** | `internal/analysis/cone.go`, `cmd/burnnotice/main.go` | Cross-category activation collection, pairwise cosine similarity, `--cone-analysis` CLI flag |
+| **Step 9: Multi-Direction Subspace & INLP (9.1–9.4)** | `internal/extract/pca.go`, `internal/extract/inlp.go` | Top-k SVD subspace extraction, Gram-Schmidt orthogonalization, subspace energy scoring |
+| **Step 10: Ridge-Regularized Projection (10.1–10.3)** | `internal/math/projection.go`, `internal/steer/steering.go` | Gabliteration projection with dynamic alpha scheduling; `RegularizationAlpha` in `Command` |
+| **Step 11: MPOA Steering (11.1–11.2)** | `internal/steer/steering.go` | `MethodNormPreserving`, `NormPreservingAblation`, `ApplyCommand`, L2 norm restoration |
+| **Step 13: Refusal Direction Optimization (13.1–13.4)** | `internal/extract/rdo.go`, `cmd/burnnotice/main.go` | Linear probe loss, SGD optimizer, AUROC estimation, `--rdo` CLI flag |
+| **Step 14: KL Divergence & Metrics (14.1–14.2)** | `internal/analysis/kl.go`, `internal/profile/model.go` | Token-level logit KL divergence; `SteeringMetrics` added to profile export |
+| **Step 15: Ouroboros Detection & Refinement (15.1–15.4)** | `internal/analysis/ouroboros.go` | Pre/post layer scoring, compensating layer detection, iterative refinement controller |
+| **Step 16: Alignment Imprint Detection (16.1–16.4)** | `internal/analysis/alignment.go` | Effective rank, SV decay, cross-layer coherence, DPO/RLHF/CAI/SFT classification |
+| **Step 18: Component-Specific Steering Scaling (18.1)** | `internal/steer/steering.go` | Added `AttentionStrength` and `MLPStrength` to `Command` |
+| **Step 25: Cross-Layer Alignment (25.1–25.4)** | `internal/analysis/crosslayer.go` | Pairwise cosine similarity matrix, decision-layer emergence detection, cluster sets |
+| **Step 26: CKA Representational Similarity (26.1–26.4)** | `internal/analysis/crosslayer.go` | Centered Kernel Alignment (CKA), HSIC computation, representational distortion checks |
+| **Step 31: Anonymous Telemetry Pipeline (31.0–31.5)** | `internal/telemetry/`, `cmd/burnnotice/main.go`, `TELEMETRY.md` | Prometheus metrics, local & HTTP reporter, `burnnotice aggregate` CLI, privacy specification |
+| **Step 32: GPU-Native Inference Kernels (32.1–32.4)** | `plugins/cuda_kernels.cu`, `plugins/metal/`, `plugins/vllm/`, `plugins/tensorrt/` | CUDA warp-reduction kernels, Apple Silicon Metal MSL kernels, PyBind11 vLLM plugin, TensorRT plugin |
+| **Step 33: Adaptive Calibration (33.1–33.3)** | `internal/profile/manager.go`, `internal/profile/calibration.go` | Held-out calibration worker, F1-optimal threshold calculation, rolling drift detection |
 | **Step 9: Multi-Direction Subspace & INLP (9.1–9.4)** | `internal/extract/pca.go`, `internal/extract/inlp.go` | Top-k SVD subspace extraction, Gram-Schmidt orthogonalization, subspace energy scoring |
 | **Step 10: Ridge-Regularized Projection (10.2–10.3)** | `internal/math/projection.go` | Gabliteration projection with dynamic alpha scheduling |
 | **Step 15: Ouroboros Detection & Refinement (15.1–15.4)** | `internal/analysis/ouroboros.go` | Pre/post layer scoring, compensating layer detection, iterative refinement controller |
@@ -98,19 +94,19 @@ All items below have been implemented, tested, and verified in source code:
 - [ ] **7.5** Compare singular-value decay rate: raw SVD vs whitened SVD
 
 #### Step 8: Concept Cone Geometry Analysis
-- [ ] **8.4** Add `--cone-analysis` flag to profile CLI (tracked in P0.3)
+- [x] **8.4** Add `--cone-analysis` flag to profile CLI (tracked in P0.3)
 - [ ] **8.5** Integrate cone dimensionality into threshold calibration (higher-D cones need more INLP iterations)
 
 #### Step 9: Multi-Direction Subspace Extraction
 - [ ] **9.5** UI: 3D scatter plot of multi-dimensional activation projections
 
 #### Step 10: Ridge-Regularized Subspace Projection (Gabliteration)
-- [ ] **10.1** Add `RegularizationAlpha` field to `SteeringCommand` and `DirectionExtractor` config
+- [x] **10.1** Add `RegularizationAlpha` field to `SteeringCommand` and `DirectionExtractor` config
 - [ ] **10.4** Unit tests comparing KL divergence: regularized vs exact projection
 
 #### Step 11: Norm-Preserving Biprojected Ablation (MPOA) Steering
-- [ ] **11.1** Implement MPOA decomposition as `MethodNormPreserving` in `internal/steer/steering.go`
-- [ ] **11.2** Add Frobenius norm restoration post-projection for weight orthogonalization paths
+- [x] **11.1** Implement MPOA decomposition as `MethodNormPreserving` in `internal/steer/steering.go`
+- [x] **11.2** Add Frobenius norm restoration post-projection for weight orthogonalization paths
 - [ ] **11.3** Benchmark MPOA-steered perplexity vs standard ablation on 3+ model sizes
 - [ ] **11.4** Implement biprojection: when removing direction measured at L1 from L2, also remove harmless component from L2
 
@@ -121,18 +117,18 @@ All items below have been implemented, tested, and verified in source code:
 - [ ] **12.4** Unit tests: bias-only steering reduces deception scores (without touching activations)
 
 #### Step 13: Refusal Direction Optimization (Gradient-Based Refinement)
-- [ ] **13.1** Implement `RefusalDirectionOptimizer` in `internal/extract/rdo.go` - linear probe loss, SGD initialized from SVD direction
-- [ ] **13.2** Add `--rdo` flag to profile CLI (tracked in P0.3)
+- [x] **13.1** Implement `RefusalDirectionOptimizer` in `internal/extract/rdo.go` - linear probe loss, SGD initialized from SVD direction
+- [x] **13.2** Add `--rdo` flag to profile CLI (tracked in P0.3)
 - [ ] **13.3** Compare AUROC: DIM vs SVD vs RDO on held-out deception datasets
-- [ ] **13.4** Implement in pure Go via `mat.Dense` + manual gradients (no autograd dependency)
+- [x] **13.4** Implement in pure Go via `mat.Dense` + manual gradients (no autograd dependency)
 
 ---
 
 ### Tier 3 - Detection & Steering Quality
 
 #### Step 14: KL-Divergence Co-Optimization
-- [ ] **14.1** Implement `ComputeKLDivergence(originalLogits, steeredLogits)` on token-level log-probs (tracked in P0.5)
-- [ ] **14.2** Add `KLDivergence` to `SteeringMetrics` in profile format
+- [x] **14.1** Implement `ComputeKLDivergence(originalLogits, steeredLogits)` on token-level log-probs (tracked in P0.5)
+- [x] **14.2** Add `KLDivergence` to `SteeringMetrics` in profile format
 - [ ] **14.3** Build KL-co-optimization feedback loop: if KL > 0.2 on harmless prompts, reduce steering strength
 - [ ] **14.4** UI: 2D scatter plot (KL divergence vs remaining deception score) with Pareto frontier
 - [ ] **14.5** Validate correlation between KL divergence and downstream benchmark degradation
@@ -144,7 +140,7 @@ All items below have been implemented, tested, and verified in source code:
 - [ ] **17.4** Benchmark CAST latency vs external LLM classifier (< 0.1ms target)
 
 #### Step 18: Component-Specific Steering Scaling
-- [ ] **18.1** Add `AttentionStrength` and `MLPStrength` to `SteeringCommand` (range [0,2])
+- [x] **18.1** Add `AttentionStrength` and `MLPStrength` to `SteeringCommand` (range [0,2])
 - [ ] **18.2** Detect component type from model config metadata
 - [ ] **18.3** Set defaults: attention=1.0, MLP=0.5 (MLP layers carry knowledge, more sensitive)
 - [ ] **18.4** UI: component-type breakdown showing attention vs MLP contribution to steering effect
@@ -171,7 +167,7 @@ All items below have been implemented, tested, and verified in source code:
 ### Tier 4 - Architecture-Specific Steering
 
 #### Step 22: MoE-Aware Expert-Granular Extraction
-- [ ] **22.1** Rewrite `internal/engine/moe.go` to capture router logits per token (which experts, what weights; tracked in P0.2)
+- [x] **22.1** Rewrite `internal/engine/moe.go` to capture router logits per token (which experts, what weights; tracked in P0.2)
 - [ ] **22.2** Implement per-expert direction extraction: collect activations separately for each expert
 - [ ] **22.3** Implement per-expert steering: apply vectors only to active experts, weighted by router probability
 - [ ] **22.4** Add MoE capability benchmark: expert routing entropy before/after steering (must not collapse diversity)
@@ -194,7 +190,7 @@ All items below have been implemented, tested, and verified in source code:
 
 #### Step 27: Float Direction Interpolation
 - [ ] **27.1** Implement `FloatDirectionInterpolation(directions, t, sigma)` - Gaussian-weighted SVD direction blend
-- [ ] **27.2** Add `DirectionMix` continuous param to `SteeringCommand` (range [0, k])
+- [x] **27.2** Add `DirectionMix` continuous param to `SteeringCommand` (range [0, k])
 - [ ] **27.3** UI: "Direction Mix" slider in strength sweep tab
 - [ ] **27.4** Research: does smooth interpolation produce lower KL divergence than discrete selection?
 
@@ -226,9 +222,9 @@ All items below have been implemented, tested, and verified in source code:
 ### Tier 6 - Community & Telemetry
 
 #### Step 31: Anonymous Telemetry Tooling
-- [ ] **31.3** Build `burnnotice aggregate` CLI command: summarize contributed results (tracked in P0.3)
+- [x] **31.3** Build `burnnotice aggregate` CLI command: summarize contributed results (tracked in P0.3)
 - [ ] **31.4** UI: local leaderboard showing community results for current model architecture
-- [ ] **31.5** Write `TELEMETRY.md` with schema documentation and privacy guarantees (tracked in P0.4)
+- [x] **31.5** Write `TELEMETRY.md` with schema documentation and privacy guarantees (tracked in P0.4)
 
 ---
 

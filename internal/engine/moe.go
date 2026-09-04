@@ -1,6 +1,10 @@
 package engine
 
-
+import (
+	"fmt"
+	"math"
+	"sort"
+)
 
 // AsyncLedger represents a zero-copy stream or memory-mapped file containing asynchronous metrics from the CUDA plugins.
 type AsyncLedger interface {
@@ -30,9 +34,24 @@ func NewMoEEngine(numExperts, topK int, expertDims []int, ledger AsyncLedger) *M
 	}
 }
 
+// PollLedger queries the underlying asynchronous ledger for activation data at layerIdx.
+func (e *MoEEngine) PollLedger(layerIdx int) ([]float64, error) {
+	if e.ledger == nil {
+		return nil, fmt.Errorf("no ledger configured")
+	}
+	return e.ledger.PollActivation(layerIdx)
+}
+
 // DetectRouting computes which experts are active for a given activation.
+// If activation is empty and a ledger is configured, it attempts to poll the ledger.
 // Returns expert indices and their routing weights.
 func (e *MoEEngine) DetectRouting(layerIdx int, activation []float64) ([]int, []float64) {
+	if len(activation) == 0 && e.ledger != nil {
+		if polled, err := e.ledger.PollActivation(layerIdx); err == nil && len(polled) > 0 {
+			activation = polled
+		}
+	}
+
 	var totalSumSq float64
 	expertSumSq := make([]float64, e.numExperts)
 	
@@ -132,4 +151,46 @@ func (e *MoEEngine) UpdateRouting(layerIdx int, weights []float64) {
 	}
 	e.routingCache[layerIdx] = make([]float64, len(weights))
 	copy(e.routingCache[layerIdx], weights)
+}
+
+// DetectRoutingFromLogits computes top-k active experts and their normalized softmax weights from router logits.
+func (e *MoEEngine) DetectRoutingFromLogits(logits []float64) ([]int, []float64) {
+	if len(logits) != e.numExperts || e.numExperts == 0 {
+		return nil, nil
+	}
+	topK := e.topK
+	if topK > e.numExperts {
+		topK = e.numExperts
+	}
+	type expertScore struct {
+		index int
+		logit float64
+	}
+	scores := make([]expertScore, e.numExperts)
+	for i := 0; i < e.numExperts; i++ {
+		scores[i] = expertScore{index: i, logit: logits[i]}
+	}
+	sort.Slice(scores, func(i, j int) bool {
+		return scores[i].logit > scores[j].logit
+	})
+
+	maxLogit := scores[0].logit
+	var sumExp float64
+	exps := make([]float64, topK)
+	for i := 0; i < topK; i++ {
+		exps[i] = math.Exp(scores[i].logit - maxLogit)
+		sumExp += exps[i]
+	}
+
+	indices := make([]int, topK)
+	weights := make([]float64, topK)
+	for i := 0; i < topK; i++ {
+		indices[i] = scores[i].index
+		if sumExp > 0 {
+			weights[i] = exps[i] / sumExp
+		} else {
+			weights[i] = 1.0 / float64(topK)
+		}
+	}
+	return indices, weights
 }

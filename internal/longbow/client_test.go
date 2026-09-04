@@ -290,6 +290,34 @@ func TestClient_AdditionalEdgeCases(t *testing.T) {
 	if sim != 0 {
 		t.Errorf("expected 0 similarity for zero vector, got %f", sim)
 	}
+
+	// 7. Test Query and Search on mock uninitialized client switches to fallback
+	cFlightMock := &Client{
+		dim:          3,
+		fallbackMode: 0,
+		sc:           nil,
+	}
+	// Query with sc=nil switches to fallback
+	qRes, err := cFlightMock.Query(ctx, []uint64{10})
+	if err != nil {
+		t.Fatalf("Query on mock client failed: %v", err)
+	}
+	if len(qRes) != 0 {
+		t.Errorf("expected empty results on fresh fallback, got %v", qRes)
+	}
+	if !cFlightMock.IsFallbackActive() {
+		t.Error("expected Query to activate fallback mode when sc is nil")
+	}
+
+	// Search with sc=nil switches to fallback
+	sIDs, sDists, err := cFlightMock.Search(ctx, []float32{1, 2, 3}, 5)
+	if err != nil {
+		t.Fatalf("Search on mock client failed: %v", err)
+	}
+	if len(sIDs) != 0 || len(sDists) != 0 {
+		t.Errorf("expected empty search results on fresh fallback, got %v, %v", sIDs, sDists)
+	}
 }
+
 
 

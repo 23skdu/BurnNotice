@@ -10,13 +10,89 @@ const (
 	MethodAngular
 	MethodSelective
 	MethodAblation
+	MethodNormPreserving
 )
 
 // Command holds a steering intervention to apply.
 type Command struct {
-	Vector   []float64
-	Strength float64
-	Method   Method
+	Vector              []float64
+	Strength            float64
+	Method              Method
+	RegularizationAlpha float64
+	AttentionStrength   float64
+	MLPStrength         float64
+	DirectionMix        float64
+}
+
+// NormPreservingAblation performs norm-preserving biprojected ablation (MPOA):
+// it removes the component along direction and restores the original L2 norm
+// of the activation, preventing representational degradation:
+//   h_ortho = h - (h · v)/(v · v + lambda) * v
+//   h' = h_ortho * (||h||_2 / ||h_ortho||_2)
+func NormPreservingAblation(activation, direction []float64, alpha float64, regAlpha float64) []float64 {
+	origNorm := vecNorm(activation)
+	if origNorm < 1e-10 {
+		return activation
+	}
+
+	vNormSq := vecDot(direction, direction)
+	if vNormSq < 1e-10 {
+		return activation
+	}
+
+	dot := vecDot(activation, direction)
+	proj := dot / (vNormSq + regAlpha)
+
+	ortho := make([]float64, len(activation))
+	for i := range activation {
+		ortho[i] = activation[i] - proj*direction[i]
+	}
+
+	orthoNorm := vecNorm(ortho)
+	if orthoNorm < 1e-10 {
+		return activation
+	}
+
+	// Restore original norm
+	scale := origNorm / orthoNorm
+	restored := make([]float64, len(activation))
+	for i := range activation {
+		restored[i] = ortho[i] * scale
+	}
+
+	if alpha >= 1.0 {
+		return restored
+	}
+	if alpha <= 0.0 {
+		return activation
+	}
+
+	// Interpolate between original and restored
+	result := make([]float64, len(activation))
+	for i := range activation {
+		result[i] = (1.0-alpha)*activation[i] + alpha*restored[i]
+	}
+	return result
+}
+
+// ApplyCommand executes the configured steering command on the activation.
+func ApplyCommand(activation []float64, cmd Command) []float64 {
+	switch cmd.Method {
+	case MethodAddition:
+		return ActAdd(activation, cmd.Vector, cmd.Strength)
+	case MethodAngular:
+		return Angular(activation, cmd.Vector, cmd.Strength)
+	case MethodAblation:
+		return Ablate(activation, cmd.Vector)
+	case MethodNormPreserving:
+		strength := cmd.Strength
+		if strength == 0 {
+			strength = 1.0
+		}
+		return NormPreservingAblation(activation, cmd.Vector, strength, cmd.RegularizationAlpha)
+	default:
+		return activation
+	}
 }
 
 // ActAdd performs activation addition: h' = h + alpha * v

@@ -7,6 +7,14 @@ import (
 	"path/filepath"
 )
 
+// SteeringMetrics stores degradation and performance metrics under activation steering.
+type SteeringMetrics struct {
+	RefusalRate         float64 `json:"refusal_rate"`
+	KLDivergence        float64 `json:"kl_divergence"`
+	CapabilityRetention float64 `json:"capability_retention"`
+	PerplexityDelta     float64 `json:"perplexity_delta,omitempty"`
+}
+
 // ModelProfile stores extracted behavioral directions for a specific model.
 type ModelProfile struct {
 	ModelID           string
@@ -14,7 +22,8 @@ type ModelProfile struct {
 	LayerScores       map[string][]float64         // direction_name -> layer scores
 	TruthNeurons      []int
 	MonitoredLayers   []int
-	OptimalThresholds map[string]float64           // metric -> threshold
+	OptimalThresholds map[string]float64         // metric -> threshold
+	SteeringMetrics   map[string]SteeringMetrics // method_name -> metrics
 }
 
 // Save persists the profile to disk using gob serialization.

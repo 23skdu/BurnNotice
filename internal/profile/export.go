@@ -23,6 +23,7 @@ type ExportableProfile struct {
 	LayerScores     map[string][]float64         `json:"layer_scores"`
 	TruthNeurons    []int                        `json:"truth_neurons"`
 	MonitoredLayers []int                        `json:"monitored_layers"`
+	SteeringMetrics map[string]SteeringMetrics   `json:"steering_metrics,omitempty"`
 	Metadata        Metadata                     `json:"metadata"`
 }
 
@@ -34,6 +35,7 @@ func (p *ModelProfile) ToExportable(meta Metadata) *ExportableProfile {
 		LayerScores:     p.LayerScores,
 		TruthNeurons:    p.TruthNeurons,
 		MonitoredLayers: p.MonitoredLayers,
+		SteeringMetrics: p.SteeringMetrics,
 		Metadata:        meta,
 	}
 }
@@ -46,6 +48,7 @@ func (ep *ExportableProfile) FromExportable() *ModelProfile {
 		LayerScores:     ep.LayerScores,
 		TruthNeurons:    ep.TruthNeurons,
 		MonitoredLayers: ep.MonitoredLayers,
+		SteeringMetrics: ep.SteeringMetrics,
 	}
 }
 

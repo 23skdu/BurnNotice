@@ -7,13 +7,15 @@ import (
 	"path/filepath"
 	"strings"
 
-	"burnnotice/internal/engine"
+	"burnnotice/internal/analysis"
 	"burnnotice/internal/converter"
 	"burnnotice/internal/datasets"
 	"burnnotice/internal/downloader"
+	"burnnotice/internal/engine"
 	"burnnotice/internal/extract"
 	"burnnotice/internal/profile"
 	"burnnotice/internal/scoring"
+	"burnnotice/internal/telemetry"
 
 	"github.com/spf13/cobra"
 )
@@ -125,6 +127,8 @@ Extraction method:
 		numDirs, _ := cmd.Flags().GetInt("num-directions")
 		shrinkage, _ := cmd.Flags().GetFloat64("shrinkage")
 		eigFloor, _ := cmd.Flags().GetFloat64("eig-floor")
+		coneAnalysis, _ := cmd.Flags().GetBool("cone-analysis")
+		rdoFlag, _ := cmd.Flags().GetBool("rdo")
 
 		if datasetPath == "" {
 			return fmt.Errorf("--dataset is required")
@@ -158,6 +162,8 @@ Extraction method:
 
 		var ablator *profile.OversightAblator
 		var oversightDirs map[int][]float64
+		var monitoredActs [][][]float64
+		var deployedActs [][][]float64
 		if oversightPath != "" {
 			var ods *datasets.Dataset
 			switch filepath.Ext(oversightPath) {
@@ -172,8 +178,8 @@ Extraction method:
 				return fmt.Errorf("load oversight dataset: %w", err)
 			}
 			
-			monitoredActs := make([][][]float64, 0, len(ods.Pairs))
-			deployedActs := make([][][]float64, 0, len(ods.Pairs))
+			monitoredActs = make([][][]float64, 0, len(ods.Pairs))
+			deployedActs = make([][][]float64, 0, len(ods.Pairs))
 			
 			for _, pair := range ods.Pairs {
 				pos, err := model.ExtractActivation(pair.Truthful.Prompt, pair.Truthful.Response)
@@ -244,6 +250,60 @@ Extraction method:
 			methodLabel = fmt.Sprintf("PCA SVD (k=%d)", len(directions))
 		}
 		fmt.Printf("Extraction method: %s\n", methodLabel)
+
+		if rdoFlag {
+			fmt.Println("Refining direction with Refusal Direction Optimization (RDO)...")
+			optimizer := extract.NewRefusalDirectionOptimizer(extract.DefaultRDOConfig())
+			var initialDir []float64
+			if len(directions) > 0 {
+				initialDir = directions[0]
+			}
+			optDir, auroc, ok := optimizer.Optimize(positiveActivations, negativeActivations, initialDir)
+			if ok {
+				if len(directions) > 0 {
+					directions[0] = optDir
+				} else {
+					directions = append(directions, optDir)
+				}
+				fmt.Printf("RDO optimization complete. Train AUROC: %.4f\n", auroc)
+			}
+		}
+
+		if coneAnalysis {
+			categories := []analysis.HarmCategory{
+				{Name: "truthful", Activations: positiveActivations},
+				{Name: "deceptive", Activations: negativeActivations},
+			}
+			if len(monitoredActs) > 0 && len(deployedActs) > 0 {
+				var monFlat, depFlat [][]float64
+				for _, m := range monitoredActs {
+					if len(m) > 0 {
+						monFlat = append(monFlat, m[0])
+					}
+				}
+				for _, d := range deployedActs {
+					if len(d) > 0 {
+						depFlat = append(depFlat, d[0])
+					}
+				}
+				if len(monFlat) > 0 {
+					categories = append(categories, analysis.HarmCategory{Name: "oversight_monitored", Activations: monFlat})
+				}
+				if len(depFlat) > 0 {
+					categories = append(categories, analysis.HarmCategory{Name: "oversight_deployed", Activations: depFlat})
+				}
+			}
+
+			coneAnalyzer := analysis.NewConceptConeAnalyzer(categories)
+			res := coneAnalyzer.Analyze()
+			if res != nil {
+				fmt.Printf("Concept cone analysis: Intrinsic Dimensionality = %d, Categories = %d\n",
+					res.IntrinsicDimensionality, len(categories))
+				for pair, sim := range res.CategoryPairwiseCosines {
+					fmt.Printf("  Pairwise cosine %s: %.4f\n", pair, sim)
+				}
+			}
+		}
 
 		for idx, dir := range directions {
 			dirName := fmt.Sprintf("deception_%d", idx)
@@ -372,6 +432,40 @@ input to verify the engine functions correctly end-to-end.`,
 	},
 }
 
+var aggregateCmd = &cobra.Command{
+	Use:   "aggregate [dir]",
+	Short: "Aggregate anonymous telemetry reports",
+	Long: `Loads all anonymous JSON telemetry reports from a directory and computes
+aggregate statistics (refusal rate, KL divergence, capability retention).`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		dir := "./telemetry"
+		if len(args) > 0 {
+			dir = args[0]
+		}
+		reports, err := telemetry.LoadReports(dir)
+		if err != nil {
+			return fmt.Errorf("load reports: %w", err)
+		}
+		if len(reports) == 0 {
+			fmt.Printf("No telemetry reports found in %s\n", dir)
+			return nil
+		}
+		res := telemetry.Aggregate(reports)
+		fmt.Printf("Aggregated %d telemetry reports from %s:\n", res.TotalReports, dir)
+		fmt.Printf("  Average Refusal Rate:         %.2f%%\n", res.AvgRefusalRate*100)
+		fmt.Printf("  Average KL Divergence:        %.4f\n", res.AvgKLDivergence)
+		fmt.Printf("  Average Capability Retention: %.2f%%\n", res.AvgCapabilityRetention*100)
+		if len(res.ModelArchitectures) > 0 {
+			fmt.Printf("  Model Architectures:          %s\n", strings.Join(res.ModelArchitectures, ", "))
+		}
+		if len(res.SteeringMethods) > 0 {
+			fmt.Printf("  Steering Methods:             %s\n", strings.Join(res.SteeringMethods, ", "))
+		}
+		return nil
+	},
+}
+
 func init() {
 	downloadCmd.Flags().StringP("output", "o", "./models", "Output directory for downloaded files")
 	downloadCmd.Flags().StringP("token", "t", "", "HuggingFace API token (or $HF_TOKEN)")
@@ -390,10 +484,12 @@ func init() {
 	profileCmd.Flags().Int("num-directions", 1, "Number of top directions to extract when --whitened-svd is set")
 	profileCmd.Flags().Float64("shrinkage", -1, "Ledoit-Wolf shrinkage intensity for the whitening covariance (<0 = auto-estimate)")
 	profileCmd.Flags().Float64("eig-floor", 0, "Minimum eigenvalue for the whitening matrix (0 = auto, 1e-10 of max)")
+	profileCmd.Flags().Bool("cone-analysis", false, "Run cross-category concept cone geometric analysis during profiling")
+	profileCmd.Flags().Bool("rdo", false, "Refine extracted direction using gradient-based Refusal Direction Optimization")
 
 	validateCmd.Flags().Int("hidden-dim", 4096, "Model hidden dimension")
 
-	rootCmd.AddCommand(downloadCmd, convertCmd, profileCmd, recommendCmd, validateCmd)
+	rootCmd.AddCommand(downloadCmd, convertCmd, profileCmd, recommendCmd, validateCmd, aggregateCmd)
 }
 
 func main() {

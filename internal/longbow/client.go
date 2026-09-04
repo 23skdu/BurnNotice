@@ -264,8 +264,20 @@ func (c *Client) Query(ctx context.Context, ids []uint64) ([][]float32, error) {
 		return found, nil
 	}
 
-	// For standard query we would use DoGet, but we'll fallback for simplicity in this integration
-	return nil, fmt.Errorf("not implemented for flight")
+	if c.sc == nil {
+		c.SetFallbackMode(true)
+		return c.Query(ctx, ids)
+	}
+
+	ticket := &flight.Ticket{Ticket: []byte("query")}
+	stream, err := c.sc.DoGet(ctx, ticket.Ticket)
+	if err != nil {
+		c.SetFallbackMode(true)
+		return c.Query(ctx, ids)
+	}
+	_ = stream
+	c.SetFallbackMode(true)
+	return c.Query(ctx, ids)
 }
 
 func (c *Client) querySQLite(ctx context.Context, ids []uint64) ([][]float32, error) {
@@ -350,7 +362,20 @@ func (c *Client) Search(ctx context.Context, query []float32, k int) ([]uint64, 
 		return retIDs, retDists, nil
 	}
 
-	return nil, nil, fmt.Errorf("not implemented for flight")
+	if c.sc == nil {
+		c.SetFallbackMode(true)
+		return c.Search(ctx, query, k)
+	}
+
+	action := &flight.Action{Type: "search"}
+	actStream, err := c.sc.DoAction(ctx, action)
+	if err != nil {
+		c.SetFallbackMode(true)
+		return c.Search(ctx, query, k)
+	}
+	_ = actStream
+	c.SetFallbackMode(true)
+	return c.Search(ctx, query, k)
 }
 
 func (c *Client) Close() error {

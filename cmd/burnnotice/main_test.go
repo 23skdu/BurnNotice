@@ -232,4 +232,65 @@ func TestBurnNotice_ProfileCmd_Execution(t *testing.T) {
 	} else {
 		t.Error("expected error for nonexistent oversight file, got nil")
 	}
+
+	// 4. Run profile with --cone-analysis and --rdo flags
+	rootCmd.SetArgs([]string{
+		"profile", path,
+		"--dataset", datasetPath,
+		"--output", dir,
+		"--layers", "0",
+		"--cone-analysis",
+		"--rdo",
+	})
+	err = rootCmd.Execute()
+	if err != nil {
+		if strings.Contains(err.Error(), "onnxruntime") || strings.Contains(err.Error(), "shared library") {
+			t.Log("skipping cone-analysis and rdo test because ONNX shared library is missing")
+		} else {
+			t.Errorf("profile with --cone-analysis and --rdo failed: %v", err)
+		}
+	}
+}
+
+func TestBurnNotice_AggregateCmd(t *testing.T) {
+	rootCmd.SetOut(&bytes.Buffer{})
+	rootCmd.SetErr(&bytes.Buffer{})
+
+	// 1. Nonexistent directory
+	rootCmd.SetArgs([]string{"aggregate", "/nonexistent/telemetry/dir"})
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Error("expected error for nonexistent telemetry dir in aggregate")
+	}
+
+	// 2. Empty directory
+	emptyDir := t.TempDir()
+	rootCmd.SetArgs([]string{"aggregate", emptyDir})
+	err = rootCmd.Execute()
+	if err != nil {
+		t.Errorf("expected clean execution for empty telemetry dir, got: %v", err)
+	}
+
+	// 3. Directory with valid report JSON
+	reportDir := t.TempDir()
+	reportJSON := `{
+		"model_architecture": "llama",
+		"model_size": "7B",
+		"steering_method": "whitened_svd",
+		"refusal_rate": 0.05,
+		"kl_divergence": 0.12,
+		"capability_retention": 0.98,
+		"hardware": "cuda",
+		"timestamp": 1234567890,
+		"version": 1
+	}`
+	if err := os.WriteFile(filepath.Join(reportDir, "telemetry_1.json"), []byte(reportJSON), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	rootCmd.SetArgs([]string{"aggregate", reportDir})
+	err = rootCmd.Execute()
+	if err != nil {
+		t.Errorf("aggregate failed on valid reports: %v", err)
+	}
 }
