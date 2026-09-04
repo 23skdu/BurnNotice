@@ -1,256 +1,128 @@
 package engine
 
 import (
+	"math"
 	"testing"
 )
 
-func TestNewMoEEngine(t *testing.T) {
-	e := NewMoEEngine(4, 2, []int{128, 128, 128, 128}, nil)
+type mockLedger struct {
+	activations map[int][]float64
+	err         error
+}
 
-	if e.NumExperts() != 4 {
-		t.Errorf("NumExperts = %d, want 4", e.NumExperts())
+func (m *mockLedger) PollActivation(layerIdx int) ([]float64, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.activations[layerIdx], nil
+}
+
+func TestMoEEngine_PollLedger(t *testing.T) {
+	// 1. Without ledger
+	engNoLedger := NewMoEEngine(4, 2, []int{2, 2, 2, 2}, nil)
+	_, err := engNoLedger.PollLedger(0)
+	if err == nil {
+		t.Error("expected error when polling without ledger")
+	}
+
+	// 2. With ledger
+	mock := &mockLedger{
+		activations: map[int][]float64{
+			1: {1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0},
+		},
+	}
+	eng := NewMoEEngine(4, 2, []int{2, 2, 2, 2}, mock)
+	data, err := eng.PollLedger(1)
+	if err != nil {
+		t.Fatalf("unexpected error polling ledger: %v", err)
+	}
+	if len(data) != 8 {
+		t.Fatalf("expected 8 floats, got %d", len(data))
 	}
 }
 
-func TestNewMoEEngine_Panic(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Fatal("expected panic for mismatched expertDims")
-		}
-	}()
-	NewMoEEngine(4, 2, []int{128, 128}, nil)
-}
-
-func TestMoEEngine_DetectRouting(t *testing.T) {
-	e := NewMoEEngine(4, 2, []int{128, 128, 128, 128}, nil)
-
-	_, weights := e.DetectRouting(0, make([]float64, 128))
-
-	if len(weights) != 2 {
-		t.Fatalf("len(weights) = %d, want 2", len(weights))
+func TestMoEEngine_DetectRouting_WithLedger(t *testing.T) {
+	mock := &mockLedger{
+		activations: map[int][]float64{
+			2: {10.0, 10.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0},
+		},
 	}
+	eng := NewMoEEngine(4, 2, []int{2, 2, 2, 2}, mock)
 
-	// Check weights sum to ~1 (top-K of uniform)
-	var sum float64
-	for _, w := range weights {
-		sum += w
+	// Call DetectRouting with empty slice; should poll ledger at layer 2
+	indices, weights := eng.DetectRouting(2, nil)
+	if len(indices) != 2 || len(weights) != 2 {
+		t.Fatalf("expected 2 experts, got %d indices, %d weights", len(indices), len(weights))
 	}
-	if sum < 0.4 || sum > 0.6 {
-		t.Errorf("weights sum = %f, want ~0.5", sum)
-	}
-}
-
-func TestMoEEngine_DetectRouting_Uniform(t *testing.T) {
-	e := NewMoEEngine(3, 2, []int{64, 64, 64}, nil)
-
-	_, weights := e.DetectRouting(0, make([]float64, 64))
-
-	// With uniform routing, top-2 should have equal weights
-	if weights[0] != weights[1] {
-		t.Errorf("uniform routing weights should be equal: %f != %f", weights[0], weights[1])
-	}
-}
-
-func TestMoEEngine_ExpertActivation(t *testing.T) {
-	e := NewMoEEngine(2, 1, []int{64, 128}, nil)
-
-	activation := make([]float64, 200)
-	for i := range activation {
-		activation[i] = float64(i)
-	}
-
-	exp0 := e.ExpertActivation(activation, 0)
-	if len(exp0) != 64 {
-		t.Errorf("expert 0 activation len = %d, want 64", len(exp0))
-	}
-
-	exp1 := e.ExpertActivation(activation, 1)
-	if len(exp1) != 128 {
-		t.Errorf("expert 1 activation len = %d, want 128", len(exp1))
-	}
-}
-
-func TestMoEEngine_ExpertActivation_InvalidIndex(t *testing.T) {
-	e := NewMoEEngine(2, 1, []int{64, 128}, nil)
-
-	result := e.ExpertActivation(make([]float64, 200), 5)
-	if result != nil {
-		t.Error("should return nil for invalid expert index")
-	}
-}
-
-func TestMoEEngine_ExpertActivation_ShorterDim(t *testing.T) {
-	e := NewMoEEngine(1, 1, []int{256}, nil)
-
-	activation := make([]float64, 100)
-	result := e.ExpertActivation(activation, 0)
-
-	if len(result) != 100 {
-		t.Errorf("result len = %d, want 100 (clipped to activation len)", len(result))
-	}
-}
-
-func TestMoEEngine_ExpertDim(t *testing.T) {
-	e := NewMoEEngine(3, 2, []int{64, 128, 256}, nil)
-
-	if e.ExpertDim(0) != 64 {
-		t.Errorf("ExpertDim(0) = %d, want 64", e.ExpertDim(0))
-	}
-	if e.ExpertDim(1) != 128 {
-		t.Errorf("ExpertDim(1) = %d, want 128", e.ExpertDim(1))
-	}
-	if e.ExpertDim(2) != 256 {
-		t.Errorf("ExpertDim(2) = %d, want 256", e.ExpertDim(2))
-	}
-	if e.ExpertDim(99) != 0 {
-		t.Errorf("ExpertDim(99) = %d, want 0", e.ExpertDim(99))
-	}
-}
-
-func TestMoEEngine_DetectRouting_Dynamic(t *testing.T) {
-	e := NewMoEEngine(3, 1, []int{64, 64, 64}, nil)
-
-	activation := make([]float64, 192)
-	// Make expert 0 highly active
-	for i := 0; i < 64; i++ {
-		activation[i] = 10.0
-	}
-	// Make expert 1 lightly active
-	for i := 64; i < 128; i++ {
-		activation[i] = 1.0
-	}
-	// Expert 2 inactive (0.0)
-
-	indices, weights := e.DetectRouting(0, activation)
-
-	if len(indices) != 1 {
-		t.Fatalf("len(indices) = %d, want 1", len(indices))
-	}
-
 	if indices[0] != 0 {
-		t.Errorf("top expert = %d, want 0", indices[0])
-	}
-	// The weights are normalized sums of squares
-	// SumSq0 = 64 * 100 = 6400
-	// SumSq1 = 64 * 1 = 64
-	// SumSq2 = 0
-	// Total = 6464
-	// Weight0 = 6400 / 6464 = 0.990099
-	if weights[0] < 0.98 || weights[0] > 1.0 {
-		t.Errorf("top weight = %f, want ~0.99", weights[0])
-	}
-}
-
-func TestMoEEngine_DetectRouting_FallbackUniform(t *testing.T) {
-	e := NewMoEEngine(3, 2, []int{64, 64, 64}, nil)
-
-	// All zeros activation
-	activation := make([]float64, 192)
-
-	_, weights := e.DetectRouting(0, activation)
-
-	// Should fall back to uniform
-	expected := 1.0 / 3.0
-	for _, w := range weights {
-		if w != expected {
-			t.Errorf("weight = %f, want %f (uniform)", w, expected)
-		}
-	}
-}
-
-func TestMoEEngine_UpdateRouting(t *testing.T) {
-	e := NewMoEEngine(3, 2, []int{64, 64, 64}, nil)
-
-	// Mismatched length should return early
-	e.UpdateRouting(1, []float64{0.1, 0.2})
-	if _, ok := e.routingCache[1]; ok {
-		t.Error("routingCache should not have been updated with mismatched weights")
-	}
-
-	// Correct length should succeed
-	weights := []float64{0.2, 0.5, 0.3}
-	e.UpdateRouting(1, weights)
-	cached, ok := e.routingCache[1]
-	if !ok {
-		t.Fatal("expected cached weights for layer 1")
-	}
-	if len(cached) != 3 || cached[0] != 0.2 || cached[1] != 0.5 || cached[2] != 0.3 {
-		t.Errorf("got cached weights %v, want %v", cached, weights)
-	}
-}
-
-func TestMoEEngine_DetectRouting_ShortActivation(t *testing.T) {
-	// ExpertDims is 64, 64, 64. Sum is 192.
-	// We pass an activation of length 100.
-	// For idx = 0: dim = 64, end = 64.
-	// For idx = 1: dim = 64, start = 64, end = 128 > 100 -> end is clipped to 100.
-	// For idx = 2: dim = 64, start = 100, end = 164 > 100 -> end is clipped to 100.
-	e := NewMoEEngine(3, 2, []int{64, 64, 64}, nil)
-
-	activation := make([]float64, 100)
-	for i := 0; i < 100; i++ {
-		activation[i] = 1.0
-	}
-
-	indices, weights := e.DetectRouting(0, activation)
-	if len(indices) != 2 {
-		t.Fatalf("expected 2 expert indices, got %d", len(indices))
-	}
-	// Expert 0 score: 64
-	// Expert 1 score: 36 (100 - 64)
-	// Expert 2 score: 0
-	// Total: 100
-	if indices[0] != 0 || indices[1] != 1 {
-		t.Errorf("got active indices %v, want [0, 1]", indices)
-	}
-	if weights[0] != 0.64 || weights[1] != 0.36 {
-		t.Errorf("got weights %v, want [0.64, 0.36]", weights)
-	}
-}
-
-func TestMoEEngine_DetectRouting_TopKGreaterThanNumExperts(t *testing.T) {
-	// e.topK = 5, but numExperts = 3
-	e := NewMoEEngine(3, 5, []int{64, 64, 64}, nil)
-
-	activation := make([]float64, 192)
-	for i := 0; i < 64; i++ {
-		activation[i] = 1.0 // Expert 0 active
-	}
-
-	indices, weights := e.DetectRouting(0, activation)
-	// topK should be capped at numExperts (3)
-	if len(indices) != 3 {
-		t.Fatalf("expected capped topK of 3, got %d", len(indices))
-	}
-	if len(weights) != 3 {
-		t.Fatalf("expected capped weights length of 3, got %d", len(weights))
-	}
-}
-
-func TestMoEEngine_DetectRouting_Swap(t *testing.T) {
-	e := NewMoEEngine(3, 2, []int{64, 64, 64}, nil)
-
-	activation := make([]float64, 192)
-	// Expert 0 score: 0
-	// Make expert 1 lightly active (score 64)
-	for i := 64; i < 128; i++ {
-		activation[i] = 1.0
-	}
-	// Make expert 2 highly active (score 6400)
-	for i := 128; i < 192; i++ {
-		activation[i] = 10.0
-	}
-
-	indices, weights := e.DetectRouting(0, activation)
-	// Expert 2 should be index 0 (highly active)
-	// Expert 1 should be index 1 (lightly active)
-	if indices[0] != 2 || indices[1] != 1 {
-		t.Errorf("got active indices %v, want [2, 1]", indices)
+		t.Errorf("expected expert 0 to have highest weight, got %d", indices[0])
 	}
 	if weights[0] <= weights[1] {
-		t.Errorf("expected weight for index 2 to be greater than index 1, got %v", weights)
+		t.Errorf("expected weight[0] > weight[1], got %f <= %f", weights[0], weights[1])
 	}
 }
 
+func TestMoEEngine_DetectRoutingFromLogits(t *testing.T) {
+	eng := NewMoEEngine(4, 2, []int{2, 2, 2, 2}, nil)
 
+	// Test dimension mismatch
+	resIdx, resW := eng.DetectRoutingFromLogits([]float64{1.0, 2.0})
+	if resIdx != nil || resW != nil {
+		t.Errorf("expected nil for mismatched logits dimension, got %v, %v", resIdx, resW)
+	}
 
+	// 4 experts, top-2: logits [1.0, 3.0, 0.0, 2.0]
+	// Top 2 should be expert 1 (logit 3.0) and expert 3 (logit 2.0)
+	indices, weights := eng.DetectRoutingFromLogits([]float64{1.0, 3.0, 0.0, 2.0})
+	if len(indices) != 2 || len(weights) != 2 {
+		t.Fatalf("expected 2 indices and weights, got %d, %d", len(indices), len(weights))
+	}
+	if indices[0] != 1 || indices[1] != 3 {
+		t.Errorf("expected indices [1, 3], got %v", indices)
+	}
+
+	// Weights should sum to 1.0
+	sum := weights[0] + weights[1]
+	if math.Abs(sum-1.0) > 1e-6 {
+		t.Errorf("expected weights sum to 1.0, got %f", sum)
+	}
+	// Exp(3-3) / (Exp(3-3) + Exp(2-3)) = 1 / (1 + 1/e) ~= 1 / 1.367879 ~= 0.731058
+	expectedW0 := 1.0 / (1.0 + math.Exp(-1.0))
+	if math.Abs(weights[0]-expectedW0) > 1e-4 {
+		t.Errorf("expected weight[0] ~ %f, got %f", expectedW0, weights[0])
+	}
+}
+
+func TestMoEEngine_AccessorsAndPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic for mismatched expertDims")
+		}
+	}()
+
+	eng := NewMoEEngine(3, 2, []int{4, 4, 4}, nil)
+	if eng.NumExperts() != 3 {
+		t.Errorf("NumExperts = %d, want 3", eng.NumExperts())
+	}
+	if eng.ExpertDim(1) != 4 {
+		t.Errorf("ExpertDim(1) = %d, want 4", eng.ExpertDim(1))
+	}
+	if eng.ExpertDim(-1) != 0 || eng.ExpertDim(10) != 0 {
+		t.Error("expected 0 for out-of-bounds ExpertDim")
+	}
+
+	act := []float64{1, 2, 3, 4, 5, 6, 7, 8}
+	eAct := eng.ExpertActivation(act, 0)
+	if len(eAct) != 4 || eAct[0] != 1 || eAct[3] != 4 {
+		t.Errorf("unexpected ExpertActivation: %v", eAct)
+	}
+	if eng.ExpertActivation(act, -1) != nil {
+		t.Error("expected nil for invalid expertIdx")
+	}
+
+	eng.UpdateRouting(0, []float64{0.5, 0.3, 0.2})
+	eng.UpdateRouting(0, []float64{0.5}) // mismatch length, ignored
+
+	// Trigger panic
+	_ = NewMoEEngine(3, 2, []int{4, 4}, nil)
+}

@@ -155,3 +155,48 @@ func TestReporter_ErrorsAndEdgeCases(t *testing.T) {
 	}
 }
 
+func TestLoadReports(t *testing.T) {
+	// 1. Nonexistent directory
+	_, err := LoadReports("/nonexistent/directory/path")
+	if err == nil {
+		t.Error("expected error for nonexistent dir in LoadReports")
+	}
+
+	// 2. Valid directory with reports and non-json file
+	tmpDir := t.TempDir()
+	r1 := Report{ModelArchitecture: "llama", SteeringMethod: "dim", RefusalRate: 0.1}
+	r2 := Report{ModelArchitecture: "qwen", SteeringMethod: "svd", RefusalRate: 0.2}
+
+	b1, _ := json.Marshal(r1)
+	b2, _ := json.Marshal(r2)
+
+	if err := os.WriteFile(filepath.Join(tmpDir, "telemetry_1.json"), b1, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "telemetry_2.json"), b2, 0600); err != nil {
+		t.Fatal(err)
+	}
+	// Non-json file should be ignored
+	if err := os.WriteFile(filepath.Join(tmpDir, "notes.txt"), []byte("ignore me"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	reports, err := LoadReports(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadReports failed: %v", err)
+	}
+	if len(reports) != 2 {
+		t.Fatalf("expected 2 reports, got %d", len(reports))
+	}
+
+	// 3. Corrupted JSON file
+	badDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(badDir, "bad.json"), []byte("{not json"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	_, err = LoadReports(badDir)
+	if err == nil {
+		t.Error("expected error for malformed json in LoadReports")
+	}
+}
+

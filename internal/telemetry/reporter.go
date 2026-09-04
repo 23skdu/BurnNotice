@@ -153,3 +153,29 @@ func Aggregate(reports []Report) AggregateResult {
 
 	return result
 }
+
+// LoadReports reads all JSON report files from the specified directory.
+func LoadReports(dir string) ([]Report, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("read telemetry dir: %w", err)
+	}
+
+	var reports []Report
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		data, err := os.ReadFile(path) // #nosec G304 -- directory is user-provided CLI arg
+		if err != nil {
+			return nil, fmt.Errorf("read telemetry file %s: %w", entry.Name(), err)
+		}
+		var report Report
+		if err := json.Unmarshal(data, &report); err != nil {
+			return nil, fmt.Errorf("parse telemetry report %s: %w", entry.Name(), err)
+		}
+		reports = append(reports, report)
+	}
+	return reports, nil
+}
