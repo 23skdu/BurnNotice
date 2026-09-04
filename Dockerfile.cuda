@@ -1,4 +1,4 @@
-FROM golang:1.26.3-bullseye AS builder
+FROM golang:1.27.0-bullseye AS builder
 
 RUN apt-get update && apt-get install -y git make protobuf-compiler libprotobuf-dev gcc g++
 
