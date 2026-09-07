@@ -11,7 +11,7 @@ require (
 	github.com/tetratelabs/wazero v1.12.0
 	github.com/yalue/onnxruntime_go v1.35.0
 	go.opentelemetry.io/otel v1.46.0
-	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.45.0
+	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.46.0
 	go.opentelemetry.io/otel/sdk v1.46.0
 	go.opentelemetry.io/otel/sdk/metric v1.46.0
 	gonum.org/v1/gonum v0.17.0
