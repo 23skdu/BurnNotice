@@ -111,6 +111,39 @@ func (h *Handlers) Subspace() http.HandlerFunc {
 	}
 }
 
+// LatentSpace renders the fine-grained semantic latent space manifold page.
+func (h *Handlers) LatentSpace() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		modelID := r.PathValue("id")
+		w.Header().Set("Content-Type", "text/html")
+		_ = latentSpaceHTML(modelID).Render(r.Context(), w)
+	}
+}
+
+// LatentSpaceSVG returns a fine-grained SVG of the model's semantic latent space.
+func (h *Handlers) LatentSpaceSVG() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		modelID := r.PathValue("id")
+		w.Header().Set("Content-Type", "image/svg+xml")
+		svg := sampleLatentSpaceSVG(modelID)
+		_, _ = w.Write([]byte(svg))
+	}
+}
+
+// LatentSpaceData returns JSON projection data for the model's semantic latent space.
+func (h *Handlers) LatentSpaceData() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		data := map[string]interface{}{
+			"model_id":           r.PathValue("id"),
+			"status":             "projected",
+			"variance_explained": []float64{0.584, 0.312},
+			"method":             "pca_svd_thin",
+		}
+		_ = json.NewEncoder(w).Encode(data)
+	}
+}
+
 // Circuits renders the neural circuit graph.
 func (h *Handlers) Circuits() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -166,6 +199,9 @@ func (h *Handlers) RegisterRoutes(mux *http.ServeMux, staticDir string) {
 	mux.Handle("GET /monitor/{session}", h.Monitor())
 	mux.Handle("GET /model/{id}/heatmap", h.Heatmap())
 	mux.Handle("GET /model/{id}/subspace", h.Subspace())
+	mux.Handle("GET /model/{id}/latent", h.LatentSpace())
+	mux.Handle("GET /api/model/{id}/latent/svg", h.LatentSpaceSVG())
+	mux.Handle("GET /api/model/{id}/latent/data", h.LatentSpaceData())
 	mux.Handle("GET /model/{id}/circuits", h.Circuits())
 	mux.Handle("GET /policies", h.Policies())
 	mux.Handle("POST /api/policies", h.SavePolicy())

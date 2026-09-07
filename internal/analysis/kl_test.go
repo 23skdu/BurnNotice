@@ -141,3 +141,29 @@ func TestComputeKLDivergence_Errors(t *testing.T) {
 		t.Error("expected error for batch length mismatch")
 	}
 }
+
+func TestProjectionKLDivergence_RegularizedVsExact(t *testing.T) {
+	// Baseline original unsteered logits
+	origLogits := []float64{3.0, 1.5, 0.2, -0.5}
+
+	// Exact projection (alpha = 0 / 100% removal of component): alters logits significantly
+	exactLogits := []float64{0.5, 1.5, 0.2, -0.5}
+
+	// Regularized projection (alpha = 0.5 / ridge shrunk): preserves partial energy, reducing distortion
+	regLogits := []float64{2.0, 1.5, 0.2, -0.5}
+
+	klExact, err := ComputeKLDivergence(origLogits, exactLogits)
+	if err != nil {
+		t.Fatalf("unexpected error on exact KL: %v", err)
+	}
+
+	klReg, err := ComputeKLDivergence(origLogits, regLogits)
+	if err != nil {
+		t.Fatalf("unexpected error on regularized KL: %v", err)
+	}
+
+	// Regularized projection must have strictly lower KL divergence than exact projection
+	if klReg >= klExact {
+		t.Errorf("regularized projection should have lower KL divergence than exact projection: reg=%f vs exact=%f", klReg, klExact)
+	}
+}

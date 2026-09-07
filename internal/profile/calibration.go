@@ -286,3 +286,33 @@ func (c *Calibrator) calibrateInternal(prof *ModelProfile, dataset *datasets.Dat
 
 	return optimalThresholds, nil
 }
+
+// AdjustThresholdForCone adjusts the baseline detection threshold based on the concept cone dimensionality.
+// Higher-dimensional concept cones naturally capture more variance, requiring scaled thresholds to maintain constant false alarm rates.
+func AdjustThresholdForCone(baseThreshold float64, coneDimension int) float64 {
+	if coneDimension <= 1 {
+		return baseThreshold
+	}
+	// Scale threshold with square root of cone dimension
+	scale := math.Sqrt(float64(coneDimension))
+	adjusted := baseThreshold * scale
+	// Clamp to maximum 0.95 to preserve sensitivity
+	if adjusted > 0.95 {
+		adjusted = 0.95
+	}
+	return adjusted
+}
+
+// RecommendedINLPIterations returns the suggested number of Iterative Nullspace Projections for a given cone dimensionality.
+func RecommendedINLPIterations(coneDimension int) int {
+	if coneDimension <= 1 {
+		return 5
+	}
+	iterations := 2 * coneDimension
+	if iterations < 5 {
+		iterations = 5
+	} else if iterations > 40 {
+		iterations = 40
+	}
+	return iterations
+}
