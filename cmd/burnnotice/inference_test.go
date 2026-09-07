@@ -1,11 +1,14 @@
 package main
 
 import (
-	"burnnotice/internal/onnxpb"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"burnnotice/internal/onnxpb"
+	"burnnotice/internal/profile"
 
 	"google.golang.org/protobuf/proto"
 )
@@ -130,3 +133,120 @@ func TestONNXModel_Inference(t *testing.T) {
 		t.Errorf("len(actEmpty) = %d, want %d", len(actEmpty), hiddenDim)
 	}
 }
+
+func TestONNXModel_ArchitectureCompatibility(t *testing.T) {
+	families := []struct {
+		name       string
+		configJSON string
+		hiddenDim  int
+		wantFamily string
+	}{
+		{
+			name:       "qwen",
+			configJSON: `{"architectures": ["Qwen2ForCausalLM"], "hidden_size": 896}`,
+			hiddenDim:  896,
+			wantFamily: "qwen",
+		},
+		{
+			name:       "gemma",
+			configJSON: `{"architectures": ["Gemma2ForCausalLM"], "hidden_size": 2304}`,
+			hiddenDim:  2304,
+			wantFamily: "gemma",
+		},
+		{
+			name:       "llama",
+			configJSON: `{"architectures": ["LlamaForCausalLM"], "hidden_size": 2048}`,
+			hiddenDim:  2048,
+			wantFamily: "llama",
+		},
+	}
+
+	for _, tc := range families {
+		t.Run(tc.name, func(t *testing.T) {
+			modelBytes, err := createDummyONNXModelForCLI(tc.hiddenDim)
+			if err != nil {
+				t.Fatalf("failed to create dummy model: %v", err)
+			}
+
+			dir := t.TempDir()
+			modelPath := filepath.Join(dir, "model.onnx")
+			if err := os.WriteFile(modelPath, modelBytes, 0644); err != nil {
+				t.Fatal(err)
+			}
+			cfgPath := filepath.Join(dir, "config.json")
+			if err := os.WriteFile(cfgPath, []byte(tc.configJSON), 0644); err != nil {
+				t.Fatal(err)
+			}
+
+			m, err := LoadONNXModel(modelPath)
+			if err != nil {
+				if strings.Contains(err.Error(), "onnxruntime") || strings.Contains(err.Error(), "shared library") {
+					t.Skipf("skipping inference test because ONNX shared library is not available: %v", err)
+				}
+				t.Fatalf("LoadONNXModel failed for %s: %v", tc.name, err)
+			}
+			defer m.Close()
+
+			if string(m.family) != tc.wantFamily {
+				t.Errorf("%s: expected family %s, got %s", tc.name, tc.wantFamily, m.family)
+			}
+			if m.dim != tc.hiddenDim {
+				t.Errorf("%s: expected dim %d, got %d", tc.name, tc.hiddenDim, m.dim)
+			}
+
+			act, err := m.ExtractActivation("Why is the sky blue?", "Rayleigh scattering.")
+			if err != nil {
+				t.Fatalf("%s: ExtractActivation failed: %v", tc.name, err)
+			}
+			if len(act) != tc.hiddenDim {
+				t.Errorf("%s: len(act) = %d, want %d", tc.name, len(act), tc.hiddenDim)
+			}
+		})
+	}
+}
+
+func TestDetectArchitecture_LlamaQwenGemma(t *testing.T) {
+	cases := []struct {
+		modelName  string
+		configJSON string
+		wantFamily string
+		wantDim    int
+	}{
+		{
+			modelName:  "qwen2.5-0.5b",
+			configJSON: `{"architectures": ["Qwen2ForCausalLM"], "hidden_size": 896}`,
+			wantFamily: "qwen",
+			wantDim:    896,
+		},
+		{
+			modelName:  "gemma-2-2b",
+			configJSON: `{"architectures": ["Gemma2ForCausalLM"], "hidden_size": 2304}`,
+			wantFamily: "gemma",
+			wantDim:    2304,
+		},
+		{
+			modelName:  "llama-3.2-1b",
+			configJSON: `{"architectures": ["LlamaForCausalLM"], "hidden_size": 2048}`,
+			wantFamily: "llama",
+			wantDim:    2048,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.modelName, func(t *testing.T) {
+			spec := profile.DetectModelFamily(tc.modelName, []byte(tc.configJSON), nil)
+			if string(spec.Family) != tc.wantFamily {
+				t.Errorf("expected family %s, got %s", tc.wantFamily, spec.Family)
+			}
+			var hfCfg profile.HuggingFaceConfig
+			if err := json.Unmarshal([]byte(tc.configJSON), &hfCfg); err != nil {
+				t.Fatal(err)
+			}
+			if hfCfg.HiddenSize != tc.wantDim {
+				t.Errorf("expected hidden dim %d, got %d", tc.wantDim, hfCfg.HiddenSize)
+			}
+		})
+	}
+}
+
+

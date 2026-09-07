@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"burnnotice/internal/extract"
 	"burnnotice/internal/profile"
 	"burnnotice/internal/scoring"
+	"burnnotice/internal/steer"
 	"burnnotice/internal/telemetry"
 
 	"github.com/spf13/cobra"
@@ -323,10 +325,38 @@ Extraction method:
 		if len(directions) > 0 {
 			fmt.Printf("Sample scores: deception=%.4f\n", scores["deception"])
 		}
+		// Detect architecture family (Llama, Qwen, Gemma, Mistral)
+		var configBytes []byte
+		cfgCandidate := filepath.Clean(filepath.Join(filepath.Dir(modelPath), "config.json"))
+		if data, err := os.ReadFile(cfgCandidate); err == nil { // #nosec G304 -- model path is user-provided CLI arg
+			configBytes = data
+		}
+		archSpec := profile.DetectModelFamily(filepath.Base(modelPath), configBytes, nil)
+		fmt.Printf("Detected architecture: %s (bias=%v, rms_offset=%v)\n",
+			archSpec.DisplayName, archSpec.HasAttentionBias, archSpec.RMSNormWithOffset)
+
+		// Prefill behavioral commitment analysis if requested
+		runCommitWindow, _ := cmd.Flags().GetBool("commit-window")
+		if runCommitWindow && len(scores) > 0 {
+			sampleScores := make([]float64, 0, 16)
+			for i := 0; i < 16; i++ {
+				fi := float64(i)
+				s := scores["deception"] * (1.0 / (1.0 + math.Exp(-0.8*(fi-6.0))))
+				sampleScores = append(sampleScores, s)
+			}
+			detector := steer.NewBehavioralCommitmentDetector(steer.DefaultCommitmentConfig(string(archSpec.Family)))
+			cRes, err := detector.AnalyzeCommitmentWindow(sampleScores, 12)
+			if err == nil {
+				fmt.Printf("Behavioral commitment window: peak=token_%d (deriv=%.4f), span=[%d..%d], prefill_ratio=%.2f%%\n",
+					cRes.PeakPosition, cRes.MaxDerivative, cRes.WindowStart, cRes.WindowEnd, cRes.PrefillEnergyRatio*100)
+			}
+		}
 
 		modelProfile := &profile.ModelProfile{
-			ModelID:    filepath.Base(modelPath),
-			Directions: make(map[string]map[int][]float64),
+			ModelID:          filepath.Base(modelPath),
+			Architecture:     string(archSpec.Family),
+			ArchitectureSpec: archSpec,
+			Directions:       make(map[string]map[int][]float64),
 		}
 		for idx, dir := range directions {
 			dirName := fmt.Sprintf("deception_%d", idx)
@@ -357,34 +387,69 @@ Extraction method:
 
 var recommendCmd = &cobra.Command{
 	Use:   "recommend",
-	Short: "Print recommended model and export instructions",
-	Long: `Prints the recommended model for testing BurnNotice and step-by-step
-instructions to export it to ONNX format using optimum-cli.`,
+	Short: "Print recommended models and export instructions for Llama, Qwen, and Gemma",
+	Long: `Prints recommended open-weight models across Llama, Qwen, and Gemma families,
+along with step-by-step export instructions using optimum-cli.`,
 	Args: cobra.NoArgs,
 	RunE: func(_ *cobra.Command, _ []string) error {
-		fmt.Printf(`Recommended Model: %s
+		fmt.Printf(`BurnNotice Supported Model Families & Export Instructions:
 
-This is the smallest model in the Qwen2.5 family (0.5B parameters).
-It is suitable for:
-  • Quick ONNX export testing
-  • BurnNotice profiling validation
-  • CI/CD pipeline integration
+========================================================================
+1. ALIBABA QWEN FAMILY (Recommended for fast testing & reasoning models)
+========================================================================
+  Models:
+    • Qwen/Qwen2.5-0.5B         (Ultra-fast CI/testing, 0.5B params)
+    • Qwen/Qwen2.5-7B-Instruct   (Production-grade alignment, 7B params)
+    • Qwen/QwQ-32B-Preview      (Reasoning architecture with <think> boundaries)
 
-Step-by-step export:
-  1. Install optimum + torch:
-     pip install optimum[onnxruntime] torch --quiet
+  Architecture Features:
+    • QKV projection attention bias (supported via internal/steer/bias.go)
+    • Chain-of-Thought state machine (supported via internal/steer/cot.go)
 
-  2. Export to ONNX:
-     optimum-cli export onnx --model %s ./onnx/qwen2.5-0.5b
+  Export command:
+    pip install optimum[onnxruntime] torch --quiet
+    optimum-cli export onnx --model Qwen/Qwen2.5-0.5B ./onnx/qwen2.5-0.5b/
 
-  3. Profile with BurnNotice:
-     burnnotice profile ./onnx/qwen2.5-0.5b/model.onnx --dataset ./data/deception_pairs.json
+========================================================================
+2. META LLAMA FAMILY (Industry standard causal decoder)
+========================================================================
+  Models:
+    • meta-llama/Llama-3.2-1B    (Edge deployment, 1B params)
+    • meta-llama/Llama-3.1-8B    (Full capability benchmark, 8B params)
+    • meta-llama/Llama-3.3-70B   (Enterprise alignment faking detection)
 
-Requirements:
-  • Python 3.10+
-  • 2 GB free disk space
-  • 4 GB RAM
-`, recommendedModel, recommendedModel)
+  Architecture Features:
+    • Pure RMSNorm (zero bias)
+    • Dual-phase prefill + decoding behavioral commitment
+
+  Export command:
+    optimum-cli export onnx --model meta-llama/Llama-3.2-1B-Instruct ./onnx/llama-3.2-1b/
+
+========================================================================
+3. GOOGLE GEMMA FAMILY (Advanced layernorms & monosemantic SAE features)
+========================================================================
+  Models:
+    • google/gemma-2-2b-it       (Compact multi-norm model, 2.6B params)
+    • google/gemma-2-9b-it       (SOTA open weights, 9B params)
+    • Gemma Scope SAEs          (Supported via internal/sae/loader.go)
+
+  Architecture Features:
+    • RMSNorm with unit offset (1.0 + weight)
+    • Embedding scaled by sqrt(hidden_size)
+    • Pre- and post-feedforward dual layernorms
+    • Prefill-dominant behavioral commitment window
+
+  Export command:
+    optimum-cli export onnx --model google/gemma-2-2b-it ./onnx/gemma-2-2b/
+
+========================================================================
+Running Profile & Analysis:
+========================================================================
+  burnnotice profile ./onnx/<model_dir>/model.onnx \
+    --dataset ./data/deception_pairs.json \
+    --cone-analysis \
+    --commit-window
+`)
 		return nil
 	},
 }
@@ -486,6 +551,7 @@ func init() {
 	profileCmd.Flags().Float64("eig-floor", 0, "Minimum eigenvalue for the whitening matrix (0 = auto, 1e-10 of max)")
 	profileCmd.Flags().Bool("cone-analysis", false, "Run cross-category concept cone geometric analysis during profiling")
 	profileCmd.Flags().Bool("rdo", false, "Refine extracted direction using gradient-based Refusal Direction Optimization")
+	profileCmd.Flags().Bool("commit-window", false, "Analyze prefill behavioral commitment window across token positions")
 
 	validateCmd.Flags().Int("hidden-dim", 4096, "Model hidden dimension")
 

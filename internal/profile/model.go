@@ -20,6 +20,8 @@ type SteeringMetrics struct {
 // ModelProfile stores extracted behavioral directions for a specific model.
 type ModelProfile struct {
 	ModelID           string
+	Architecture      string
+	ArchitectureSpec  ArchitectureSpec
 	Directions        map[string]map[int][]float64 // direction_name -> layer_idx -> vector
 	BiasDirections    map[string]map[int][]float64 // direction_name -> layer_idx -> bias vector
 	LayerScores       map[string][]float64         // direction_name -> layer scores
