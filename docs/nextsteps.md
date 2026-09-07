@@ -1,8 +1,54 @@
 # BurnNotice: Prioritized Implementation Roadmap
 
 > **Status**: Active
-> **Last Updated**: 2026-09-04 (Go 1.27 Upgrade & Codebase Deep Audit)
-> **Version**: 0.6
+> **Last Updated**: 2026-09-07 (Go 1.27 Upgrade, Dependabot PR Sync & SOTA 10-Part Strategic Plan)
+> **Version**: 0.7
+
+---
+
+## 🚀 10-Part Strategic Improvement Plan (v0.7+ Architecture)
+
+Based on comprehensive deep code analysis, empirical performance profiling across the ONNX/CGO runtime, and 2025–2026 state-of-the-art advances in latent representation engineering (RepE, MPOA, SAE-SSV, CKA), the following 10-part strategic improvement plan establishes the next generation of BurnNotice:
+
+### 1. Unified Serving-Engine VRAM Zero-Copy Kernel Interception
+- **Architecture**: Move token-level scoring and steering directly into GPU VRAM serving loops via the PyBind11 vLLM and TensorRT-LLM C++ plugins (`plugins/vllm/`, `plugins/tensorrt/`).
+- **Goal**: Eliminate PCIe host-device memory transfers for activation capture. The Go engine acts purely as an asynchronous control plane and policy coordinator via ring-buffer telemetry, while CUDA warp-reduction kernels (`plugins/cuda_kernels.cu`) execute steering in-place during the forward pass (< 25µs per layer).
+
+### 2. Dynamic CoT & Autoregressive Thinking-Phase Boundary Gating
+- **Architecture**: Implement token-stream state-machine monitoring for reasoning models (e.g. DeepSeek-R1, QwQ) detecting `<think>` / `</think>` structural boundaries and reasoning token protocol delimiters.
+- **Goal**: Maintain zero steering intervention during the internal chain-of-thought exploration phase to prevent reasoning degradation, while engaging calibrated MPOA steering dynamically the moment answer emission begins.
+
+### 3. Cross-Layer CKA Distortion Profiling & Targeted Layer Recovery
+- **Architecture**: Leverage Centered Kernel Alignment (CKA) and Hilbert-Schmidt Independence Criterion (`internal/analysis/crosslayer.go`) to measure representational deformation across residual streams pre- and post-intervention.
+- **Goal**: Automatically identify decision layers where deceptive trajectories emerge and apply surgical steering to only the minimal subset of critical layers, avoiding broad cross-layer representational damage.
+
+### 4. MoE-Aware Dynamic Expert Gating & Router-Weighted Intervention
+- **Architecture**: Deepen the Mixture-of-Experts routing hooks (`internal/engine/moe.go`) to extract concept vectors on a per-expert basis rather than globally across the residual stream.
+- **Goal**: Apply steering vectors conditioned on router logit softmax probabilities, steering only the specialized experts active for the toxic or deceptive token subspace without altering factual knowledge experts.
+
+### 5. Continuous SVD Subspace Interpolation & Smooth Manifold Steering
+- **Architecture**: Replace discrete steering vector selection with continuous geodesic interpolation across concept cone subspaces (`internal/analysis/cone.go`, `internal/extract/pca.go`).
+- **Goal**: Enable continuous parameter `DirectionMix` $\in [0, k]$ with Gaussian-weighted kernel blending across multiple basis directions, eliminating sharp behavioral discontinuities and minimizing token-level KL divergence.
+
+### 6. Multi-Turn KV-Cache Steering Accumulation & GCAD Attention Dilation Defense
+- **Architecture**: Build a KV-cache accumulation tracker (`internal/steer/`) that monitors cumulative angular drift across conversational turns.
+- **Goal**: Prevent multi-turn conversational steering drift from exceeding safe angular bounds ($\theta_{\text{max}} = 15^\circ$) and implement Gated Cropped Attention-Delta (GCAD) to prevent historical steering vectors from corrupting future context attention scores.
+
+### 7. Multi-Agent Deception Topology & Gossip Contamination Graph Analysis
+- **Architecture**: Extend the agent telemetry mesh (`internal/agent/`) to track multi-agent communication networks (MCP servers, LangChain, CrewAI).
+- **Goal**: Calculate pairwise directional deception cross-correlation between collaborating agents, generating live contamination risk graphs and halting deceptive cascades before multi-agent task completion.
+
+### 8. Standardized Multi-Turn Red-Teaming & Pareto Tradeoff Harness
+- **Architecture**: Integrate automated evaluation against standard safety suites (HarmBench 400 across 7 harm categories, TruthfulQA, GSM8k) into the BurnNotice benchmarking pipeline.
+- **Goal**: Compute empirical Pareto frontiers comparing token KL divergence versus Attack Success Rate (ASR) across single-turn and 10-turn multi-turn jailbreak attempts, reporting a normalized composite quality score.
+
+### 9. Adversarial Shielding with Stochastic Latent Perturbations & Gradient Masking
+- **Architecture**: Build active evasion defenses around linear and non-linear probes (`internal/profile/obfuscation.go`).
+- **Goal**: Inject controlled Gaussian noise $\eta \sim \mathcal{N}(0, \sigma^2)$ into residual probe passes and generate decoy gradient distributions to resist black-box gradient-based suffix optimization (GCG) and activation manipulation attacks.
+
+### 10. Autonomous Distributed Flight/SQLite Sharded Edge Mesh Synchronization
+- **Architecture**: Expand the standalone fallback vector store (`internal/longbow/client.go`) into a distributed, peer-to-peer sharded synchronization mesh.
+- **Goal**: Enable distributed BurnNotice edge nodes to hot-swap between remote Arrow Flight endpoints and local SQLite caches with zero downtime, sharing discovered concept directions via secure zero-knowledge telemetry.
 
 ---
 
@@ -59,20 +105,20 @@ All items below have been implemented, tested, and verified in source code:
 | **Step 15: Ouroboros Detection & Refinement (15.1–15.4)** | `internal/analysis/ouroboros.go` | Pre/post layer scoring, compensating layer detection, iterative refinement controller |
 | **Step 16: Alignment Imprint Detection (16.1–16.4)** | `internal/analysis/alignment.go` | Effective rank, SV decay, cross-layer coherence, DPO/RLHF/CAI/SFT classification |
 | **Step 18: Component-Specific Steering Scaling (18.1)** | `internal/steer/steering.go` | Added `AttentionStrength` and `MLPStrength` to `Command` |
+| **Step 24: Sparse Autoencoder Integration (24.1–24.3)** | `internal/sae/loader.go` | Pretrained SAE loader (Gemma Scope NPZ + JSON), `Encode`/`Decode` forward pass, feature attribution scoring |
 | **Step 25: Cross-Layer Alignment (25.1–25.4)** | `internal/analysis/crosslayer.go` | Pairwise cosine similarity matrix, decision-layer emergence detection, cluster sets |
 | **Step 26: CKA Representational Similarity (26.1–26.4)** | `internal/analysis/crosslayer.go` | Centered Kernel Alignment (CKA), HSIC computation, representational distortion checks |
+| **Step 27: Continuous Steering Param (27.2)** | `internal/steer/steering.go` | Added continuous parameter `DirectionMix` to `Command` |
 | **Step 31: Anonymous Telemetry Pipeline (31.0–31.5)** | `internal/telemetry/`, `cmd/burnnotice/main.go`, `TELEMETRY.md` | Prometheus metrics, local & HTTP reporter, `burnnotice aggregate` CLI, privacy specification |
 | **Step 32: GPU-Native Inference Kernels (32.1–32.4)** | `plugins/cuda_kernels.cu`, `plugins/metal/`, `plugins/vllm/`, `plugins/tensorrt/` | CUDA warp-reduction kernels, Apple Silicon Metal MSL kernels, PyBind11 vLLM plugin, TensorRT plugin |
 | **Step 33: Adaptive Calibration (33.1–33.3)** | `internal/profile/manager.go`, `internal/profile/calibration.go` | Held-out calibration worker, F1-optimal threshold calculation, rolling drift detection |
-| **Step 9: Multi-Direction Subspace & INLP (9.1–9.4)** | `internal/extract/pca.go`, `internal/extract/inlp.go` | Top-k SVD subspace extraction, Gram-Schmidt orthogonalization, subspace energy scoring |
-| **Step 10: Ridge-Regularized Projection (10.2–10.3)** | `internal/math/projection.go` | Gabliteration projection with dynamic alpha scheduling |
-| **Step 15: Ouroboros Detection & Refinement (15.1–15.4)** | `internal/analysis/ouroboros.go` | Pre/post layer scoring, compensating layer detection, iterative refinement controller |
-| **Step 16: Alignment Imprint Detection (16.1–16.4)** | `internal/analysis/alignment.go` | Effective rank, SV decay, cross-layer coherence, DPO/RLHF/CAI/SFT classification |
-| **Step 25: Cross-Layer Alignment (25.1–25.4)** | `internal/analysis/crosslayer.go` | Pairwise cosine similarity matrix, decision-layer emergence detection, cluster sets |
-| **Step 26: CKA Representational Similarity (26.1–26.4)** | `internal/analysis/crosslayer.go` | Centered Kernel Alignment (CKA), HSIC computation, representational distortion checks |
-| **Step 31: Anonymous Telemetry Pipeline (31.0–31.2)** | `internal/metrics/handler.go`, `internal/telemetry/reporter.go` | 50+ Prometheus metrics on `/metrics`, privacy-preserving payload schema, local & HTTP reporting |
-| **Step 32: GPU-Native Inference Kernels (32.1–32.4)** | `plugins/cuda_kernels.cu`, `plugins/metal/`, `plugins/vllm/`, `plugins/tensorrt/` | CUDA warp-reduction kernels, Apple Silicon Metal MSL kernels, PyBind11 vLLM plugin, TensorRT plugin |
-| **Step 33: Adaptive Calibration (33.1–33.3)** | `internal/profile/manager.go`, `internal/profile/calibration.go` | Held-out calibration worker, F1-optimal threshold calculation, rolling drift detection |
+| **Step 35: Quantization Scale Calibration & Transfer (35.2–35.3)** | `internal/steer/quantization.go` | Scale calibration ratio $s_{\text{calib}} = \sigma_{\text{FP16}} / \sigma_{\text{quant}}$, direction transfer with $\ge 0.98$ cosine parity check |
+| **Step 36: Temporal Deception Sequence Scoring (36.1–36.2)** | `internal/scoring/aggregator.go` | Exponential Moving Average ($\text{EMA}_t$), consecutive-step sliding window drift trajectory detection |
+| **Step 38: Asynchronous Scoring Engine (38.1–38.3)** | `internal/scoring/async.go` | Lock-free ring buffer channel, worker pool, emergency sync bypass at 85% depth or 2.5ms latency limit |
+| **Step 39: Context-Aware Semantic Intent Gating (39.1–39.3)** | `internal/policy/gate.go` | Lightweight semantic pre-classifier backend (`LLMClient`), creative/roleplay bypass, context-specific confidence weighting |
+| **Step 40: Obfuscation-Resilient Probing (40.1–40.3)** | `internal/profile/obfuscation.go` | Non-linear `MLPProbe` (ReLU+Sigmoid), finite-difference gradient adversarial perturber, Mahalanobis OOD anomaly detection |
+| **Step 41: Decentralized Standalone Fallback Engine (41.1–41.3)** | `internal/longbow/client.go` | Local SQLite storage, Gonum-based distance math, zero-downtime hot-swap and automatic failover |
+| **Step 42: Closed-Loop Coherence Management (42.1–42.2)** | `internal/steer/coherence.go` | Token-level sliding perplexity tracker, exponential negative log-prob accumulator, dynamic adaptive alpha scaling multiplier |
 
 ---
 
@@ -94,19 +140,15 @@ All items below have been implemented, tested, and verified in source code:
 - [ ] **7.5** Compare singular-value decay rate: raw SVD vs whitened SVD
 
 #### Step 8: Concept Cone Geometry Analysis
-- [x] **8.4** Add `--cone-analysis` flag to profile CLI (tracked in P0.3)
 - [ ] **8.5** Integrate cone dimensionality into threshold calibration (higher-D cones need more INLP iterations)
 
 #### Step 9: Multi-Direction Subspace Extraction
 - [ ] **9.5** UI: 3D scatter plot of multi-dimensional activation projections
 
 #### Step 10: Ridge-Regularized Subspace Projection (Gabliteration)
-- [x] **10.1** Add `RegularizationAlpha` field to `SteeringCommand` and `DirectionExtractor` config
 - [ ] **10.4** Unit tests comparing KL divergence: regularized vs exact projection
 
 #### Step 11: Norm-Preserving Biprojected Ablation (MPOA) Steering
-- [x] **11.1** Implement MPOA decomposition as `MethodNormPreserving` in `internal/steer/steering.go`
-- [x] **11.2** Add Frobenius norm restoration post-projection for weight orthogonalization paths
 - [ ] **11.3** Benchmark MPOA-steered perplexity vs standard ablation on 3+ model sizes
 - [ ] **11.4** Implement biprojection: when removing direction measured at L1 from L2, also remove harmless component from L2
 
@@ -117,18 +159,13 @@ All items below have been implemented, tested, and verified in source code:
 - [ ] **12.4** Unit tests: bias-only steering reduces deception scores (without touching activations)
 
 #### Step 13: Refusal Direction Optimization (Gradient-Based Refinement)
-- [x] **13.1** Implement `RefusalDirectionOptimizer` in `internal/extract/rdo.go` - linear probe loss, SGD initialized from SVD direction
-- [x] **13.2** Add `--rdo` flag to profile CLI (tracked in P0.3)
 - [ ] **13.3** Compare AUROC: DIM vs SVD vs RDO on held-out deception datasets
-- [x] **13.4** Implement in pure Go via `mat.Dense` + manual gradients (no autograd dependency)
 
 ---
 
 ### Tier 3 - Detection & Steering Quality
 
 #### Step 14: KL-Divergence Co-Optimization
-- [x] **14.1** Implement `ComputeKLDivergence(originalLogits, steeredLogits)` on token-level log-probs (tracked in P0.5)
-- [x] **14.2** Add `KLDivergence` to `SteeringMetrics` in profile format
 - [ ] **14.3** Build KL-co-optimization feedback loop: if KL > 0.2 on harmless prompts, reduce steering strength
 - [ ] **14.4** UI: 2D scatter plot (KL divergence vs remaining deception score) with Pareto frontier
 - [ ] **14.5** Validate correlation between KL divergence and downstream benchmark degradation
@@ -140,7 +177,6 @@ All items below have been implemented, tested, and verified in source code:
 - [ ] **17.4** Benchmark CAST latency vs external LLM classifier (< 0.1ms target)
 
 #### Step 18: Component-Specific Steering Scaling
-- [x] **18.1** Add `AttentionStrength` and `MLPStrength` to `SteeringCommand` (range [0,2])
 - [ ] **18.2** Detect component type from model config metadata
 - [ ] **18.3** Set defaults: attention=1.0, MLP=0.5 (MLP layers carry knowledge, more sensitive)
 - [ ] **18.4** UI: component-type breakdown showing attention vs MLP contribution to steering effect
@@ -167,7 +203,6 @@ All items below have been implemented, tested, and verified in source code:
 ### Tier 4 - Architecture-Specific Steering
 
 #### Step 22: MoE-Aware Expert-Granular Extraction
-- [x] **22.1** Rewrite `internal/engine/moe.go` to capture router logits per token (which experts, what weights; tracked in P0.2)
 - [ ] **22.2** Implement per-expert direction extraction: collect activations separately for each expert
 - [ ] **22.3** Implement per-expert steering: apply vectors only to active experts, weighted by router probability
 - [ ] **22.4** Add MoE capability benchmark: expert routing entropy before/after steering (must not collapse diversity)
@@ -181,16 +216,12 @@ All items below have been implemented, tested, and verified in source code:
 - [ ] **23.5** Add `ReasoningModelAware` bool to steering config (auto-detect from architecture)
 
 #### Step 24: Sparse Autoencoder Integration
-- [ ] **24.1** Load pretrained SAEs (Gemma Scope, SAELens) alongside base model in inference engine
-- [ ] **24.2** Build `SAEEncoder` in `internal/extract/sae.go`: encode activations through SAE
-- [ ] **24.3** Feature attribution scoring: correlate SAE features with deception/refusal labels
 - [ ] **24.4** Add SAE feature monitoring as independent probe alongside DIM/whitening
 - [ ] **24.5** Implement SAE feature-level ablation (suppress top-k refusal features directly)
 - [ ] **24.6** Tests: SAE monitoring catches jailbreaks that DIM misses (complementary signal)
 
 #### Step 27: Float Direction Interpolation
 - [ ] **27.1** Implement `FloatDirectionInterpolation(directions, t, sigma)` - Gaussian-weighted SVD direction blend
-- [x] **27.2** Add `DirectionMix` continuous param to `SteeringCommand` (range [0, k])
 - [ ] **27.3** UI: "Direction Mix" slider in strength sweep tab
 - [ ] **27.4** Research: does smooth interpolation produce lower KL divergence than discrete selection?
 
@@ -222,9 +253,7 @@ All items below have been implemented, tested, and verified in source code:
 ### Tier 6 - Community & Telemetry
 
 #### Step 31: Anonymous Telemetry Tooling
-- [x] **31.3** Build `burnnotice aggregate` CLI command: summarize contributed results (tracked in P0.3)
 - [ ] **31.4** UI: local leaderboard showing community results for current model architecture
-- [x] **31.5** Write `TELEMETRY.md` with schema documentation and privacy guarantees (tracked in P0.4)
 
 ---
 
@@ -246,14 +275,10 @@ All items below have been implemented, tested, and verified in source code:
 
 #### Step 35: Multi-Format Quantization & Direction Transfer
 - [ ] **35.1** Implement Turboquant, SQ8, PQ loaders in `internal/engine/onnx.go`
-- [ ] **35.2** Scale calibration: `s_calib = std(a_FP16) / std(a_quant)`
-- [ ] **35.3** Direction transfer: `v_quant = s_calib · v_FP16`; cosine parity check >= 0.98
 - [ ] **35.4** UI: "Quantization Compatibility" chart
 - [ ] **35.5** E2E: INT8 conversion → direction transfer → steering → verify identical behavioral outputs
 
 #### Step 36: Temporal Deception Sequence Scoring
-- [ ] **36.1** EMA scoring pipeline: `EMA_t = alpha · S(a_t) + (1-alpha) · EMA_{t-1}`
-- [ ] **36.2** Sliding window monitoring for slow-drift deception patterns
 - [ ] **36.3** Policy engine temporal operators (cumulative thresholds, sustained violation windows)
 - [ ] **36.4** UI: real-time temporal trend chart with threshold envelopes
 - [ ] **36.5** E2E: increasing deceptive prompt sequence → preemptive intervention before completion
@@ -266,30 +291,10 @@ All items below have been implemented, tested, and verified in source code:
 - [ ] **37.5** E2E: max-strength steering while asserting > 98% capability retention
 
 #### Step 38: Asynchronous Non-Blocking Scoring Engine
-- [ ] **38.1** Lock-free ring buffer for zero-copy activation handoff from inference to scoring
-- [ ] **38.2** Background worker pool for subspace projection calculations
-- [ ] **38.3** Emergency sync bypass at 85% queue capacity or 2.5ms latency
 - [ ] **38.4** Race tests under high parallel load
 - [ ] **38.5** UI: system latency panel - queue depth, worker saturation, engine delay
 
-#### Step 39: Context-Aware Semantic Intent Gating
-- [ ] **39.1** Parallel lightweight semantic pre-classifier (Llama Guard or distilled model)
-- [ ] **39.2** Dynamic gating logic: disable `deception_direction` for creative writing, academic analysis, roleplay
-- [ ] **39.3** Class-specific confidence weights scaling intervention strength by conversational context
-
-#### Step 40: Obfuscation-Resilient Probe Training
-- [ ] **40.1** Upgrade linear probes to non-linear MLPs and multi-directional ensembles
-- [ ] **40.2** Adversarial training: perturb activations via gradient-based noise during profiling
-- [ ] **40.3** Real-time OOD anomaly detection on residual stream
-
-#### Step 41: Decentralized Standalone Fallback Engine
-- [ ] **41.1** Local SQLite storage for profile metadata and calibration thresholds
-- [ ] **41.2** Gonum-based local math backend (cosine/dot fallback)
-- [ ] **41.3** Zero-downtime hot-swap between Longbow Flight and local fallback
-
 #### Step 42: Closed-Loop Coherence Management
-- [ ] **42.1** Token-level perplexity tracking and coherence checker in generation loop
-- [ ] **42.2** Adaptive feedback: scale down alpha or shift layers on consecutive degradation
 - [ ] **42.3** Regression tests against GSM8k/MMLU during live steering
 
 ---
