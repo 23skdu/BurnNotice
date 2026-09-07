@@ -1,28 +1,30 @@
-FROM golang:1.27.0-alpine3.21 AS builder
+FROM golang:1.27-bookworm AS builder
 
-RUN apk add --no-cache git make protoc protobuf-dev
+RUN apt-get update && apt-get install -y git make protobuf-compiler libprotobuf-dev gcc g++ && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
 
 COPY go.mod go.sum ./
-RUN go mod download
+RUN go mod edit -dropreplace=github.com/23skdu/longbow && go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -ldflags="-s -w -X main.Version=$(git describe --tags --always 2>/dev/null || echo dev)" \
+RUN go mod edit -dropreplace=github.com/23skdu/longbow
+
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 \
+    go build -buildvcs=false -ldflags="-s -w -X main.Version=$(git describe --tags --always 2>/dev/null || echo dev)" \
     -o /bin/burnnotice ./cmd/burnnotice
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -ldflags="-s -w -X main.Version=$(git describe --tags --always 2>/dev/null || echo dev)" \
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 \
+    go build -buildvcs=false -ldflags="-s -w -X main.Version=$(git describe --tags --always 2>/dev/null || echo dev)" \
     -o /bin/burnnotice-dashboard ./cmd/dashboard
 
-FROM alpine:3.21
+FROM debian:bookworm-slim
 
-RUN apk add --no-cache ca-certificates tini
+RUN apt-get update && apt-get install -y ca-certificates tini && rm -rf /var/lib/apt/lists/*
 
-RUN addgroup -g 1000 burnnotice && \
-    adduser -u 1000 -G burnnotice -s /bin/sh -D burnnotice
+RUN groupadd -g 1000 burnnotice && \
+    useradd -u 1000 -g burnnotice -s /bin/sh -m burnnotice
 
 COPY --from=builder /bin/burnnotice /bin/burnnotice-dashboard /bin/
 
@@ -33,6 +35,6 @@ USER burnnotice
 
 EXPOSE 8080
 
-ENTRYPOINT ["/sbin/tini", "--"]
+ENTRYPOINT ["/usr/bin/tini", "--"]
 
 CMD ["/bin/burnnotice-dashboard"]

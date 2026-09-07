@@ -226,10 +226,8 @@ __marimo__/
 *.test
 *.out
 vendor/
-go.sum
 bin/
 profiles/
-*_templ.go
 /burnnotice
 opencode.json
 vectors.db

@@ -3,7 +3,7 @@ module burnnotice
 go 1.27.0
 
 require (
-	github.com/23skdu/longbow v0.0.0-00010101000000-000000000000
+	github.com/23skdu/longbow v0.2.1-rc3.0.20260907182726-093d3e04901c
 	github.com/a-h/templ v0.3.1020
 	github.com/apache/arrow-go/v18 v18.7.0
 	github.com/prometheus/client_golang v1.24.1
@@ -32,7 +32,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/klauspost/compress v1.19.2 // indirect
+	github.com/klauspost/compress v1.20.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
