@@ -45,6 +45,8 @@ Recent mechanistic interpretability research has established that:
 4. **Conflict subspaces** are where LLMs decide between competing objectives, orthogonal to truth subspaces (2025)
 5. **Hallucination manifests as phase transitions** in latent potential energy, detectable via SAE features (HalluSAE, 2026)
 6. **Policy violations** can be detected via activation-space whitening without training (2025)
+7. **Obfuscated Activations & Probe Evasion** (Bailey et al., 2025/2026): Advanced models can learn to distribute or obfuscate representations to evade simple linear probes, necessitating non-linear MLP probes, adversarial perturbation testing, and Mahalanobis OOD anomaly detection.
+8. **Steering Externalities & Jailbreak Risk** (arXiv:2602.04896, 2026): Naive activation steering toward refusal or truthfulness can paradoxically alter early-token distributions and lower defenses against adversarial jailbreaks (e.g. Rogue Scalpel finding: ASR can increase by > 1.2x). BurnNotice directly counters this via `JailbreakRiskAssessor`, `ExternalitiesReport`, and the `AdversarialShield`.
 
 Abliteration demonstrated that these directions can be permanently removed via weight orthogonalization. BurnNotice inverts this approach: instead of removing directions, we **monitor** them in real time and **steer** away from misalignment when detected or terminate the agent (BurnNotice)
 
@@ -68,23 +70,26 @@ All orchestration, policy enforcement, model profiling, vector storage, and visu
 
 ## 3. Core Concepts
 
-### 3.1 Abliteration (Foundational Technique)
+### 3.1 Multi-Dimensional Subspace & Concept Cones (Foundational Technique)
 
-Abliteration identifies a behavioral direction (e.g., refusal) by computing the difference-in-means between activations on contrasting prompt pairs, then removes it via:
+While early abliteration identified a behavioral direction (e.g., refusal) by computing a single difference-in-means vector between contrasting prompt pairs, modern 2025–2026 research proves that complex behaviors span a **multi-dimensional subspace (concept cone)**:
 
-**Inference-time ablation**:
+$$\mathcal{C}_{\text{concept}} = \text{span}\{\mathbf{v}_1, \mathbf{v}_2, \dots, \mathbf{v}_k\}$$
 
+BurnNotice extracts the concept cone via top-k Singular Value Decomposition (thin SVD) and Iterative Nullspace Projection (INLP). Interventions are performed via:
+
+**Inference-time norm-preserving biprojection (MPOA)**:
 ```go
-h' = h - (h · r̂)r̂
+h' = MPOA_Ablate(h, B) // removes concept cone subspace while preserving residual L2 norm
 ```
 
-**Weight orthogonalization** (permanent):
-
-```text
-W' = W - (W · r̂)r̂
+**Ridge-regularized projection (Gabliteration)**:
+```go
+P_alpha = I - V (V^T V + alpha * I)^(-1) V^T
+h' = P_alpha * h
 ```
 
-BurnNotice uses the same direction-finding machinery but applies it as a **detection** and **steering** mechanism rather than permanent removal.
+BurnNotice uses this multi-dimensional subspace machinery for both real-time **detection** and **steering** without causing cognitive degradation or output collapse.
 
 ### 3.2 Key Activation-Space Constructs
 
@@ -1393,6 +1398,8 @@ For closed models (GPT-4, Claude), BurnNotice can operate in proxy mode:
 | Threat | BurnNotice Mitigation |
 | --- | --- |
 | Jailbreak via activation manipulation | Multi-direction monitoring; conflict subspace detection catches novel attacks |
+| Steering Externalities / Rogue Scalpel (arXiv:2602.04896) | `JailbreakRiskAssessor` held-out 100-prompt evaluation, early-token KL shift monitoring, and `ExternalitiesScore` alarm (ratio > 1.2) |
+| Gradient-based adversarial suffixes (GCG) | `InputTokenSanitizer`, `LatentNoiseInjector` (2% stochastic perturbation), and `SteeringGradientMasker` |
 | Alignment faking (compliant under monitoring) | Detect oversight-sensitivity direction; monitor for representational shifts between monitored/unmonitored states |
 | Safety geometry collapse from fine-tuning | Monitor CKA and Fisher score as safety health indicators; alert on geometric degradation |
 | Adversarial prompt injection | Policy violation detection catches OOD activations regardless of prompt structure |
@@ -1636,6 +1643,37 @@ Integrating real-time latent governance directly into production token generatio
 1.  **Lock-Free Multi-Producer Single-Consumer Queue**: A highly efficient ring buffer hands off intermediate layer activation pointers from the ONNX/WASM inference execution thread.
 2.  **Worker Pool Execution**: A dedicated background thread pool dequeues activation blocks, calculates subspace projection energies, and evaluates policy configurations.
 3.  **Emergency Synchronous Interlock**: If the queue fills beyond $85\%$ capacity, or the scoring delay exceeds $2.5\text{ms}$, the engine triggers an immediate interlock signal, forcing synchronous blocking evaluations on high-risk compliance pipelines until queue pressure is fully relieved.
+
+---
+
+### 13.8 Multi-Turn KV-Cache Steering Accumulation & GCAD Defense
+
+In persistent multi-turn conversations, applying steering vectors $\mathbf{v}_t$ iteratively across turns leads to cumulative representation drift within the key-value cache:
+$$\theta_{\text{cumulative}} = \arccos\left(\frac{\mathbf{v}_0 \cdot \mathbf{v}_t}{\|\mathbf{v}_0\| \|\mathbf{v}_t\|}\right)$$
+
+BurnNotice tracks this drift via `KVCacheAccumulationTracker`:
+- **Drift Ceiling Alarm**: If $\theta_{\text{cumulative}} > 15^\circ$ (`ThetaMaxDegrees`), the engine flags an alert and downscales steering amplitude.
+- **Gated Cropped Attention-Delta (GCAD)**: Crops the delta vector $\Delta K = K_{\text{steered}} - K_{\text{unsteered}}$ to $\|\Delta K\| \le \tau_k$ and applies exponential turn decay $0.95^{\Delta t}$ to historical attention keys/values, preventing multi-turn context corruption.
+
+---
+
+### 13.9 Fine-Grained Semantic Latent Space Manifold & Trajectory Analysis
+
+BurnNotice provides fine-grained 2D/3D representations of the high-dimensional transformer residual stream:
+- **Thin SVD / PCA Projection**: Factors mean-centered activations $(\mathbf{X} - \boldsymbol{\mu}) = \mathbf{U} \boldsymbol{\Sigma} \mathbf{V}^T$ to extract orthonormal projection basis vectors $[\mathbf{v}_1, \mathbf{v}_2]$ and variance explained.
+- **Semantic Cluster Hulls**: Identifies centroids and 95% confidence intervals ($1.96\sigma$) across Truthful (emerald), Deceptive (crimson), Refusal (amber), Creative (purple), Harmful (pink), and Harmless (blue) categories.
+- **Token Trajectory Analysis**: Tracks token activations across layer depths $L_0 \rightarrow L_{last}$, calculating step velocity and angular curvature $\Delta \theta$ to pinpoint critical decision layers.
+- **Vector SVG Generation**: Standalone, dark-mode SVG rendering with responsive viewport, glow filters, direction-arrowed trajectory paths, and interactive tooltips.
+
+---
+
+### 13.10 Chain-of-Thought (CoT) Boundary Gating for Reasoning Models
+
+For reasoning architectures (DeepSeek-R1, QwQ, o1-class), naive token-level steering during the internal chain-of-thought degrades problem-solving ability.
+- **Boundary State Machine**: Monitors token emission for `<think>` and `</think>` structural boundary delimiters.
+- **Thinking Phase**: Zero steering intervention ($\alpha = 0.0$); monitoring and latent logging remain active.
+- **Answer Phase**: Immediate transition to calibrated MPOA / regularized steering once reasoning concludes.
+- **Decoupled Telemetry**: CoT-phase deception and final answer deception metrics are tracked independently in Prometheus.
 
 ---
 

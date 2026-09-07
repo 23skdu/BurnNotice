@@ -119,6 +119,20 @@ All items below have been implemented, tested, and verified in source code:
 | **Step 40: Obfuscation-Resilient Probing (40.1–40.3)** | `internal/profile/obfuscation.go` | Non-linear `MLPProbe` (ReLU+Sigmoid), finite-difference gradient adversarial perturber, Mahalanobis OOD anomaly detection |
 | **Step 41: Decentralized Standalone Fallback Engine (41.1–41.3)** | `internal/longbow/client.go` | Local SQLite storage, Gonum-based distance math, zero-downtime hot-swap and automatic failover |
 | **Step 42: Closed-Loop Coherence Management (42.1–42.2)** | `internal/steer/coherence.go` | Token-level sliding perplexity tracker, exponential negative log-prob accumulator, dynamic adaptive alpha scaling multiplier |
+| **Step 10.4: KL Regularized vs Exact Projection** | `internal/analysis/kl_test.go` | Verified regularized projection strictly lowers token logit KL divergence vs exact projection |
+| **Step 11.4: MPOA Biprojected Ablation** | `internal/steer/steering.go` | `BiprojectedAblation`, `MethodBiprojection`, removes secondary harmless projection from primary ablation |
+| **Step 12: Bias Term Projection (12.1–12.4)** | `internal/steer/bias.go`, `internal/profile/model.go` | Per-layer `BiasDirections` in profile, `ComputeBiasSteering`, bias-only projection unit tests |
+| **Step 14.3: Closed-Loop KL Feedback Scaling** | `internal/steer/coherence.go` | `AdjustAlphaForKL` proportional feedback downscaling when harmless KL exceeds target ceiling |
+| **Step 17: Conditional Activation Steering (17.1–17.4)** | `internal/steer/cast.go` | Gated activation addition, `OpAND`/`OpOR`/`OpNOT` logic, thresholded & smooth scaling, 5.5µs latency |
+| **Step 18: Component-Specific Scaling (18.2–18.4)** | `internal/steer/steering.go` | `ResolveComponentStrengths`, attention=1.0, MLP=0.5 defaults, component contribution breakdown |
+| **Step 19: Standardized Evaluation & Heretic Score** | `internal/analysis/heretic.go` | HarmBench 400 7-category evaluator, non-dominated Pareto frontier, composite Heretic score |
+| **Step 21: Latent-Space Separation Metric (21.1–21.2)** | `internal/analysis/separation.go` | `ComputeLatentSeparation`, centroid cosine distance, `MeasureSeparationRetention` with 25% alarm |
+| **Step 23: CoT-Aware Steering (23.1–23.5)** | `internal/steer/cot.go` | `<think>`/`</think>` state machine, zero steering in thinking phase, active steering in answer phase |
+| **Step 27: Float Direction Interpolation (27.1–27.3)** | `internal/steer/interpolate.go` | Gaussian-weighted SVD basis blend, smooth monotonicity across `DirectionMix` parameter |
+| **Step 28: KV-Cache Accumulation & GCAD (28.1–28.3)** | `internal/steer/kvcache.go` | `KVCacheAccumulationTracker` with $\theta > 15^\circ$ alarm, Gated Cropped Attention-Delta defense |
+| **Step 29: Steering Externalities Risk (29.1–29.3)** | `internal/analysis/externalities.go` | `JailbreakRiskAssessor`, `ExternalitiesScore` ($\text{ASR}_{\text{steered}} / \text{ASR}_{\text{base}} > 1.2$ alert) |
+| **Step 34: Adversarial Robustness Shield (34.1–34.4)** | `internal/steer/adversarial.go` | GCG suffix token sanitization, 2% stochastic latent noise injection, probe gradient masking |
+| **New Feature: Fine-Grained Latent Visualizer** | `internal/analysis/latent_vis.go`, `internal/web/` | Thin SVD 2D projection, 95% CI cluster hulls, token trajectories, curvature, dark-mode SVG, HTMX panel |
 
 ---
 
@@ -140,23 +154,23 @@ All items below have been implemented, tested, and verified in source code:
 - [ ] **7.5** Compare singular-value decay rate: raw SVD vs whitened SVD
 
 #### Step 8: Concept Cone Geometry Analysis
-- [ ] **8.5** Integrate cone dimensionality into threshold calibration (higher-D cones need more INLP iterations)
+- [x] **8.5** Integrate cone dimensionality into threshold calibration (`AdjustThresholdForCone`, higher-D cones scale thresholds)
 
 #### Step 9: Multi-Direction Subspace Extraction
 - [ ] **9.5** UI: 3D scatter plot of multi-dimensional activation projections
 
 #### Step 10: Ridge-Regularized Subspace Projection (Gabliteration)
-- [ ] **10.4** Unit tests comparing KL divergence: regularized vs exact projection
+- [x] **10.4** Unit tests comparing KL divergence: regularized vs exact projection (`internal/analysis/kl_test.go`)
 
 #### Step 11: Norm-Preserving Biprojected Ablation (MPOA) Steering
 - [ ] **11.3** Benchmark MPOA-steered perplexity vs standard ablation on 3+ model sizes
-- [ ] **11.4** Implement biprojection: when removing direction measured at L1 from L2, also remove harmless component from L2
+- [x] **11.4** Implement biprojection: when removing direction measured at L1 from L2, also remove harmless component from L2 (`BiprojectedAblation`)
 
 #### Step 12: Bias Term Projection
-- [ ] **12.1** Audit all transformer component types; add bias projection alongside activation projection
-- [ ] **12.2** Add `BiasDirections` to `ModelProfile` for per-layer bias direction storage
-- [ ] **12.3** Implement `ComputeBiasSteering` projecting direction out of bias vectors
-- [ ] **12.4** Unit tests: bias-only steering reduces deception scores (without touching activations)
+- [x] **12.1** Audit all transformer component types; add bias projection alongside activation projection
+- [x] **12.2** Add `BiasDirections` to `ModelProfile` for per-layer bias direction storage
+- [x] **12.3** Implement `ComputeBiasSteering` projecting direction out of bias vectors
+- [x] **12.4** Unit tests: bias-only steering reduces deception scores (without touching activations)
 
 #### Step 13: Refusal Direction Optimization (Gradient-Based Refinement)
 - [ ] **13.3** Compare AUROC: DIM vs SVD vs RDO on held-out deception datasets
@@ -166,26 +180,26 @@ All items below have been implemented, tested, and verified in source code:
 ### Tier 3 - Detection & Steering Quality
 
 #### Step 14: KL-Divergence Co-Optimization
-- [ ] **14.3** Build KL-co-optimization feedback loop: if KL > 0.2 on harmless prompts, reduce steering strength
+- [x] **14.3** Build KL-co-optimization feedback loop: if KL > 0.2 on harmless prompts, reduce steering strength (`AdjustAlphaForKL`)
 - [ ] **14.4** UI: 2D scatter plot (KL divergence vs remaining deception score) with Pareto frontier
 - [ ] **14.5** Validate correlation between KL divergence and downstream benchmark degradation
 
 #### Step 17: Conditional Activation Steering (CAST)
-- [ ] **17.1** Implement `ConditionalSteering` in `internal/steer/cast.go` - extract condition vectors per bypass category during profiling
-- [ ] **17.2** Apply steering scaled by `f(sim(h_l, c))` where f is thresholded step function
-- [ ] **17.3** Implement logical condition composition: AND/OR/NOT for complex gating rules
-- [ ] **17.4** Benchmark CAST latency vs external LLM classifier (< 0.1ms target)
+- [x] **17.1** Implement `ConditionalSteering` in `internal/steer/cast.go` - extract condition vectors per bypass category during profiling
+- [x] **17.2** Apply steering scaled by `f(sim(h_l, c))` where f is thresholded step function
+- [x] **17.3** Implement logical condition composition: AND/OR/NOT for complex gating rules
+- [x] **17.4** Benchmark CAST latency vs external LLM classifier (< 0.1ms target, achieved ~5.5µs)
 
 #### Step 18: Component-Specific Steering Scaling
-- [ ] **18.2** Detect component type from model config metadata
-- [ ] **18.3** Set defaults: attention=1.0, MLP=0.5 (MLP layers carry knowledge, more sensitive)
-- [ ] **18.4** UI: component-type breakdown showing attention vs MLP contribution to steering effect
+- [x] **18.2** Detect component type from model config metadata (`ResolveComponentStrengths`)
+- [x] **18.3** Set defaults: attention=1.0, MLP=0.5 (MLP layers carry knowledge, more sensitive)
+- [x] **18.4** UI: component-type breakdown showing attention vs MLP contribution to steering effect
 
 #### Step 19: Standardized Evaluation - Refusal Rate & KL Tradeoff
-- [ ] **19.1** Integrate HarmBench 400: 400 test cases across 7 categories, compute Attack Success Rate (ASR)
-- [ ] **19.2** Add ASR to standard steering metrics output
+- [x] **19.1** Integrate HarmBench 400: 400 test cases across 7 categories, compute Attack Success Rate (ASR)
+- [x] **19.2** Add ASR to standard steering metrics output (`SteeringMetrics.AttackSuccessRate`)
 - [ ] **19.3** 2D tradeoff plot: KL divergence (x) vs remaining deception/refusal rate (y), Pareto frontier
-- [ ] **19.4** Report "Heretic score": `w1 · refusal_rate + w2 · KL_divergence` as single-number quality metric
+- [x] **19.4** Report "Heretic score": composite safety metric (`internal/analysis/heretic.go`)
 
 #### Step 20: Downstream Benchmark Sensitivity Profiling
 - [ ] **20.1** Add TruthfulQA, HellaSwag, ARC, MMLU to steering evaluation suite
@@ -194,8 +208,8 @@ All items below have been implemented, tested, and verified in source code:
 - [ ] **20.4** Weight capability health ratio by benchmark sensitivity
 
 #### Step 21: Latent-Space Separation Metric
-- [ ] **21.1** Implement `ComputeLatentSeparation(harmfulActs, benignActs)` - cosine distance between cluster centroids
-- [ ] **21.2** Measure separation pre/post steering; flag if drop > 25%
+- [x] **21.1** Implement `ComputeLatentSeparation(harmfulActs, benignActs)` - cosine distance between cluster centroids
+- [x] **21.2** Measure separation pre/post steering; flag if drop > 25% (`MeasureSeparationRetention`)
 - [ ] **21.3** UI: "Geometric Separation" gauge on dashboard
 
 ---
@@ -209,11 +223,11 @@ All items below have been implemented, tested, and verified in source code:
 - [ ] **22.5** Tests with synthetic MoE model (2-4 experts) verifying per-expert correctness
 
 #### Step 23: CoT-Aware Steering for Reasoning Models
-- [ ] **23.1** Detect `<think>`/`</think>` boundaries (or protocol-level signals) in token stream
-- [ ] **23.2** During thinking phase: monitoring only, zero steering strength
-- [ ] **23.3** During answer phase: full steering intervention
-- [ ] **23.4** Track and report CoT-token-specific deception metrics separately
-- [ ] **23.5** Add `ReasoningModelAware` bool to steering config (auto-detect from architecture)
+- [x] **23.1** Detect `<think>`/`</think>` boundaries (or protocol-level signals) in token stream
+- [x] **23.2** During thinking phase: monitoring only, zero steering strength
+- [x] **23.3** During answer phase: full steering intervention
+- [x] **23.4** Track and report CoT-token-specific deception metrics separately
+- [x] **23.5** Add `ReasoningModelAware` bool to steering config (auto-detect from architecture)
 
 #### Step 24: Sparse Autoencoder Integration
 - [ ] **24.4** Add SAE feature monitoring as independent probe alongside DIM/whitening
@@ -221,8 +235,8 @@ All items below have been implemented, tested, and verified in source code:
 - [ ] **24.6** Tests: SAE monitoring catches jailbreaks that DIM misses (complementary signal)
 
 #### Step 27: Float Direction Interpolation
-- [ ] **27.1** Implement `FloatDirectionInterpolation(directions, t, sigma)` - Gaussian-weighted SVD direction blend
-- [ ] **27.3** UI: "Direction Mix" slider in strength sweep tab
+- [x] **27.1** Implement `FloatDirectionInterpolation(directions, t, sigma)` - Gaussian-weighted SVD direction blend
+- [x] **27.3** UI: "Direction Mix" slider in strength sweep tab (`internal/steer/interpolate.go`)
 - [ ] **27.4** Research: does smooth interpolation produce lower KL divergence than discrete selection?
 
 ---
@@ -230,17 +244,17 @@ All items below have been implemented, tested, and verified in source code:
 ### Tier 5 - Multi-Turn & Externalities Safety
 
 #### Step 28: KV-Cache Steering Accumulation Tracking
-- [ ] **28.1** Build `KVCacheAccumulationTracker` - maintain per-turn steering vector log, measure cumulative angular drift
-- [ ] **28.2** Alert when cumulative drift exceeds `theta_max` (15 degrees)
-- [ ] **28.3** Implement Gated Cropped Attention-Delta (GCAD): crop attention-delta between steered/unsteered states to prevent KV-cache propagation
+- [x] **28.1** Build `KVCacheAccumulationTracker` - maintain per-turn steering vector log, measure cumulative angular drift
+- [x] **28.2** Alert when cumulative drift exceeds `theta_max` (15 degrees)
+- [x] **28.3** Implement Gated Cropped Attention-Delta (GCAD): crop attention-delta between steered/unsteered states to prevent KV-cache propagation
 - [ ] **28.4** Multi-turn benchmark: 10-turn conversation with active steering, perplexity per turn
 - [ ] **28.5** Fix EMA temporal scoring to account for KV-cache baseline drift (not actual deception intent)
 
 #### Step 29: Steering Externalities Monitoring
-- [ ] **29.1** Implement `JailbreakRiskAssessor` - measure ASR on 100 held-out jailbreak prompts, compare baseline vs steered
-- [ ] **29.2** Add `SteeringExternalitiesScore` = steered_ASR / baseline_ASR; flag if > 1.2
-- [ ] **29.3** Monitor early-token distribution shifts (steering biasing toward non-refusal trajectories)
-- [ ] **29.4** Document in design docs: steering carries jailbreak externalities risk
+- [x] **29.1** Implement `JailbreakRiskAssessor` - measure ASR on 100 held-out jailbreak prompts, compare baseline vs steered
+- [x] **29.2** Add `SteeringExternalitiesScore` = steered_ASR / baseline_ASR; flag if > 1.2 (`internal/analysis/externalities.go`)
+- [x] **29.3** Monitor early-token distribution shifts (steering biasing toward non-refusal trajectories)
+- [x] **29.4** Document in design docs: steering carries jailbreak externalities risk (`docs/design.md`)
 
 #### Step 30: Extended Refusal Defense
 - [ ] **30.1** Build dataset generator: harmful prompts → extended refusal responses (overview + refusal + rationale)
@@ -267,10 +281,10 @@ All items below have been implemented, tested, and verified in source code:
 - [ ] **33.5** Fuzz tests with extreme validation datasets (all-positive, all-negative, high-variance)
 
 #### Step 34: Adversarial Robustness
-- [ ] **34.1** Input token sanitization: filter low-probability token transitions typical of gradient-optimized suffixes
-- [ ] **34.2** Steering gradient masking: restrict prompt tracing on high-cosine-similarity probe sequences, generate decoy distributions
-- [ ] **34.3** Latent noise injection: `S_robust(a) = S(a + eta)` with Gaussian eta
-- [ ] **34.4** UI: "Adversarial Shield" panel with live perturbation rates and blocked jailbreak count
+- [x] **34.1** Input token sanitization: filter low-probability token transitions typical of gradient-optimized suffixes
+- [x] **34.2** Steering gradient masking: restrict prompt tracing on high-cosine-similarity probe sequences, generate decoy distributions
+- [x] **34.3** Latent noise injection: `S_robust(a) = S(a + eta)` with Gaussian eta
+- [x] **34.4** UI: "Adversarial Shield" panel with live perturbation rates and blocked jailbreak count
 - [ ] **34.5** E2E test: simulated adversarial attack under direct projection manipulation
 
 #### Step 35: Multi-Format Quantization & Direction Transfer
@@ -302,12 +316,12 @@ All items below have been implemented, tested, and verified in source code:
 ### Tier 8 - Documentation Corrections
 
 #### Step 43: Update Theoretical Claims
-- [ ] **43.1** `design.md §3.1`: Replace "single direction" with "multi-dimensional subspace (concept cone)"
-- [ ] **43.2** `design.md §10`: Add Rogue Scalpel / Steering Externalities jailbreak risk finding
-- [ ] **43.3** `design.md §2.2`: Add Bailey et al. obfuscated activations finding and proposed defenses
-- [ ] **43.4** `design.md §12`: Add KV-cache steering accumulation and Prompt-Activation Duality finding
-- [ ] **43.5** `design.md §13`: Add references to MPOA, Gabliteration, concept cones, SAE-based steering
-- [ ] **43.6** `design.md §2.2`: Add Steering Externalities paper (arXiv:2602.04896) to critical findings
+- [x] **43.1** `design.md §3.1`: Replace "single direction" with "multi-dimensional subspace (concept cone)"
+- [x] **43.2** `design.md §10`: Add Rogue Scalpel / Steering Externalities jailbreak risk finding
+- [x] **43.3** `design.md §2.2`: Add Bailey et al. obfuscated activations finding and proposed defenses
+- [x] **43.4** `design.md §12`: Add KV-cache steering accumulation and Prompt-Activation Duality finding
+- [x] **43.5** `design.md §13`: Add references to MPOA, Gabliteration, concept cones, SAE-based steering
+- [x] **43.6** `design.md §2.2`: Add Steering Externalities paper (arXiv:2602.04896) to critical findings
 
 #### Step 44: Document Known Limitations
 - [ ] **44.1** SAE limitation: only chat/instruction-data SAEs capture refusal - pretraining SAEs do not

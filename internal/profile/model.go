@@ -13,12 +13,15 @@ type SteeringMetrics struct {
 	KLDivergence        float64 `json:"kl_divergence"`
 	CapabilityRetention float64 `json:"capability_retention"`
 	PerplexityDelta     float64 `json:"perplexity_delta,omitempty"`
+	AttackSuccessRate   float64 `json:"attack_success_rate,omitempty"`
+	HereticScore        float64 `json:"heretic_score,omitempty"`
 }
 
 // ModelProfile stores extracted behavioral directions for a specific model.
 type ModelProfile struct {
 	ModelID           string
 	Directions        map[string]map[int][]float64 // direction_name -> layer_idx -> vector
+	BiasDirections    map[string]map[int][]float64 // direction_name -> layer_idx -> bias vector
 	LayerScores       map[string][]float64         // direction_name -> layer scores
 	TruthNeurons      []int
 	MonitoredLayers   []int

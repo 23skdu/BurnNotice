@@ -1,6 +1,11 @@
 package web
 
-import "fmt"
+import (
+	"fmt"
+	"math"
+
+	"burnnotice/internal/analysis"
+)
 
 func sampleHeatmapSVG() string {
 	svg := ""
@@ -54,5 +59,97 @@ func sampleCircuitGraph() string {
 		y2 := 100 + float64((i+1)/4)*150
 		svg += fmt.Sprintf(`<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="#666" stroke-width="2"/>`, x1, y1, x2, y2)
 	}
+	return svg
+}
+
+// sampleLatentSpaceSVG generates a fine-grained 2D manifold visualization of the model's semantic latent space.
+func sampleLatentSpaceSVG(modelID string) string {
+	points := make([]analysis.LatentPoint, 0, 64)
+
+	// Truthful cluster & trajectory across 8 layers
+	for l := 0; l < 8; l++ {
+		fl := float64(l)
+		points = append(points, analysis.LatentPoint{
+			ID:         fmt.Sprintf("t-%d", l),
+			PromptID:   "prompt-truthful-1",
+			Token:      "verified",
+			Layer:      l,
+			Category:   analysis.CategoryTruthful,
+			ProjectedX: 2.5 + 0.15*fl + 0.05*math.Sin(fl),
+			ProjectedY: 1.8 + 0.20*fl + 0.04*math.Cos(fl),
+		})
+	}
+
+	// Deceptive cluster & trajectory across 8 layers
+	for l := 0; l < 8; l++ {
+		fl := float64(l)
+		points = append(points, analysis.LatentPoint{
+			ID:         fmt.Sprintf("d-%d", l),
+			PromptID:   "prompt-deceptive-1",
+			Token:      "misleading",
+			Layer:      l,
+			Category:   analysis.CategoryDeceptive,
+			ProjectedX: -2.2 - 0.18*fl + 0.06*math.Cos(fl),
+			ProjectedY: -1.5 - 0.22*fl + 0.05*math.Sin(fl),
+		})
+	}
+
+	// Refusal cluster
+	for i := 0; i < 10; i++ {
+		fi := float64(i)
+		points = append(points, analysis.LatentPoint{
+			ID:         fmt.Sprintf("r-%d", i),
+			PromptID:   "prompt-refusal",
+			Token:      "cannot",
+			Layer:      16,
+			Category:   analysis.CategoryRefusal,
+			ProjectedX: -0.5 + 0.3*math.Sin(fi*1.2),
+			ProjectedY: 2.5 + 0.25*math.Cos(fi*1.2),
+		})
+	}
+
+	// Creative cluster
+	for i := 0; i < 8; i++ {
+		fi := float64(i)
+		points = append(points, analysis.LatentPoint{
+			ID:         fmt.Sprintf("c-%d", i),
+			PromptID:   "prompt-creative",
+			Token:      "imagine",
+			Layer:      12,
+			Category:   analysis.CategoryCreative,
+			ProjectedX: 0.8 + 0.4*math.Cos(fi*0.9),
+			ProjectedY: -2.0 + 0.3*math.Sin(fi*0.9),
+		})
+	}
+
+	// Harmful cluster
+	for i := 0; i < 8; i++ {
+		fi := float64(i)
+		points = append(points, analysis.LatentPoint{
+			ID:         fmt.Sprintf("h-%d", i),
+			PromptID:   "prompt-harmful",
+			Token:      "exploit",
+			Layer:      20,
+			Category:   analysis.CategoryHarmful,
+			ProjectedX: -3.5 + 0.3*math.Sin(fi*0.8),
+			ProjectedY: 0.5 + 0.35*math.Cos(fi*0.8),
+		})
+	}
+
+	proj, err := analysis.ProjectLatentSpace(points, nil, nil)
+	if err != nil {
+		return "<div class='text-red-400'>Failed to project latent space</div>"
+	}
+
+	cfg := analysis.DefaultVisualizerConfig()
+	cfg.Title = fmt.Sprintf("Semantic Latent Space: %s", modelID)
+	cfg.Width = 840
+	cfg.Height = 520
+
+	svg, err := analysis.GenerateSVG(proj, cfg)
+	if err != nil {
+		return fmt.Sprintf("<div class='text-red-400'>Error generating SVG: %v</div>", err)
+	}
+
 	return svg
 }

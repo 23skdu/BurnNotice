@@ -11,11 +11,13 @@ const (
 	MethodSelective
 	MethodAblation
 	MethodNormPreserving
+	MethodBiprojection
 )
 
 // Command holds a steering intervention to apply.
 type Command struct {
 	Vector              []float64
+	SecondaryVector     []float64 // Benign / harmless reference direction for biprojection
 	Strength            float64
 	Method              Method
 	RegularizationAlpha float64
@@ -75,6 +77,94 @@ func NormPreservingAblation(activation, direction []float64, alpha float64, regA
 	return result
 }
 
+// BiprojectedAblation removes the harmful direction while explicitly preserving/restoring
+// the benign direction component and the original activation norm:
+//   h_harm_free = h - (h · v_harm)/(||v_harm||^2 + reg) * v_harm
+//   h_benign_restored = h_harm_free + (h · v_benign)/(||v_benign||^2 + reg) * v_benign
+//   h' = h_benign_restored * (||h||_2 / ||h_benign_restored||_2)
+func BiprojectedAblation(activation, harmDir, benignDir []float64, alpha, regAlpha float64) []float64 {
+	origNorm := vecNorm(activation)
+	if origNorm < 1e-10 || len(harmDir) != len(activation) {
+		return activation
+	}
+
+	harmNormSq := vecDot(harmDir, harmDir)
+	if harmNormSq < 1e-10 {
+		return activation
+	}
+
+	// 1. Remove harmful projection
+	dotHarm := vecDot(activation, harmDir)
+	projHarm := dotHarm / (harmNormSq + regAlpha)
+
+	hOrtho := make([]float64, len(activation))
+	for i := range activation {
+		hOrtho[i] = activation[i] - projHarm*harmDir[i]
+	}
+
+	// 2. If benign direction is provided, preserve its original component
+	if len(benignDir) == len(activation) {
+		benignNormSq := vecDot(benignDir, benignDir)
+		if benignNormSq >= 1e-10 {
+			origBenignDot := vecDot(activation, benignDir)
+			curBenignDot := vecDot(hOrtho, benignDir)
+			deficit := origBenignDot - curBenignDot
+			scale := deficit / (benignNormSq + regAlpha)
+			for i := range hOrtho {
+				hOrtho[i] += scale * benignDir[i]
+			}
+		}
+	}
+
+	// 3. Restore original L2 norm
+	orthoNorm := vecNorm(hOrtho)
+	if orthoNorm < 1e-10 {
+		return activation
+	}
+	normScale := origNorm / orthoNorm
+	restored := make([]float64, len(activation))
+	for i := range activation {
+		restored[i] = hOrtho[i] * normScale
+	}
+
+	if alpha >= 1.0 {
+		return restored
+	}
+	if alpha <= 0.0 {
+		return activation
+	}
+
+	result := make([]float64, len(activation))
+	for i := range activation {
+		result[i] = (1.0-alpha)*activation[i] + alpha*restored[i]
+	}
+	return result
+}
+
+// ResolveComponentStrengths computes the effective steering strength for a transformer sub-component.
+// If component-specific strengths are not configured, default to attention=1.0 and MLP=0.5 (as MLP carries sensitive knowledge).
+func ResolveComponentStrengths(cmd Command, component TransformerComponent) float64 {
+	baseStrength := cmd.Strength
+	if baseStrength == 0 {
+		baseStrength = 1.0
+	}
+
+	switch component {
+	case ComponentMLPDown, ComponentMLPUp, ComponentMLPGate:
+		if cmd.MLPStrength > 0 {
+			return baseStrength * cmd.MLPStrength
+		}
+		return baseStrength * 0.5 // Default MLP scaling
+	case ComponentAttentionQuery, ComponentAttentionKey, ComponentAttentionValue, ComponentAttentionOut:
+		if cmd.AttentionStrength > 0 {
+			return baseStrength * cmd.AttentionStrength
+		}
+		return baseStrength * 1.0 // Default Attention scaling
+	default:
+		return baseStrength
+	}
+}
+
 // ApplyCommand executes the configured steering command on the activation.
 func ApplyCommand(activation []float64, cmd Command) []float64 {
 	switch cmd.Method {
@@ -90,6 +180,12 @@ func ApplyCommand(activation []float64, cmd Command) []float64 {
 			strength = 1.0
 		}
 		return NormPreservingAblation(activation, cmd.Vector, strength, cmd.RegularizationAlpha)
+	case MethodBiprojection:
+		strength := cmd.Strength
+		if strength == 0 {
+			strength = 1.0
+		}
+		return BiprojectedAblation(activation, cmd.Vector, cmd.SecondaryVector, strength, cmd.RegularizationAlpha)
 	default:
 		return activation
 	}

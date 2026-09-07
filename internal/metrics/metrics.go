@@ -341,4 +341,76 @@ var (
 		},
 		[]string{"classifier_type"},
 	)
+
+	CASTEvaluationsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "burnnotice_cast_evaluations_total",
+			Help: "Total number of conditional activation steering evaluations",
+		},
+		[]string{"model_id", "decision"},
+	)
+
+	CoTPhaseTransitionsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "burnnotice_cot_phase_transitions_total",
+			Help: "Total number of chain-of-thought phase transitions detected",
+		},
+		[]string{"model_id", "phase"},
+	)
+
+	KVCacheAngularDriftDegrees = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "burnnotice_kv_cache_angular_drift_degrees",
+			Help: "Current cumulative angular drift of KV-cache steering vectors in degrees",
+		},
+		[]string{"model_id"},
+	)
+
+	GCADAttenuationsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "burnnotice_gcad_attenuations_total",
+			Help: "Total number of attention key/value deltas cropped or attenuated by GCAD",
+		},
+		[]string{"model_id"},
+	)
+
+	HereticScoreCurrent = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "burnnotice_heretic_score_current",
+			Help: "Current composite safety Heretic score",
+		},
+		[]string{"model_id"},
+	)
+
+	LatentSeparationRatio = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "burnnotice_latent_separation_ratio",
+			Help: "Ratio of steered to baseline latent space cluster separation",
+		},
+		[]string{"model_id"},
+	)
+
+	AdversarialShieldBlockedTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "burnnotice_adversarial_shield_blocked_total",
+			Help: "Total number of adversarial inputs or gradient probes blocked",
+		},
+		[]string{"attack_type"},
+	)
+
+	AdversarialPerturbationsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "burnnotice_adversarial_perturbations_total",
+			Help: "Total number of stochastic latent perturbations injected",
+		},
+		[]string{"model_id"},
+	)
+
+	LatentSpaceVisualizationsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "burnnotice_latent_space_visualizations_total",
+			Help: "Total number of fine-grained semantic latent space manifolds rendered",
+		},
+		[]string{"method"},
+	)
 )

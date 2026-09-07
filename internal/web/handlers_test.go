@@ -391,3 +391,68 @@ func TestHandlers_DashboardSummary_Error(t *testing.T) {
 	h.DashboardSummary().ServeHTTP(w, req)
 }
 
+func TestHandlers_LatentSpace(t *testing.T) {
+	hub := NewSSEHub()
+	h := NewHandlers(hub)
+
+	req := httptest.NewRequest("GET", "/model/llama-3-8b/latent", nil)
+	req.SetPathValue("id", "llama-3-8b")
+	w := httptest.NewRecorder()
+
+	h.LatentSpace().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+
+	body := w.Body.String()
+	if !containsAll(body, "Semantic Latent Space", "llama-3-8b", "Centroid Separation", "Trajectory Curvature") {
+		t.Errorf("latent space HTML missing expected elements")
+	}
+}
+
+func TestHandlers_LatentSpaceSVG(t *testing.T) {
+	hub := NewSSEHub()
+	h := NewHandlers(hub)
+
+	req := httptest.NewRequest("GET", "/api/model/llama-3-8b/latent/svg", nil)
+	req.SetPathValue("id", "llama-3-8b")
+	w := httptest.NewRecorder()
+
+	h.LatentSpaceSVG().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+
+	contentType := w.Header().Get("Content-Type")
+	if !strings.Contains(contentType, "image/svg+xml") {
+		t.Errorf("expected Content-Type image/svg+xml, got %s", contentType)
+	}
+
+	body := w.Body.String()
+	if !strings.Contains(body, "<svg") || !strings.Contains(body, "</svg>") {
+		t.Errorf("expected valid SVG output")
+	}
+}
+
+func TestHandlers_LatentSpaceData(t *testing.T) {
+	hub := NewSSEHub()
+	h := NewHandlers(hub)
+
+	req := httptest.NewRequest("GET", "/api/model/llama-3-8b/latent/data", nil)
+	req.SetPathValue("id", "llama-3-8b")
+	w := httptest.NewRecorder()
+
+	h.LatentSpaceData().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+
+	body := w.Body.String()
+	if !containsAll(body, `"model_id"`, `"variance_explained"`, `"status":"projected"`) {
+		t.Errorf("latent data JSON missing expected elements: %s", body)
+	}
+}
+

@@ -10,7 +10,7 @@ func BenchmarkActAdd(b *testing.B) {
 	direction := randomVecF64(4096)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		ActAdd(activation, direction, 0.5)
 	}
 }
@@ -20,7 +20,7 @@ func BenchmarkAngular(b *testing.B) {
 	direction := randomVecF64(4096)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		Angular(activation, direction, 0.5)
 	}
 }
@@ -30,7 +30,7 @@ func BenchmarkAblate(b *testing.B) {
 	direction := randomVecF64(4096)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		Ablate(activation, direction)
 	}
 }
@@ -41,9 +41,11 @@ func BenchmarkDispatcher_Apply(b *testing.B) {
 	activation := randomVecF64(4096)
 	direction := randomVecF64(4096)
 
+	i := 0
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		d.Apply(i%4, activation, direction, 0.5)
+		i++
 	}
 }
 
@@ -55,7 +57,7 @@ func BenchmarkSelectiveSteerer_ComputeSteering(b *testing.B) {
 	activation := randomVecF64(4096)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		s.ComputeSteering(0, activation, 0.5)
 	}
 }
@@ -70,7 +72,7 @@ func BenchmarkLoRASteerer_ApplyLoRA(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		l.ApplyLoRA(weights)
 		l.ReverseLoRA(weights)
 	}

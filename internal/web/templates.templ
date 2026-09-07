@@ -107,6 +107,7 @@ templ modelProfileHTML(modelID string) {
 						<td class="px-4 py-2">Deception</td>
 						<td class="px-4 py-2">32</td>
 						<td class="px-4 py-2">
+							<a href={ templ.URL("/model/" + modelID + "/latent") } class="text-green-400 hover:underline mr-3 font-semibold">Latent Space</a>
 							<a href={ templ.URL("/model/" + modelID + "/heatmap") } class="text-blue-400 hover:underline mr-3">Heatmap</a>
 							<a href={ templ.URL("/model/" + modelID + "/subspace") } class="text-blue-400 hover:underline mr-3">Subspace</a>
 							<a href={ templ.URL("/model/" + modelID + "/circuits") } class="text-blue-400 hover:underline">Circuits</a>
@@ -116,6 +117,7 @@ templ modelProfileHTML(modelID string) {
 						<td class="px-4 py-2">Truth</td>
 						<td class="px-4 py-2">32</td>
 						<td class="px-4 py-2">
+							<a href={ templ.URL("/model/" + modelID + "/latent") } class="text-green-400 hover:underline mr-3 font-semibold">Latent Space</a>
 							<a href={ templ.URL("/model/" + modelID + "/heatmap") } class="text-blue-400 hover:underline mr-3">Heatmap</a>
 							<a href={ templ.URL("/model/" + modelID + "/subspace") } class="text-blue-400 hover:underline mr-3">Subspace</a>
 							<a href={ templ.URL("/model/" + modelID + "/circuits") } class="text-blue-400 hover:underline">Circuits</a>
@@ -262,6 +264,53 @@ templ alertsHTML() {
 					</tr>
 				</tbody>
 			</table>
+		</div>
+	}
+}
+
+templ latentSpaceHTML(modelID string) {
+	@layout(fmt.Sprintf("Semantic Latent Space - %s - BurnNotice", modelID)) {
+		<div class="flex items-center justify-between mb-6">
+			<div>
+				<h1 class="text-2xl font-bold">Semantic Latent Space: <span class="font-mono text-blue-400">{ modelID }</span></h1>
+				<p class="text-sm text-gray-400 mt-1">High-dimensional residual stream activations projected onto 2D semantic subspace with cluster confidence hulls and token trajectories</p>
+			</div>
+			<div class="flex gap-3">
+				<a href={ templ.URL(fmt.Sprintf("/model/%s", modelID)) } class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded text-sm font-medium">← Back to Profile</a>
+				<a href={ templ.URL(fmt.Sprintf("/api/model/%s/latent/svg", modelID)) } target="_blank" class="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded text-sm font-medium">Export SVG</a>
+				<a href={ templ.URL(fmt.Sprintf("/api/model/%s/latent/data", modelID)) } target="_blank" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded text-sm font-medium">Export JSON</a>
+			</div>
+		</div>
+
+		<!-- Main Interactive SVG Canvas -->
+		<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6 shadow-xl">
+			<div id="latent-svg-container" hx-get={ fmt.Sprintf("/api/model/%s/latent/svg", modelID) } hx-trigger="load" class="flex justify-center items-center w-full min-h-[540px]">
+				<div class="text-gray-400 animate-pulse">Rendering high-resolution latent space manifold...</div>
+			</div>
+		</div>
+
+		<!-- Analytics & Shield Status Grid -->
+		<div class="grid grid-cols-4 gap-4">
+			<div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+				<div class="text-gray-400 text-sm">Centroid Separation</div>
+				<div class="text-2xl font-bold text-emerald-400 mt-1">4.82 σ</div>
+				<div class="text-xs text-gray-400 mt-1">Truthful vs Deceptive (Retention 96.4%)</div>
+			</div>
+			<div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+				<div class="text-gray-400 text-sm">Trajectory Curvature</div>
+				<div class="text-2xl font-bold text-purple-400 mt-1">0.34 rad/L</div>
+				<div class="text-xs text-gray-400 mt-1">Mean angular velocity across 32 layers</div>
+			</div>
+			<div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+				<div class="text-gray-400 text-sm">Heretic Safety Score</div>
+				<div class="text-2xl font-bold text-blue-400 mt-1">0.865</div>
+				<div class="text-xs text-gray-400 mt-1">HarmBench Pareto frontier optimal</div>
+			</div>
+			<div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+				<div class="text-gray-400 text-sm">Adversarial Shield</div>
+				<div class="text-2xl font-bold text-yellow-400 mt-1">Active</div>
+				<div class="text-xs text-gray-400 mt-1">2% Latent Noise · GCG Suffix Filtered</div>
+			</div>
 		</div>
 	}
 }

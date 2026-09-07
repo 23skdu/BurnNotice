@@ -23,9 +23,13 @@ graph TB
         WASM["WASM Inference Backend"]
         MON["Activation Monitor"]
         SCORE["Scoring Engine"]
-        STEER["Steering Engine"]
+        STEER["Steering Engine (MPOA, Bias, Float Mix)"]
         POLICY["Policy Engine"]
         HALL["Hallucination Detector"]
+        CAST["CAST Conditional Gating"]
+        COT["CoT State Machine"]
+        KV["KVCache Tracker & GCAD"]
+        SHIELD["Adversarial Shield"]
     end
 
     subgraph Analysis["Post-Profile Analysis"]
@@ -33,6 +37,9 @@ graph TB
         CONE["ConceptConeAnalyzer"]
         CROSS["CrossLayerAnalyzer"]
         OURO["OuroborosDetector"]
+        LATENT["LatentSpaceVisualizer (SVD, Trajectories)"]
+        EXTERN["ExternalitiesAssessor (Jailbreak Risk)"]
+        HERETIC["HereticScoreEvaluator (HarmBench Pareto)"]
     end
 
     subgraph Longbow["Longbow Vector Engine"]
@@ -48,6 +55,7 @@ graph TB
         TEMPL["Templ Templates"]
         HTMX["HTMX UI"]
         SSE["SSE Hub"]
+        LATENT_UI["Latent Space Manifold SVG"]
     end
 
     subgraph Observability["Observability"]

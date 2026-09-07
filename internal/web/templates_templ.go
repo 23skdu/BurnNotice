@@ -232,33 +232,33 @@ func modelProfileHTML(modelID string) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var12 templ.SafeURL
-			templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL("/model/" + modelID + "/heatmap"))
+			templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL("/model/" + modelID + "/latent"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates.templ`, Line: 110, Col: 60}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates.templ`, Line: 110, Col: 59}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "\" class=\"text-blue-400 hover:underline mr-3\">Heatmap</a> <a href=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "\" class=\"text-green-400 hover:underline mr-3 font-semibold\">Latent Space</a> <a href=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var13 templ.SafeURL
-			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL("/model/" + modelID + "/subspace"))
+			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL("/model/" + modelID + "/heatmap"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates.templ`, Line: 111, Col: 61}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates.templ`, Line: 111, Col: 60}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "\" class=\"text-blue-400 hover:underline mr-3\">Subspace</a> <a href=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "\" class=\"text-blue-400 hover:underline mr-3\">Heatmap</a> <a href=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var14 templ.SafeURL
-			templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL("/model/" + modelID + "/circuits"))
+			templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL("/model/" + modelID + "/subspace"))
 			if templ_7745c5c3_Err != nil {
 				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates.templ`, Line: 112, Col: 61}
 			}
@@ -266,46 +266,72 @@ func modelProfileHTML(modelID string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "\" class=\"text-blue-400 hover:underline\">Circuits</a></td></tr><tr class=\"border-t border-gray-700\"><td class=\"px-4 py-2\">Truth</td><td class=\"px-4 py-2\">32</td><td class=\"px-4 py-2\"><a href=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "\" class=\"text-blue-400 hover:underline mr-3\">Subspace</a> <a href=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var15 templ.SafeURL
-			templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL("/model/" + modelID + "/heatmap"))
+			templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL("/model/" + modelID + "/circuits"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates.templ`, Line: 119, Col: 60}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates.templ`, Line: 113, Col: 61}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "\" class=\"text-blue-400 hover:underline mr-3\">Heatmap</a> <a href=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "\" class=\"text-blue-400 hover:underline\">Circuits</a></td></tr><tr class=\"border-t border-gray-700\"><td class=\"px-4 py-2\">Truth</td><td class=\"px-4 py-2\">32</td><td class=\"px-4 py-2\"><a href=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var16 templ.SafeURL
-			templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL("/model/" + modelID + "/subspace"))
+			templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL("/model/" + modelID + "/latent"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates.templ`, Line: 120, Col: 61}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates.templ`, Line: 120, Col: 59}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "\" class=\"text-blue-400 hover:underline mr-3\">Subspace</a> <a href=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "\" class=\"text-green-400 hover:underline mr-3 font-semibold\">Latent Space</a> <a href=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var17 templ.SafeURL
-			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL("/model/" + modelID + "/circuits"))
+			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL("/model/" + modelID + "/heatmap"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates.templ`, Line: 121, Col: 61}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates.templ`, Line: 121, Col: 60}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "\" class=\"text-blue-400 hover:underline\">Circuits</a></td></tr></tbody></table></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "\" class=\"text-blue-400 hover:underline mr-3\">Heatmap</a> <a href=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var18 templ.SafeURL
+			templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL("/model/" + modelID + "/subspace"))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates.templ`, Line: 122, Col: 61}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "\" class=\"text-blue-400 hover:underline mr-3\">Subspace</a> <a href=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var19 templ.SafeURL
+			templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL("/model/" + modelID + "/circuits"))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates.templ`, Line: 123, Col: 61}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "\" class=\"text-blue-400 hover:underline\">Circuits</a></td></tr></tbody></table></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -335,12 +361,12 @@ func monitorHTML(sessionID string) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var18 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var18 == nil {
-			templ_7745c5c3_Var18 = templ.NopComponent
+		templ_7745c5c3_Var20 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var20 == nil {
+			templ_7745c5c3_Var20 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var19 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Var21 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -352,26 +378,26 @@ func monitorHTML(sessionID string) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<h1 class=\"text-2xl font-bold mb-6\">Live Monitor: <span class=\"font-mono\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<h1 class=\"text-2xl font-bold mb-6\">Live Monitor: <span class=\"font-mono\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var20 string
-			templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(sessionID)
+			var templ_7745c5c3_Var22 string
+			templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(sessionID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates.templ`, Line: 132, Col: 87}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates.templ`, Line: 134, Col: 87}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "</span></h1><div hx-ext=\"sse\" sse-connect=\"/sse\" class=\"grid grid-cols-4 gap-4\"><div class=\"bg-gray-800 rounded-lg p-4 border border-gray-700\"><div class=\"text-gray-400 text-sm\">Deception</div><div id=\"deception-score\" class=\"text-3xl font-bold text-green-400\">0.12</div><div class=\"w-full bg-gray-700 rounded h-2 mt-2\"><div class=\"bg-green-500 h-2 rounded\" style=\"width:12%\"></div></div></div><div class=\"bg-gray-800 rounded-lg p-4 border border-gray-700\"><div class=\"text-gray-400 text-sm\">Conflict</div><div id=\"conflict-score\" class=\"text-3xl font-bold text-yellow-400\">0.34</div><div class=\"w-full bg-gray-700 rounded h-2 mt-2\"><div class=\"bg-yellow-500 h-2 rounded\" style=\"width:34%\"></div></div></div><div class=\"bg-gray-800 rounded-lg p-4 border border-gray-700\"><div class=\"text-gray-400 text-sm\">Truth</div><div id=\"truth-score\" class=\"text-3xl font-bold text-green-400\">0.89</div><div class=\"w-full bg-gray-700 rounded h-2 mt-2\"><div class=\"bg-green-500 h-2 rounded\" style=\"width:89%\"></div></div></div><div class=\"bg-gray-800 rounded-lg p-4 border border-gray-700\"><div class=\"text-gray-400 text-sm\">Compliance</div><div id=\"compliance-score\" class=\"text-3xl font-bold text-green-400\">0.95</div><div class=\"w-full bg-gray-700 rounded h-2 mt-2\"><div class=\"bg-green-500 h-2 rounded\" style=\"width:95%\"></div></div></div></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "</span></h1><div hx-ext=\"sse\" sse-connect=\"/sse\" class=\"grid grid-cols-4 gap-4\"><div class=\"bg-gray-800 rounded-lg p-4 border border-gray-700\"><div class=\"text-gray-400 text-sm\">Deception</div><div id=\"deception-score\" class=\"text-3xl font-bold text-green-400\">0.12</div><div class=\"w-full bg-gray-700 rounded h-2 mt-2\"><div class=\"bg-green-500 h-2 rounded\" style=\"width:12%\"></div></div></div><div class=\"bg-gray-800 rounded-lg p-4 border border-gray-700\"><div class=\"text-gray-400 text-sm\">Conflict</div><div id=\"conflict-score\" class=\"text-3xl font-bold text-yellow-400\">0.34</div><div class=\"w-full bg-gray-700 rounded h-2 mt-2\"><div class=\"bg-yellow-500 h-2 rounded\" style=\"width:34%\"></div></div></div><div class=\"bg-gray-800 rounded-lg p-4 border border-gray-700\"><div class=\"text-gray-400 text-sm\">Truth</div><div id=\"truth-score\" class=\"text-3xl font-bold text-green-400\">0.89</div><div class=\"w-full bg-gray-700 rounded h-2 mt-2\"><div class=\"bg-green-500 h-2 rounded\" style=\"width:89%\"></div></div></div><div class=\"bg-gray-800 rounded-lg p-4 border border-gray-700\"><div class=\"text-gray-400 text-sm\">Compliance</div><div id=\"compliance-score\" class=\"text-3xl font-bold text-green-400\">0.95</div><div class=\"w-full bg-gray-700 rounded h-2 mt-2\"><div class=\"bg-green-500 h-2 rounded\" style=\"width:95%\"></div></div></div></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = layout(fmt.Sprintf("Monitor %s - BurnNotice", sessionID)).Render(templ.WithChildren(ctx, templ_7745c5c3_Var19), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = layout(fmt.Sprintf("Monitor %s - BurnNotice", sessionID)).Render(templ.WithChildren(ctx, templ_7745c5c3_Var21), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -395,12 +421,12 @@ func heatmapHTML(modelID string) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var21 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var21 == nil {
-			templ_7745c5c3_Var21 = templ.NopComponent
+		templ_7745c5c3_Var23 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var23 == nil {
+			templ_7745c5c3_Var23 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var22 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Var24 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -412,20 +438,20 @@ func heatmapHTML(modelID string) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<h1 class=\"text-2xl font-bold mb-6\">Layer x Token Heatmap: <span class=\"font-mono\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<h1 class=\"text-2xl font-bold mb-6\">Layer x Token Heatmap: <span class=\"font-mono\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var23 string
-			templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(modelID)
+			var templ_7745c5c3_Var25 string
+			templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(modelID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates.templ`, Line: 160, Col: 94}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates.templ`, Line: 162, Col: 94}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var25))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "</span></h1><div class=\"bg-gray-800 rounded-lg border border-gray-700 p-4 overflow-x-auto\"><svg width=\"800\" height=\"400\" viewBox=\"0 0 800 400\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "</span></h1><div class=\"bg-gray-800 rounded-lg border border-gray-700 p-4 overflow-x-auto\"><svg width=\"800\" height=\"400\" viewBox=\"0 0 800 400\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -433,13 +459,13 @@ func heatmapHTML(modelID string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "</svg></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</svg></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = layout(fmt.Sprintf("Heatmap - %s - BurnNotice", modelID)).Render(templ.WithChildren(ctx, templ_7745c5c3_Var22), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = layout(fmt.Sprintf("Heatmap - %s - BurnNotice", modelID)).Render(templ.WithChildren(ctx, templ_7745c5c3_Var24), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -463,12 +489,12 @@ func subspaceHTML(modelID string) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var24 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var24 == nil {
-			templ_7745c5c3_Var24 = templ.NopComponent
+		templ_7745c5c3_Var26 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var26 == nil {
+			templ_7745c5c3_Var26 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var25 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Var27 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -480,20 +506,20 @@ func subspaceHTML(modelID string) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "<h1 class=\"text-2xl font-bold mb-6\">Subspace Projection: <span class=\"font-mono\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<h1 class=\"text-2xl font-bold mb-6\">Subspace Projection: <span class=\"font-mono\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var26 string
-			templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinStringErrs(modelID)
+			var templ_7745c5c3_Var28 string
+			templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(modelID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates.templ`, Line: 171, Col: 92}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates.templ`, Line: 173, Col: 92}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var26))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var28))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</span></h1><div class=\"bg-gray-800 rounded-lg border border-gray-700 p-4\"><svg width=\"600\" height=\"400\" viewBox=\"0 0 600 400\"><line x1=\"50\" y1=\"200\" x2=\"550\" y2=\"200\" stroke=\"#666\" stroke-width=\"1\"></line> <line x1=\"300\" y1=\"50\" x2=\"300\" y2=\"350\" stroke=\"#666\" stroke-width=\"1\"></line> <text x=\"540\" y=\"190\" fill=\"#999\" font-size=\"12\">Truth</text> <text x=\"310\" y=\"60\" fill=\"#999\" font-size=\"12\">Deception</text> <line x1=\"50\" y1=\"350\" x2=\"550\" y2=\"50\" stroke=\"#f44\" stroke-width=\"1\" stroke-dasharray=\"4\"></line>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "</span></h1><div class=\"bg-gray-800 rounded-lg border border-gray-700 p-4\"><svg width=\"600\" height=\"400\" viewBox=\"0 0 600 400\"><line x1=\"50\" y1=\"200\" x2=\"550\" y2=\"200\" stroke=\"#666\" stroke-width=\"1\"></line> <line x1=\"300\" y1=\"50\" x2=\"300\" y2=\"350\" stroke=\"#666\" stroke-width=\"1\"></line> <text x=\"540\" y=\"190\" fill=\"#999\" font-size=\"12\">Truth</text> <text x=\"310\" y=\"60\" fill=\"#999\" font-size=\"12\">Deception</text> <line x1=\"50\" y1=\"350\" x2=\"550\" y2=\"50\" stroke=\"#f44\" stroke-width=\"1\" stroke-dasharray=\"4\"></line>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -501,13 +527,13 @@ func subspaceHTML(modelID string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "</svg></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "</svg></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = layout(fmt.Sprintf("Subspace - %s - BurnNotice", modelID)).Render(templ.WithChildren(ctx, templ_7745c5c3_Var25), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = layout(fmt.Sprintf("Subspace - %s - BurnNotice", modelID)).Render(templ.WithChildren(ctx, templ_7745c5c3_Var27), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -531,12 +557,12 @@ func circuitsHTML(modelID string) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var27 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var27 == nil {
-			templ_7745c5c3_Var27 = templ.NopComponent
+		templ_7745c5c3_Var29 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var29 == nil {
+			templ_7745c5c3_Var29 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var28 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Var30 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -548,20 +574,20 @@ func circuitsHTML(modelID string) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<h1 class=\"text-2xl font-bold mb-6\">Neural Circuits: <span class=\"font-mono\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "<h1 class=\"text-2xl font-bold mb-6\">Neural Circuits: <span class=\"font-mono\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var29 string
-			templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.JoinStringErrs(modelID)
+			var templ_7745c5c3_Var31 string
+			templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(modelID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates.templ`, Line: 187, Col: 88}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates.templ`, Line: 189, Col: 88}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var29))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "</span></h1><div class=\"bg-gray-800 rounded-lg border border-gray-700 p-4\"><svg width=\"800\" height=\"500\" viewBox=\"0 0 800 500\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "</span></h1><div class=\"bg-gray-800 rounded-lg border border-gray-700 p-4\"><svg width=\"800\" height=\"500\" viewBox=\"0 0 800 500\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -569,13 +595,13 @@ func circuitsHTML(modelID string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "</svg></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "</svg></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = layout(fmt.Sprintf("Circuits - %s - BurnNotice", modelID)).Render(templ.WithChildren(ctx, templ_7745c5c3_Var28), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = layout(fmt.Sprintf("Circuits - %s - BurnNotice", modelID)).Render(templ.WithChildren(ctx, templ_7745c5c3_Var30), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -584,53 +610,6 @@ func circuitsHTML(modelID string) templ.Component {
 }
 
 func policiesHTML() templ.Component {
-	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
-		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
-		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
-			return templ_7745c5c3_CtxErr
-		}
-		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
-		if !templ_7745c5c3_IsBuffer {
-			defer func() {
-				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
-				if templ_7745c5c3_Err == nil {
-					templ_7745c5c3_Err = templ_7745c5c3_BufErr
-				}
-			}()
-		}
-		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var30 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var30 == nil {
-			templ_7745c5c3_Var30 = templ.NopComponent
-		}
-		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var31 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
-			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
-			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
-			if !templ_7745c5c3_IsBuffer {
-				defer func() {
-					templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
-					if templ_7745c5c3_Err == nil {
-						templ_7745c5c3_Err = templ_7745c5c3_BufErr
-					}
-				}()
-			}
-			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "<h1 class=\"text-2xl font-bold mb-6\">Policy Configuration</h1><div class=\"bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6\"><h2 class=\"text-lg font-semibold mb-4\">Add Policy</h2><form hx-post=\"/api/policies\" hx-swap=\"outerHTML\" class=\"grid grid-cols-5 gap-4\"><input name=\"name\" placeholder=\"Policy name\" class=\"bg-gray-700 rounded px-3 py-2 border border-gray-600\"> <select name=\"metric\" class=\"bg-gray-700 rounded px-3 py-2 border border-gray-600\"><option value=\"deception_score\">Deception Score</option> <option value=\"conflict_score\">Conflict Score</option> <option value=\"truth_score\">Truth Score</option> <option value=\"compliance\">Compliance</option></select> <input name=\"threshold\" type=\"number\" step=\"0.1\" min=\"0\" max=\"1\" placeholder=\"Threshold\" class=\"bg-gray-700 rounded px-3 py-2 border border-gray-600\"> <select name=\"action\" class=\"bg-gray-700 rounded px-3 py-2 border border-gray-600\"><option value=\"steer\">Steer</option> <option value=\"block\">Block</option> <option value=\"log\">Log</option> <option value=\"terminate\">Terminate</option></select> <button type=\"submit\" class=\"bg-red-600 hover:bg-red-500 rounded px-4 py-2\">Add Policy</button></form></div><div class=\"bg-gray-800 rounded-lg border border-gray-700 overflow-hidden\"><table class=\"w-full\"><thead class=\"bg-gray-700\"><tr><th class=\"px-4 py-2 text-left\">Name</th><th class=\"px-4 py-2 text-left\">Metric</th><th class=\"px-4 py-2 text-left\">Threshold</th><th class=\"px-4 py-2 text-left\">Action</th><th class=\"px-4 py-2 text-left\">Actions</th></tr></thead> <tbody><tr class=\"border-t border-gray-700\"><td class=\"px-4 py-2\">deception_threshold</td><td class=\"px-4 py-2\">deception_score</td><td class=\"px-4 py-2\">0.7</td><td class=\"px-4 py-2\"><span class=\"px-2 py-1 rounded bg-blue-900 text-blue-300 text-sm\">steer</span></td><td class=\"px-4 py-2\"><button class=\"text-red-400 hover:underline\">Delete</button></td></tr></tbody></table></div>")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			return nil
-		})
-		templ_7745c5c3_Err = layout("Policies - BurnNotice").Render(templ.WithChildren(ctx, templ_7745c5c3_Var31), templ_7745c5c3_Buffer)
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		return nil
-	})
-}
-
-func alertsHTML() templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -663,13 +642,172 @@ func alertsHTML() templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "<h1 class=\"text-2xl font-bold mb-6\">Alert History</h1><div class=\"bg-gray-800 rounded-lg border border-gray-700 overflow-hidden\"><table class=\"w-full\"><thead class=\"bg-gray-700\"><tr><th class=\"px-4 py-2 text-left\">Timestamp</th><th class=\"px-4 py-2 text-left\">Metric</th><th class=\"px-4 py-2 text-left\">Score</th><th class=\"px-4 py-2 text-left\">Threshold</th><th class=\"px-4 py-2 text-left\">Action</th><th class=\"px-4 py-2 text-left\">Session</th></tr></thead> <tbody><tr class=\"border-t border-gray-700\"><td class=\"px-4 py-2 font-mono text-sm\">2026-05-18T10:30:00Z</td><td class=\"px-4 py-2\">deception_score</td><td class=\"px-4 py-2 text-red-400\">0.85</td><td class=\"px-4 py-2\">0.7</td><td class=\"px-4 py-2\"><span class=\"px-2 py-1 rounded bg-blue-900 text-blue-300 text-sm\">steer</span></td><td class=\"px-4 py-2 font-mono text-sm\">sess-001</td></tr><tr class=\"border-t border-gray-700\"><td class=\"px-4 py-2 font-mono text-sm\">2026-05-18T10:31:00Z</td><td class=\"px-4 py-2\">conflict_score</td><td class=\"px-4 py-2 text-yellow-400\">0.72</td><td class=\"px-4 py-2\">0.8</td><td class=\"px-4 py-2\"><span class=\"px-2 py-1 rounded bg-gray-600 text-gray-300 text-sm\">log</span></td><td class=\"px-4 py-2 font-mono text-sm\">sess-002</td></tr></tbody></table></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "<h1 class=\"text-2xl font-bold mb-6\">Policy Configuration</h1><div class=\"bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6\"><h2 class=\"text-lg font-semibold mb-4\">Add Policy</h2><form hx-post=\"/api/policies\" hx-swap=\"outerHTML\" class=\"grid grid-cols-5 gap-4\"><input name=\"name\" placeholder=\"Policy name\" class=\"bg-gray-700 rounded px-3 py-2 border border-gray-600\"> <select name=\"metric\" class=\"bg-gray-700 rounded px-3 py-2 border border-gray-600\"><option value=\"deception_score\">Deception Score</option> <option value=\"conflict_score\">Conflict Score</option> <option value=\"truth_score\">Truth Score</option> <option value=\"compliance\">Compliance</option></select> <input name=\"threshold\" type=\"number\" step=\"0.1\" min=\"0\" max=\"1\" placeholder=\"Threshold\" class=\"bg-gray-700 rounded px-3 py-2 border border-gray-600\"> <select name=\"action\" class=\"bg-gray-700 rounded px-3 py-2 border border-gray-600\"><option value=\"steer\">Steer</option> <option value=\"block\">Block</option> <option value=\"log\">Log</option> <option value=\"terminate\">Terminate</option></select> <button type=\"submit\" class=\"bg-red-600 hover:bg-red-500 rounded px-4 py-2\">Add Policy</button></form></div><div class=\"bg-gray-800 rounded-lg border border-gray-700 overflow-hidden\"><table class=\"w-full\"><thead class=\"bg-gray-700\"><tr><th class=\"px-4 py-2 text-left\">Name</th><th class=\"px-4 py-2 text-left\">Metric</th><th class=\"px-4 py-2 text-left\">Threshold</th><th class=\"px-4 py-2 text-left\">Action</th><th class=\"px-4 py-2 text-left\">Actions</th></tr></thead> <tbody><tr class=\"border-t border-gray-700\"><td class=\"px-4 py-2\">deception_threshold</td><td class=\"px-4 py-2\">deception_score</td><td class=\"px-4 py-2\">0.7</td><td class=\"px-4 py-2\"><span class=\"px-2 py-1 rounded bg-blue-900 text-blue-300 text-sm\">steer</span></td><td class=\"px-4 py-2\"><button class=\"text-red-400 hover:underline\">Delete</button></td></tr></tbody></table></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = layout("Alerts - BurnNotice").Render(templ.WithChildren(ctx, templ_7745c5c3_Var33), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = layout("Policies - BurnNotice").Render(templ.WithChildren(ctx, templ_7745c5c3_Var33), templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+func alertsHTML() templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var34 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var34 == nil {
+			templ_7745c5c3_Var34 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Var35 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+			if !templ_7745c5c3_IsBuffer {
+				defer func() {
+					templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err == nil {
+						templ_7745c5c3_Err = templ_7745c5c3_BufErr
+					}
+				}()
+			}
+			ctx = templ.InitializeContext(ctx)
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "<h1 class=\"text-2xl font-bold mb-6\">Alert History</h1><div class=\"bg-gray-800 rounded-lg border border-gray-700 overflow-hidden\"><table class=\"w-full\"><thead class=\"bg-gray-700\"><tr><th class=\"px-4 py-2 text-left\">Timestamp</th><th class=\"px-4 py-2 text-left\">Metric</th><th class=\"px-4 py-2 text-left\">Score</th><th class=\"px-4 py-2 text-left\">Threshold</th><th class=\"px-4 py-2 text-left\">Action</th><th class=\"px-4 py-2 text-left\">Session</th></tr></thead> <tbody><tr class=\"border-t border-gray-700\"><td class=\"px-4 py-2 font-mono text-sm\">2026-05-18T10:30:00Z</td><td class=\"px-4 py-2\">deception_score</td><td class=\"px-4 py-2 text-red-400\">0.85</td><td class=\"px-4 py-2\">0.7</td><td class=\"px-4 py-2\"><span class=\"px-2 py-1 rounded bg-blue-900 text-blue-300 text-sm\">steer</span></td><td class=\"px-4 py-2 font-mono text-sm\">sess-001</td></tr><tr class=\"border-t border-gray-700\"><td class=\"px-4 py-2 font-mono text-sm\">2026-05-18T10:31:00Z</td><td class=\"px-4 py-2\">conflict_score</td><td class=\"px-4 py-2 text-yellow-400\">0.72</td><td class=\"px-4 py-2\">0.8</td><td class=\"px-4 py-2\"><span class=\"px-2 py-1 rounded bg-gray-600 text-gray-300 text-sm\">log</span></td><td class=\"px-4 py-2 font-mono text-sm\">sess-002</td></tr></tbody></table></div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			return nil
+		})
+		templ_7745c5c3_Err = layout("Alerts - BurnNotice").Render(templ.WithChildren(ctx, templ_7745c5c3_Var35), templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+func latentSpaceHTML(modelID string) templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var36 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var36 == nil {
+			templ_7745c5c3_Var36 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Var37 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+			if !templ_7745c5c3_IsBuffer {
+				defer func() {
+					templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err == nil {
+						templ_7745c5c3_Err = templ_7745c5c3_BufErr
+					}
+				}()
+			}
+			ctx = templ.InitializeContext(ctx)
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "<div class=\"flex items-center justify-between mb-6\"><div><h1 class=\"text-2xl font-bold\">Semantic Latent Space: <span class=\"font-mono text-blue-400\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var38 string
+			templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.JoinStringErrs(modelID)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates.templ`, Line: 275, Col: 105}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var38))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "</span></h1><p class=\"text-sm text-gray-400 mt-1\">High-dimensional residual stream activations projected onto 2D semantic subspace with cluster confidence hulls and token trajectories</p></div><div class=\"flex gap-3\"><a href=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var39 templ.SafeURL
+			templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL(fmt.Sprintf("/model/%s", modelID)))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates.templ`, Line: 279, Col: 58}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var39))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "\" class=\"bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded text-sm font-medium\">← Back to Profile</a> <a href=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var40 templ.SafeURL
+			templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL(fmt.Sprintf("/api/model/%s/latent/svg", modelID)))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates.templ`, Line: 280, Col: 73}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var40))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "\" target=\"_blank\" class=\"bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded text-sm font-medium\">Export SVG</a> <a href=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var41 templ.SafeURL
+			templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL(fmt.Sprintf("/api/model/%s/latent/data", modelID)))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates.templ`, Line: 281, Col: 74}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var41))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "\" target=\"_blank\" class=\"bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded text-sm font-medium\">Export JSON</a></div></div><!-- Main Interactive SVG Canvas --> <div class=\"bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6 shadow-xl\"><div id=\"latent-svg-container\" hx-get=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var42 string
+			templ_7745c5c3_Var42, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("/api/model/%s/latent/svg", modelID))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates.templ`, Line: 287, Col: 91}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var42)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "\" hx-trigger=\"load\" class=\"flex justify-center items-center w-full min-h-[540px]\"><div class=\"text-gray-400 animate-pulse\">Rendering high-resolution latent space manifold...</div></div></div><!-- Analytics & Shield Status Grid --> <div class=\"grid grid-cols-4 gap-4\"><div class=\"bg-gray-800 rounded-lg p-4 border border-gray-700\"><div class=\"text-gray-400 text-sm\">Centroid Separation</div><div class=\"text-2xl font-bold text-emerald-400 mt-1\">4.82 σ</div><div class=\"text-xs text-gray-400 mt-1\">Truthful vs Deceptive (Retention 96.4%)</div></div><div class=\"bg-gray-800 rounded-lg p-4 border border-gray-700\"><div class=\"text-gray-400 text-sm\">Trajectory Curvature</div><div class=\"text-2xl font-bold text-purple-400 mt-1\">0.34 rad/L</div><div class=\"text-xs text-gray-400 mt-1\">Mean angular velocity across 32 layers</div></div><div class=\"bg-gray-800 rounded-lg p-4 border border-gray-700\"><div class=\"text-gray-400 text-sm\">Heretic Safety Score</div><div class=\"text-2xl font-bold text-blue-400 mt-1\">0.865</div><div class=\"text-xs text-gray-400 mt-1\">HarmBench Pareto frontier optimal</div></div><div class=\"bg-gray-800 rounded-lg p-4 border border-gray-700\"><div class=\"text-gray-400 text-sm\">Adversarial Shield</div><div class=\"text-2xl font-bold text-yellow-400 mt-1\">Active</div><div class=\"text-xs text-gray-400 mt-1\">2% Latent Noise · GCG Suffix Filtered</div></div></div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			return nil
+		})
+		templ_7745c5c3_Err = layout(fmt.Sprintf("Semantic Latent Space - %s - BurnNotice", modelID)).Render(templ.WithChildren(ctx, templ_7745c5c3_Var37), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

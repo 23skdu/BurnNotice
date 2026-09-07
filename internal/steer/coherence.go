@@ -89,3 +89,25 @@ func (ct *CoherenceTracker) Reset() {
 	defer ct.mu.Unlock()
 	ct.logProbs = ct.logProbs[:0]
 }
+
+// AdjustAlphaForKL scales steering strength alpha dynamically based on harmless prompt KL divergence.
+// If measuredKL exceeds maxTargetKL (e.g. 0.20), alpha is scaled down proportionally to protect capability.
+func AdjustAlphaForKL(currentAlpha, measuredKL, maxTargetKL float64) float64 {
+	if currentAlpha <= 0 {
+		return 0
+	}
+	if maxTargetKL <= 0 {
+		maxTargetKL = 0.20 // Default harmless target ceiling
+	}
+	if measuredKL <= maxTargetKL {
+		return currentAlpha
+	}
+	// Scale down proportionally
+	scaled := currentAlpha * (maxTargetKL / measuredKL)
+	// Floor at 5% of currentAlpha to avoid total deactivation
+	floor := currentAlpha * 0.05
+	if scaled < floor {
+		scaled = floor
+	}
+	return scaled
+}
