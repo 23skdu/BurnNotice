@@ -1,6 +1,6 @@
-# 🛡️ BurnNotice
+# BurnNotice
 
-> **Real-Time Latent Governance, Alignment Monitoring, and Dynamic Activation Steering for Autonomous LLM Agents.**
+> Real-Time Latent Governance, Alignment Monitoring, and Dynamic Activation Steering for Autonomous LLM Agents.
 
 ---
 
@@ -10,85 +10,110 @@ By interfacing directly with the model's inner representations, BurnNotice bypas
 
 ---
 
-## 🚀 Key Features
+## Key Features
 
-* **⚡ Latent-Space Governance**: Decodes and audits agent intentions within the model's internal layers in real-time, preventing planning evasion and adversarial prompt injection.
-* **📐 Orthonormal Planar Steering**: Performs mathematically perfect, norm-preserving rotations in the 2D plane spanned by the activation vector and the alignment/deception steering directions.
-* **🎯 Selective Dynamic Steering**: Dynamically evaluates the projection of current activations to detect deception-leaning states and selectively steer only when an agent crosses safety boundaries.
-* **📋 Real-Time Policy Engine**: Evaluates metrics against configurable thresholds using flexible operators (e.g., greater-than `>`, less-than `<` for safety metrics).
-* **🏎️ Zero-Allocation Tokenizer & Parser (`zjson`)**: Uses a custom, SIMD-accelerated zero-copy JSON tokenizer and decoder for sub-millisecond serialization of structured activations and messages.
-* **💾 Low-Rank Adaptation (LoRA) Steerer**: Integrates directly with dynamic model weights via high-performance rank-clamped weight updates.
+* **Multi-Family Architecture Compatibility**: Native support for Meta Llama (Llama 2, 3, 3.1, 3.2, 3.3), Alibaba Qwen (Qwen 1.5, 2, 2.5, Coder, QwQ), Google Gemma (Gemma 1, 2, Scope), and Mistral. Automatically detects architectures from `config.json`, dynamic tensor signatures, and model IDs, configuring family-specific chat templates, attention projection biases, and normalization schemes.
+* **Fine-Grained Semantic Latent Space Visualizer**: Projects high-dimensional hidden states onto orthogonal 2D manifolds via Thin SVD and PCA. Computes 95% confidence cluster ellipses across semantic categories (Truthful, Deceptive, Refusal, Creative, Harmful, Harmless) and reconstructs token trajectories across layers with step velocity and angular curvature. Renders interactive, dark-mode vector SVGs for real-time web dashboard streaming.
+* **Norm-Preserving Orthogonal Ablation (MPOA) & Steering**: Performs mathematically verified planar rotations and norm-preserving biprojections that ablate target deceptive features while completely preserving the Euclidean activation norm, preventing model representation collapse.
+* **Continuous Subspace & Float Direction Interpolation**: Smoothly navigates concept cone manifolds via Gaussian-weighted kernel blending across multiple basis directions, eliminating behavioral discontinuities and suppressing token-level KL divergence.
+* **Multi-Turn KV-Cache Tracking & GCAD Defense**: Monitors cumulative angular drift across conversational turns with automated threshold alerts (theta > 15 degrees). Applies Gated Cropped Attention-Delta (GCAD) with exponential age decay to prevent historical steering vectors from corrupting context attention scores.
+* **Chain-of-Thought (CoT) State Machine**: Monitors internal reasoning delimiters (`<think>` and `</think>`) in reasoning architectures (e.g. QwQ, DeepSeek-R1), enforcing zero-steering passivity during deliberation and activating calibrated intervention upon answer generation.
+* **Standardized Safety Evaluation & Heretic Score**: Evaluates steering configurations across 400 test prompts spanning 7 HarmBench categories. Identifies non-dominated configurations along the empirical Pareto frontier (KL divergence vs. Attack Success Rate) and outputs a composite Heretic safety score.
+* **Adversarial Robustness Shield**: Sanitizes input tokens against gradient-optimized adversarial suffixes (GCG attacks), injects controlled stochastic Gaussian noise into probe passes, and masks probe gradients with orthogonal decoys.
+* **Zero-Allocation Tokenizer & Parser (`zjson`)**: Uses a custom zero-copy JSON tokenizer and decoder for sub-millisecond serialization of structured activations and messages.
+* **Zero-Knowledge Privacy Telemetry**: Complies with formal privacy specifications, collecting zero prompts, outputs, user identities, or IP addresses. Provides local aggregation via `burnnotice aggregate`.
 
 ---
 
-## 🗺️ Architectural Workflow
+## Architectural Workflow
 
-The diagram below represents how activations are processed, audited, and dynamically steered:
+The diagram below illustrates how activations are captured, analyzed, and dynamically steered through the pipeline:
 
 ```mermaid
 graph TD
-    A[Model Hidden States / Activations] --> B{Policy Engine Evaluation}
-    B -->|Unaligned / Deceptive Leaning| C[Selective Steerer]
-    B -->|Compliant / Inside Boundaries| H[Output Unchanged]
-    C --> D[Orthonormal planar rotation]
-    D --> E[Re-inject Steered Hidden States]
-    E --> F[Generate Aligned Token Output]
+    Input["Prompt Input (Formatted via Architecture-Specific Chat Template)"] --> Forward["Forward Pass & Residual Stream Capture (Layers 0..L)"]
+    Forward --> Detect["Architecture & State Machine (Llama / Qwen / Gemma / CoT)"]
+    Detect --> Score["Scoring Engine & Concept Cone Projection"]
+    Score --> Policy{"Policy Engine Evaluation"}
+    Policy -->|Compliant / Inside Boundaries| Passthrough["Unmodified Hidden States"]
+    Policy -->|Deceptive / Safety Threshold Exceeded| Intervene["Dynamic Steering Engine"]
+    Intervene --> MPOA["Norm-Preserving Planar Rotation (MPOA / Biprojection)"]
+    Intervene --> Bias["Bias Direction Projection (Qwen Attention Biases)"]
+    Intervene --> Interpolate["Float Direction Interpolation (DirectionMix)"]
+    MPOA --> Reconstruct["Re-injected Residual Hidden States"]
+    Bias --> Reconstruct
+    Interpolate --> Reconstruct
+    Reconstruct --> Cache["KV-Cache Accumulation Tracker & GCAD Defense"]
+    Cache --> Output["Aligned Token Generation"]
 ```
 
 ---
 
-## 🛠️ Codebase Structure
+## Model Family Compatibility
+
+BurnNotice provides native, architecture-calibrated profiling, extraction, and steering:
+
+| Model Family | Key Architecture Characteristics | BurnNotice Handling |
+|---|---|---|
+| **Meta Llama** (2, 3, 3.1, 3.2, 3.3) | Pure RMSNorm (zero bias), standard BPE tokenization | Standard dual-phase commitment window, native `<\|begin_of_text\|>` chat templates, exact residual projection. |
+| **Alibaba Qwen** (2, 2.5, Coder, QwQ) | QKV attention projection bias (`q_proj.bias`), reasoning `<think>` tokens | Bias direction projection (`internal/steer/bias.go`), reasoning CoT boundary state machine (`internal/steer/cot.go`), `<\|im_start\|>` chat templates. |
+| **Google Gemma** (1, 2, Scope) | RMSNorm with unit offset ($1.0 + w$), embedding scaled by $\sqrt{d_{\text{model}}}$, pre/post-FF layernorms | Unit-offset normalization, prefill-dominant commitment window (`internal/steer/commitment.go`), Gemma Scope SAE loader (`internal/sae/loader.go`). |
+| **Mistral AI** (Mistral, Mixtral) | Sliding-window attention, standard RMSNorm | Scaled critical layer selection (35% to 70% depth), native chat formatting. |
+
+---
+
+## Codebase Structure
 
 ```text
 ├── cmd/
-│   ├── burnnotice/        # CLI: download, convert, profile, validate, recommend
-│   └── dashboard/         # Live dashboard: real-time latent governance visualization
+│   ├── burnnotice/        # CLI: download, convert, profile, validate, recommend, aggregate
+│   └── dashboard/         # Live web dashboard: real-time latent governance visualization
 ├── docs/
-│   ├── architecture.md    # System design, component diagrams, tech stack
-│   ├── analysis_packages.md # internal/analysis: alignment, cone, cross-layer, ouroboros
-│   ├── cli.md             # Full CLI reference for all commands & flags
-│   ├── metrics.md         # All 50+ Prometheus metrics & OTel export config
+│   ├── architecture.md    # System design, component diagrams, model family specs
+│   ├── analysis_packages.md # Analysis packages: alignment, cone, cross-layer, latent vis
+│   ├── cli.md             # Full CLI reference for all commands and flags
+│   ├── metrics.md         # Prometheus metrics (50+) and OTel export configuration
 │   ├── testing.md         # Testing strategy, coverage, fuzz tests, benchmarks
-│   └── nextsteps.md       # Prioritized implementation roadmap
+│   ├── nextsteps.md       # Implementation roadmap and completed milestones
+│   └── TELEMETRY.md       # Telemetry payload schema and zero-knowledge privacy spec
 ├── internal/
-│   ├── agent/             # Agent monitoring hooks
-│   ├── analysis/          # Post-profile geometry: alignment imprint, concept cone, CKA
+│   ├── agent/             # Multi-agent monitoring hooks (MCP, LangChain, CrewAI)
+│   ├── analysis/          # Geometry: latent visualizer, concept cone, externalities, Heretic score
 │   ├── checkpoint/        # Job checkpoint manager (resume long-running profiling)
-│   ├── compliance/        # Regulatory compliance wrappers
-│   ├── converter/         # HuggingFace → ONNX format converter
+│   ├── compliance/        # Regulatory compliance evaluation and reporting
+│   ├── converter/         # HuggingFace safetensors to ONNX format converter
 │   ├── datasets/          # Contrastive dataset loaders (JSON, JSONL)
-│   ├── downloader/        # Parallel HuggingFace Hub file downloader
-│   ├── engine/            # ONNX Runtime inference engine with forward hooks
-│   ├── extract/           # DIM, PCA, SVD, INLP, whitened direction extraction
+│   ├── downloader/        # Parallel HuggingFace Hub model downloader
+│   ├── engine/            # ONNX Runtime inference engine and MoE dynamic router
+│   ├── extract/           # DIM, PCA, SVD, INLP, whitened SVD, RDO direction extraction
 │   ├── hallucination/     # SAE-energy rolling-window hallucination detector
-│   ├── ledger/            # Activity ledger (async deception event log)
-│   ├── longbow/           # Vector store client (Longbow Flight + SQLite fallback)
-│   ├── math/              # Robust stats: winsorization, whitening, ZCA, projection
+│   ├── ledger/            # Activity ledger (async deception event log, SQLite / Longbow)
+│   ├── longbow/           # Vector store client (Apache Arrow Flight with SQLite fallback)
+│   ├── math/              # Robust statistics: winsorization, ZCA whitening, covariance
 │   ├── memory/            # sync.Pool activation buffer management
-│   ├── metrics/           # Prometheus instruments (50+) & OTel OTLP/HTTP exporter
-│   ├── onnxpb/            # ONNX protobuf bindings & getter helpers
+│   ├── metrics/           # Prometheus instruments (50+) and OTel OTLP exporter
+│   ├── onnxpb/            # ONNX protobuf bindings and accessor helpers
 │   ├── policy/            # Policy engine, YAML parser, kill-switch guards
 │   ├── policydetect/      # Policy violation detector
-│   ├── profile/           # Model profile (gob/protobuf serialization & versioning)
-│   ├── profiler/          # Long-running profiler with GPU-aware scheduling
+│   ├── profile/           # Model profile, architecture detection, versioning
+│   ├── profiler/          # Long-running profiler with progressive checkpointing
 │   ├── registry/          # Profile registry (load, save, list)
 │   ├── sae/               # Sparse Autoencoder loader (NPZ/NPY, Gemma Scope)
 │   ├── scheduler/         # Job queue with GPU memory-aware scheduling
-│   ├── scoring/           # Activation scoring pipeline (sync + async ring-buffer)
-│   ├── steer/             # Steering: ActAdd, LoRA, angular rotation, ablation
-│   ├── telemetry/         # Telemetry reporter (metrics push + file fallback)
-│   ├── tokenizer/         # Tokenizer interface
+│   ├── scoring/           # Activation scoring pipeline (sync and async ring-buffer)
+│   ├── steer/             # Steering: MPOA, bias projection, interpolate, KV-cache, CAST
+│   ├── telemetry/         # Telemetry reporter and local aggregation engine
+│   ├── tokenizer/         # Zero-allocation tokenization interfaces
 │   ├── wasm/              # WASM inference backend (wazero)
-│   ├── web/               # SSE event hub & HTTP handlers for dashboard
-│   └── zjson/             # Zero-copy JSON tokenizer & encoder
-├── scripts/
-│   └── update_paper.py    # arXiv LaTeX post-processor (strips code blocks for submission)
-├── e2e/                   # End-to-end integration tests
-├── grafana/               # Pre-built Grafana dashboard JSON files
-├── helm/                  # Kubernetes Helm chart
-├── static/                # Static web assets (CSS, JS, uPlot)
-├── templates/             # Templ HTML templates for the web dashboard
-├── Dockerfile             # Standard CPU container
+│   ├── web/               # Web dashboard handlers, templates, and SSE event hub
+│   └── zjson/             # Zero-copy JSON tokenizer and encoder
+├── plugins/
+│   ├── cuda_kernels.cu    # CUDA warp-reduction steering kernels
+│   ├── metal/             # Apple Silicon Metal MSL kernels
+│   ├── vllm/              # PyBind11 vLLM C++ plugin
+│   └── tensorrt/          # TensorRT-LLM plugin
+├── templates/             # Templ HTML templates for dashboard
+├── Dockerfile             # Standard container (Go 1.27, CGO ONNX Runtime)
 ├── Dockerfile.cuda        # CUDA GPU container
 ├── Dockerfile.metal       # Apple Metal container
 └── docker-compose.yml     # Full local stack (BurnNotice + Prometheus + Grafana)
@@ -96,31 +121,75 @@ graph TD
 
 ---
 
-## 📖 Documentation
+## Documentation
 
-| Doc | Description |
+| Document | Description |
 |---|---|
-| [architecture.md](docs/architecture.md) | System design, Mermaid diagrams, deployment topology |
+| [architecture.md](docs/architecture.md) | System design, Mermaid diagrams, model family specifications |
 | [cli.md](docs/cli.md) | Full CLI reference for all commands and flags |
-| [metrics.md](docs/metrics.md) | All Prometheus metrics + OTel export configuration |
+| [metrics.md](docs/metrics.md) | Prometheus metrics and OpenTelemetry export configuration |
 | [testing.md](docs/testing.md) | Testing strategy, coverage, fuzz tests, benchmarks |
-| [analysis_packages.md](docs/analysis_packages.md) | Alignment imprint, concept cone, cross-layer, ouroboros |
+| [analysis_packages.md](docs/analysis_packages.md) | Latent visualization, concept cone, cross-layer CKA, Heretic score |
+| [nextsteps.md](docs/nextsteps.md) | Implementation roadmap, strategic plan, completed milestones |
+| [TELEMETRY.md](TELEMETRY.md) | Telemetry schema, zero-knowledge privacy guarantees, aggregate CLI |
 
 ---
 
-## 🚦 Quick Start
+## Quick Start
 
-### 1. Installation & Compilation
+### 1. Compilation
 
-To compile all binaries:
+Build all binaries using Go 1.27:
 
 ```bash
 make build
 ```
 
-### 2. Define Safety Policies
+Or compile individual components:
 
-Define real-time alignment boundaries in `policies.yaml`:
+```bash
+CGO_ENABLED=1 go build -o bin/burnnotice ./cmd/burnnotice
+CGO_ENABLED=1 go build -o bin/burnnotice-dashboard ./cmd/dashboard
+```
+
+### 2. Model Export Instructions
+
+BurnNotice supports exporting open-weight models across Llama, Qwen, and Gemma families using `optimum-cli`:
+
+```bash
+# View recommended models and instructions
+burnnotice recommend
+
+# Example: Export Qwen 2.5 0.5B
+pip install optimum[onnxruntime] torch --quiet
+optimum-cli export onnx --model Qwen/Qwen2.5-0.5B ./onnx/qwen2.5-0.5b/
+```
+
+### 3. Profile a Model
+
+Extract behavioral directions, analyze concept cones, and evaluate commitment windows:
+
+```bash
+burnnotice profile ./onnx/qwen2.5-0.5b/model.onnx \
+  --dataset ./data/deception_pairs.json \
+  --cone-analysis \
+  --commit-window \
+  --output ./profiles/qwen2.5-0.5b
+```
+
+### 4. Run the Dashboard
+
+Launch the real-time governance and latent space visualizer web interface:
+
+```bash
+./bin/burnnotice-dashboard --port 8080 --profiles-dir ./profiles
+```
+
+Navigate to `http://localhost:8080` to inspect live telemetry, safety gauges, and latent space manifold visualizers.
+
+### 5. Define Safety Policies
+
+Configure real-time alignment boundaries in `policies.yaml`:
 
 ```yaml
 policies:
@@ -139,20 +208,46 @@ policies:
     action: block
 ```
 
-### 3. Run the Unit and Fuzz Tests
+### 6. Run Verification & Tests
 
-BurnNotice enforces high quality and strict correctness:
+Run the complete test suite including race detection and security auditing:
 
 ```bash
+# Unit and integration tests
 go test -v ./...
+
+# Race condition detection
+go test -race ./...
+
+# Static security audit
+gosec ./...
 ```
 
 ---
 
-## 🧪 Scientific & Mathematical Hardening
+## Docker Deployment
 
-BurnNotice's core libraries have been mathematically audited and verified:
+Build and run using Docker:
 
-* **PCA Column-SVD Alignment**: Extracted singular vectors are aligned as columns of the right singular matrix $V$ rather than rows.
-* **Norm-Preserving Angular Rotations**: Planar rotations construct a perfect orthogonal subspace to guarantee that the absolute scale of the model's activations remains unchanged, preventing representation collapse.
-* **Defensive Concurrency**: Fully audited with Go's race detector to ensure 100% thread safety across the web, scheduler, and policy engines.
+```bash
+# Build the container
+docker build -t burnnotice:latest -f Dockerfile .
+
+# Run the CLI tool
+docker run --rm burnnotice:latest /bin/burnnotice recommend
+
+# Run the web dashboard
+docker run -d -p 8080:8080 --name burnnotice burnnotice:latest
+```
+
+---
+
+## Scientific and Mathematical Principles
+
+BurnNotice's core algorithms are mathematically audited and verified:
+
+* **PCA Column-SVD Alignment**: Singular vectors are aligned as columns of the right singular matrix $V$ to guarantee correct subspace projection coordinates.
+* **Norm-Preserving Angular Rotations (MPOA)**: Planar rotations construct an orthogonal subspace ensuring that the Euclidean activation norm $\|h\|_2$ remains invariant, avoiding representation collapse.
+* **Ridge-Regularized Projection**: Applies dynamic regularization to nullspace projection, preventing excessive token-level KL divergence on benign prompts.
+* **Continuous Direction Interpolation**: Gaussian-weighted kernel blending prevents discontinuous behavioral shifts across concept directions.
+* **Defensive Concurrency**: Verified with Go's race detector to ensure 100% thread safety across the web dashboard, async scoring ring buffers, and policy evaluation engine.
