@@ -627,3 +627,34 @@ graph TD
   $$h_{ablated} = h - (h \cdot \hat{v}_{oversight})\hat{v}_{oversight}$$
 - **Shadow Profiling**: Implemented within the `AsyncLedger` continuously sampling unmonitored runtime activations and comparing them dynamically (via Cosine Distance) to the static profiles, triggering alerts on representational drift.
 
+### Model Family Architecture Compatibility (Llama, Qwen, Gemma)
+
+BurnNotice provides native, architecture-calibrated profiling, extraction, and steering across major open-weight causal decoder families:
+
+```mermaid
+graph TD
+    Input["Model Configuration & Weights"] --> Detect["DetectModelFamily<br/>(config.json / model_id / tensor signatures)"]
+    Detect --> Llama["Meta Llama (2/3/3.1/3.2/3.3)<br/>• Pure RMSNorm (zero bias)<br/>• Dual-phase prefill/decoding commitment<br/>• Standard BPE chat template"]
+    Detect --> Qwen["Alibaba Qwen (2/2.5/Coder/QwQ)<br/>• QKV attention projection bias<br/>• Bias steering projection (steer/bias.go)<br/>• CoT state machine for reasoning (<think>)"]
+    Detect --> Gemma["Google Gemma (1/2/Scope)<br/>• RMSNorm with unit offset (1.0 + w)<br/>• Embedding scaling sqrt(d_model)<br/>• Pre/post feedforward dual layernorms<br/>• Prefill-dominant behavioral commitment"]
+    Llama --> Engine["Calibrated Profiling & Steering Engine"]
+    Qwen --> Engine
+    Gemma --> Engine
+```
+
+#### Family-Specific Mechanics:
+1. **Meta Llama (Llama 2, 3, 3.1, 3.2, 3.3)**:
+   - Uses zero-bias pure RMSNorm.
+   - Dual-phase behavioral commitment where steering applies across both prefill and early decoding tokens.
+   - Formats prompts natively using `<|begin_of_text|><|start_header_id|>...<|end_header_id|>...<|eot_id|>`.
+2. **Alibaba Qwen (Qwen 2, 2.5, Coder, QwQ)**:
+   - Incorporates attention projection biases (`q_proj.bias`, `k_proj.bias`, `v_proj.bias`). BurnNotice applies bias direction projection (`internal/steer/bias.go`) in addition to activation steering.
+   - Reasoning variants (QwQ) utilize `<think>` and `</think>` boundary state machine tracking (`internal/steer/cot.go`), suspending steering during internal deliberative reasoning and engaging intervention during answer generation.
+   - Chat format: `<|im_start|>system...<|im_end|><|im_start|>user...<|im_end|><|im_start|>assistant`.
+3. **Google Gemma (Gemma 1, 2, Scope)**:
+   - Uses unit-offset RMSNorm ($1.0 + w$), input embedding scaling ($\sqrt{d_{\text{model}}}$), and Gemma 2 pre/post feedforward dual layernorms.
+   - Prefill-dominant behavioral commitment: decisions solidify almost entirely within the prompt prefill phase (`internal/steer/commitment.go`), allowing decoding tokens to receive attenuated steering without losing control efficacy.
+   - Native Gemma Scope SAE integration (`internal/sae/loader.go`).
+   - Chat format: `<start_of_turn>user...<end_of_turn><start_of_turn>model`.
+
+

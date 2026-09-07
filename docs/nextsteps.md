@@ -132,6 +132,7 @@ All items below have been implemented, tested, and verified in source code:
 | **Step 28: KV-Cache Accumulation & GCAD (28.1–28.3)** | `internal/steer/kvcache.go` | `KVCacheAccumulationTracker` with $\theta > 15^\circ$ alarm, Gated Cropped Attention-Delta defense |
 | **Step 29: Steering Externalities Risk (29.1–29.3)** | `internal/analysis/externalities.go` | `JailbreakRiskAssessor`, `ExternalitiesScore` ($\text{ASR}_{\text{steered}} / \text{ASR}_{\text{base}} > 1.2$ alert) |
 | **Step 34: Adversarial Robustness Shield (34.1–34.4)** | `internal/steer/adversarial.go` | GCG suffix token sanitization, 2% stochastic latent noise injection, probe gradient masking |
+| **Llama, Qwen & Gemma Model Support** | `internal/profile/architecture.go`, `internal/steer/commitment.go`, `cmd/burnnotice/` | Architecture detection, family specs, chat templates, bias projection, RMSNorm offset, prefill commitment window |
 | **New Feature: Fine-Grained Latent Visualizer** | `internal/analysis/latent_vis.go`, `internal/web/` | Thin SVD 2D projection, 95% CI cluster hulls, token trajectories, curvature, dark-mode SVG, HTMX panel |
 
 ---
