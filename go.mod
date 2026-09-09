@@ -5,7 +5,7 @@ go 1.27.0
 require (
 	github.com/23skdu/longbow v0.2.1-rc3.0.20260907182726-093d3e04901c
 	github.com/a-h/templ v0.3.1020
-	github.com/apache/arrow-go/v18 v18.7.0
+	github.com/apache/arrow-go/v18 v18.8.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/spf13/cobra v1.10.2
 	github.com/tetratelabs/wazero v1.12.0
