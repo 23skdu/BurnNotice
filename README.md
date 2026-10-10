@@ -113,7 +113,7 @@ BurnNotice provides native, architecture-calibrated profiling, extraction, and s
 │   ├── vllm/              # PyBind11 vLLM C++ plugin
 │   └── tensorrt/          # TensorRT-LLM plugin
 ├── templates/             # Templ HTML templates for dashboard
-├── Dockerfile             # Standard container (Go 1.27, CGO ONNX Runtime)
+├── Dockerfile             # Standard container (Go 1.27.2, CGO ONNX Runtime)
 ├── Dockerfile.cuda        # CUDA GPU container
 ├── Dockerfile.metal       # Apple Metal container
 └── docker-compose.yml     # Full local stack (BurnNotice + Prometheus + Grafana)
@@ -139,7 +139,7 @@ BurnNotice provides native, architecture-calibrated profiling, extraction, and s
 
 ### 1. Compilation
 
-Build all binaries using Go 1.27:
+Build all binaries using Go 1.27.2:
 
 ```bash
 make build
