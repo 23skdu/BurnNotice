@@ -63,3 +63,5 @@ require (
 )
 
 replace github.com/23skdu/longbow => ../longbow
+
+replace github.com/emlgo/eml => ../emlgo
