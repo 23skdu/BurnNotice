@@ -135,14 +135,23 @@ go test -race ./...
 
 ## 6. Security Auditing (Gosec)
 
-BurnNotice integrates `gosec` to scan Go ASTs for security vulnerabilities. The repository maintains **0 security issues** (with 45 audited `#nosec` exclusions for necessary user file loading).
+BurnNotice integrates `gosec` to scan Go ASTs for security vulnerabilities. The repository maintains **0 security issues** (with 48 audited `#nosec` exclusions for necessary user file loading).
+
+For Go 1.27.2, the scanner must be built with `golang.org/x/tools` v0.52.0 or newer so its SSA importer can read the compiler's export data. The verified scan used gosec v2.29.0 with x/tools v0.52.0; the default gosec v2.29.0 dependency on x/tools v0.49.0 reports importer errors instead of completing analysis.
 
 Run a security audit locally using:
 
 ```bash
-# Install gosec if not present
-go install github.com/securego/gosec/v2/cmd/gosec@latest
+# Build gosec with a Go 1.27.2-compatible analyzer dependency.
+tool_dir=$(mktemp -d)
+(
+  cd "$tool_dir"
+  go mod init gosec-tools
+  go get github.com/securego/gosec/v2/cmd/gosec@v2.29.0
+  go get golang.org/x/tools@v0.52.0
+  go install github.com/securego/gosec/v2/cmd/gosec
+)
 
-# Run scan
-gosec ./...
+# Run the scan from the repository root.
+"$(go env GOPATH)/bin/gosec" ./...
 ```
