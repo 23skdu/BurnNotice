@@ -9,7 +9,7 @@ require (
 	github.com/prometheus/client_golang v1.25.0
 	github.com/spf13/cobra v1.10.2
 	github.com/tetratelabs/wazero v1.12.0
-	github.com/yalue/onnxruntime_go v1.36.0
+	github.com/yalue/onnxruntime_go v1.38.0
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.47.0
 	go.opentelemetry.io/otel/sdk v1.47.0
