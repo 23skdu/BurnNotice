@@ -1,0 +1,4 @@
+# Python helper scripts under scripts/ (e.g. update_paper.py).
+# They currently use only the Python standard library. Add any third-party
+# packages here, pinned with ==, so Dependabot can keep them up to date.
+

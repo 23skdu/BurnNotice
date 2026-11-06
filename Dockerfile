@@ -1,4 +1,4 @@
-FROM golang:1.27.2-bookworm AS builder
+FROM golang:1.27.3-trixie AS builder
 
 RUN apt-get update && apt-get install -y git make protobuf-compiler libprotobuf-dev gcc g++ && rm -rf /var/lib/apt/lists/*
 
@@ -19,7 +19,7 @@ RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 \
     go build -buildvcs=false -ldflags="-s -w -X main.Version=$(git describe --tags --always 2>/dev/null || echo dev)" \
     -o /bin/burnnotice-dashboard ./cmd/dashboard
 
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 
 RUN apt-get update && apt-get install -y ca-certificates tini && rm -rf /var/lib/apt/lists/*
 

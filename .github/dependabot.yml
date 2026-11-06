@@ -1,6 +1,8 @@
+# Dependabot keeps every dependency ecosystem in this repository current.
+# Docs: https://docs.github.com/code-security/dependabot/working-with-dependabot/dependabot-options-reference
 version: 2
 updates:
-  # Enable automatic weekly updates for Go modules (go.mod)
+  # Go modules (go.mod / go.sum). Minor + patch bumps are grouped into one PR.
   - package-ecosystem: "gomod"
     directory: "/"
     schedule:
@@ -9,13 +11,63 @@ updates:
     labels:
       - "dependencies"
       - "go"
+    groups:
+      go-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
 
-  # Enable automatic daily updates for GitHub Actions workflows
+  # Python tooling (scripts/requirements.txt).
+  - package-ecosystem: "pip"
+    directory: "/scripts"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "python"
+
+  # Dockerfile, Dockerfile.cuda, Dockerfile.metal base images
+  # (golang, debian, nvidia/cuda).
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "docker"
+
+  # docker-compose.yml service images (longbow, prometheus, grafana).
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "docker"
+
+  # GitHub Actions used in .github/workflows/*.yml.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "daily"
+      interval: "weekly"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
       - "github-actions"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  # Playwright end-to-end test suite (e2e/package.json).
+  - package-ecosystem: "npm"
+    directory: "/e2e"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "javascript"

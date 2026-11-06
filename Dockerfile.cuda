@@ -1,4 +1,6 @@
-FROM golang:1.27.2-bookworm AS builder
+# Builder stays on bookworm (glibc 2.36) so the CGO binaries run on the
+# Ubuntu 24.04 (glibc 2.39) CUDA runtime image; trixie ships glibc 2.41.
+FROM golang:1.27.3-bookworm AS builder
 
 RUN apt-get update && apt-get install -y git make protobuf-compiler libprotobuf-dev gcc g++ && rm -rf /var/lib/apt/lists/*
 
@@ -20,11 +22,13 @@ RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 \
     go build -buildvcs=false -ldflags="-s -w -X main.Version=$(git describe --tags --always 2>/dev/null || echo dev)" \
     -o /bin/burnnotice-dashboard ./cmd/dashboard
 
-FROM nvidia/cuda:12.2.2-runtime-ubuntu22.04
+FROM nvidia/cuda:13.4.2-runtime-ubuntu24.04
 
 RUN apt-get update && apt-get install -y ca-certificates tini && rm -rf /var/lib/apt/lists/*
 
-RUN groupadd -g 1000 burnnotice && \
+# Ubuntu 24.04 images ship a default 'ubuntu' user with UID/GID 1000.
+RUN (userdel -r ubuntu 2>/dev/null || true) && \
+    groupadd -g 1000 burnnotice && \
     useradd -u 1000 -g burnnotice -s /bin/sh -m burnnotice
 
 COPY --from=builder /bin/burnnotice /bin/burnnotice-dashboard /bin/
