@@ -157,5 +157,11 @@ func cloneProfileCmd() *cobra.Command {
 	clone.Flags().Int("num-directions", 1, "Number of top directions to extract when --whitened-svd is set")
 	clone.Flags().Float64("shrinkage", -1, "Ledoit-Wolf shrinkage intensity for the whitening covariance (<0 = auto-estimate)")
 	clone.Flags().Float64("eig-floor", 0, "Minimum eigenvalue for the whitening matrix (0 = auto, 1e-10 of max)")
+	clone.Flags().String("oversight-dataset", "", "Path to oversight contrastive dataset (optional)")
+	clone.Flags().Bool("cone-analysis", false, "Run concept cone geometry analysis")
+	clone.Flags().Bool("rdo", false, "Refine extracted direction via Refusal Direction Optimization")
+	clone.Flags().Bool("commit-window", false, "Analyze behavioral commitment window")
+	clone.Flags().Bool("calibrate", false, "Calibrate optimal per-layer steering thresholds")
+	clone.Flags().Bool("obfuscate", false, "Apply orthogonal obfuscation to extracted directions")
 	return &clone
 }

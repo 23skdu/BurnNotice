@@ -77,7 +77,7 @@ func (h *SSEHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case msg := <-ch:
-			fmt.Fprint(w, msg)
+			_, _ = fmt.Fprint(w, msg)
 			flusher.Flush()
 		}
 	}

@@ -61,7 +61,7 @@ func (l *Loader) LoadJSONL(path string) (*Dataset, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var ds Dataset
 	scanner := bufio.NewScanner(f)

@@ -1,7 +1,9 @@
 package analysis
 
 import (
+	"fmt"
 	"math"
+	"sync"
 	"testing"
 )
 
@@ -94,4 +96,76 @@ func TestConceptConeAnalyzer_EdgeCases(t *testing.T) {
 	res := a3.Analyze()
 	// Should handle empty activations gracefully
 	_ = res
+}
+
+func makeSyntheticHarmCategories(numCats, numSamples, dim int) []HarmCategory {
+	cats := make([]HarmCategory, numCats)
+	for c := 0; c < numCats; c++ {
+		acts := make([][]float64, numSamples)
+		for s := 0; s < numSamples; s++ {
+			vec := make([]float64, dim)
+			for d := 0; d < dim; d++ {
+				if d == c%dim {
+					vec[d] = 1.0 + 0.05*float64(s)
+				} else {
+					vec[d] = 0.01 * float64((c+s+d)%7)
+				}
+			}
+			acts[s] = vec
+		}
+		cats[c] = HarmCategory{
+			Name:        fmt.Sprintf("cat_%d", c),
+			Activations: acts,
+		}
+	}
+	return cats
+}
+
+func TestConceptConeAnalyzer_ConcurrentRaceSafety(t *testing.T) {
+	cats := makeSyntheticHarmCategories(6, 4, 16)
+	analyzer := NewConceptConeAnalyzer(cats)
+
+	var wg sync.WaitGroup
+	for g := 0; g < 8; g++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			res := analyzer.Analyze()
+			if res == nil {
+				t.Errorf("Analyze returned nil")
+				return
+			}
+			sims := analyzer.PairwiseSimilarities()
+			if len(sims) != 6 {
+				t.Errorf("PairwiseSimilarities len = %d, want 6", len(sims))
+			}
+			id := analyzer.IntrinsicDimensionality()
+			if id <= 0 {
+				t.Errorf("IntrinsicDimensionality = %d, want > 0", id)
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+func BenchmarkConceptConeAnalyze(b *testing.B) {
+	cats := makeSyntheticHarmCategories(16, 16, 64)
+	analyzer := NewConceptConeAnalyzer(cats)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if res := analyzer.Analyze(); res == nil {
+			b.Fatal("nil result")
+		}
+	}
+}
+
+func BenchmarkConceptConePairwiseSimilarities(b *testing.B) {
+	cats := makeSyntheticHarmCategories(24, 8, 128)
+	analyzer := NewConceptConeAnalyzer(cats)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if sims := analyzer.PairwiseSimilarities(); len(sims) != 24 {
+			b.Fatal("unexpected sims length")
+		}
+	}
 }

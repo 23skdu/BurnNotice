@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
-	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -162,7 +161,7 @@ func FuzzFindSafetensorsFiles(f *testing.F) {
 
 		dir := t.TempDir()
 		path := filepath.Join(dir, filename)
-		os.WriteFile(path, []byte{}, 0644)
+		_ = os.WriteFile(path, []byte{}, 0644)
 
 		files, err := FindSafetensorsFiles(dir)
 		if err != nil {
@@ -209,9 +208,6 @@ func FuzzONNXConverter(f *testing.F) {
 			t.Skip()
 		}
 		if dtype == "" {
-			t.Skip()
-		}
-		if math.IsNaN(float64(start)) || math.IsInf(float64(start), 0) {
 			t.Skip()
 		}
 

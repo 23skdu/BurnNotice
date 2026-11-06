@@ -181,3 +181,104 @@ func TestExportJSON(t *testing.T) {
 		t.Errorf("expected 1 point in parsed JSON, got %d", len(parsed.Points))
 	}
 }
+
+func TestProjectLatentSpace_CacheHitAndEviction(t *testing.T) {
+	ClearLatentSVDCache()
+	points := []LatentPoint{
+		{ID: "t1", Vector: []float64{2.0, 3.0, 0.1, -0.2}, Category: CategoryTruthful, Layer: 0, Token: "The"},
+		{ID: "t2", Vector: []float64{2.1, 2.9, 0.2, -0.1}, Category: CategoryTruthful, Layer: 1, Token: "The"},
+		{ID: "d1", Vector: []float64{-2.0, -1.0, 0.5, 0.4}, Category: CategoryDeceptive, Layer: 0, Token: "Lie"},
+		{ID: "d2", Vector: []float64{-2.2, -0.9, 0.4, 0.6}, Category: CategoryDeceptive, Layer: 1, Token: "Lie"},
+	}
+
+	proj1, err := ProjectLatentSpace(points, nil, nil)
+	if err != nil {
+		t.Fatalf("first ProjectLatentSpace failed: %v", err)
+	}
+	proj2, err := ProjectLatentSpace(points, nil, nil)
+	if err != nil {
+		t.Fatalf("second ProjectLatentSpace (cached) failed: %v", err)
+	}
+
+	if proj1.VarianceExplained != proj2.VarianceExplained {
+		t.Errorf("cached variance mismatch: %v vs %v", proj1.VarianceExplained, proj2.VarianceExplained)
+	}
+	for i := range proj1.Points {
+		if proj1.Points[i].ProjectedX != proj2.Points[i].ProjectedX || proj1.Points[i].ProjectedY != proj2.Points[i].ProjectedY {
+			t.Errorf("point %d cached projection mismatch", i)
+		}
+	}
+
+	// Trigger cache rollover beyond maxSVDCacheEntries
+	for k := 0; k < maxSVDCacheEntries+2; k++ {
+		pts := []LatentPoint{
+			{ID: "a", Vector: []float64{float64(k) + 1.0, 2.0, 3.0}, Category: CategoryTruthful},
+			{ID: "b", Vector: []float64{-float64(k) - 1.0, -2.0, -3.0}, Category: CategoryDeceptive},
+		}
+		if _, err := ProjectLatentSpace(pts, nil, nil); err != nil {
+			t.Fatalf("rollover iteration %d failed: %v", k, err)
+		}
+	}
+}
+
+func makeBenchmarkLatentPoints(n, dim int) []LatentPoint {
+	pts := make([]LatentPoint, n)
+	for i := 0; i < n; i++ {
+		vec := make([]float64, dim)
+		for j := 0; j < dim; j++ {
+			vec[j] = float64((i+1)*(j+1)%37)*0.1 - 1.8
+		}
+		cat := CategoryTruthful
+		if i%2 == 1 {
+			cat = CategoryDeceptive
+		}
+		pts[i] = LatentPoint{
+			ID:       "pt",
+			PromptID: "p1",
+			Token:    "tok",
+			Layer:    i % 8,
+			Category: cat,
+			Vector:   vec,
+		}
+	}
+	return pts
+}
+
+func BenchmarkProjectLatentSpacePCA(b *testing.B) {
+	pts := makeBenchmarkLatentPoints(64, 128)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		ClearLatentSVDCache()
+		if _, err := ProjectLatentSpace(pts, nil, nil); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkProjectLatentSpaceCached(b *testing.B) {
+	pts := makeBenchmarkLatentPoints(64, 128)
+	ClearLatentSVDCache()
+	if _, err := ProjectLatentSpace(pts, nil, nil); err != nil {
+		b.Fatal(err)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := ProjectLatentSpace(pts, nil, nil); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkProjectLatentSpaceBasis(b *testing.B) {
+	pts := makeBenchmarkLatentPoints(64, 128)
+	basisX := make([]float64, 128)
+	basisY := make([]float64, 128)
+	basisX[0] = 1.0
+	basisY[1] = 1.0
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := ProjectLatentSpace(pts, basisX, basisY); err != nil {
+			b.Fatal(err)
+		}
+	}
+}

@@ -8,7 +8,7 @@ import (
 
 func TestSaveLoadRoundTrip(t *testing.T) {
 	tmp := t.TempDir() + "/checkpoint.gob"
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	original := map[string]interface{}{"counter": float64(42), "name": "test"}
 
@@ -36,8 +36,8 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 
 func TestAtomicRename(t *testing.T) {
 	tmp := t.TempDir() + "/checkpoint.gob"
-	defer os.Remove(tmp)
-	defer os.Remove(tmp + ".tmp")
+	defer func() { _ = os.Remove(tmp) }()
+	defer func() { _ = os.Remove(tmp + ".tmp") }()
 
 	original := map[string]interface{}{"counter": 1}
 
@@ -57,7 +57,7 @@ func TestAtomicRename(t *testing.T) {
 
 func TestExists(t *testing.T) {
 	tmp := t.TempDir() + "/checkpoint.gob"
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	if Exists(tmp) {
 		t.Fatal("Exists should return false for non-existent file")
@@ -74,7 +74,7 @@ func TestExists(t *testing.T) {
 
 func TestStartStop(t *testing.T) {
 	tmp := t.TempDir() + "/checkpoint.gob"
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	m := NewManager(100*time.Millisecond, tmp)
 	state := map[string]interface{}{"counter": 0}

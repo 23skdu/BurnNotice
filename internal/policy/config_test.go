@@ -26,7 +26,7 @@ func TestLoadPolicies_AllActions(t *testing.T) {
     action: terminate
 `
 	tmp := writeTempFileConfig(t, content)
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	policies, err := LoadPolicies(tmp)
 	if err != nil {
@@ -48,7 +48,7 @@ func TestLoadPolicies_AllActions(t *testing.T) {
 func TestLoadPolicies_EmptyPolicies(t *testing.T) {
 	content := `policies: []`
 	tmp := writeTempFileConfig(t, content)
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	policies, err := LoadPolicies(tmp)
 	if err != nil {
@@ -68,7 +68,7 @@ func TestLoadPolicies_OptionalFields(t *testing.T) {
     action: log
 `
 	tmp := writeTempFileConfig(t, content)
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	policies, err := LoadPolicies(tmp)
 	if err != nil {
@@ -94,7 +94,7 @@ func TestLoadPolicies_InvalidAction(t *testing.T) {
     action: invalid_action
 `
 	tmp := writeTempFileConfig(t, content)
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	policies, err := LoadPolicies(tmp)
 	if err != nil {

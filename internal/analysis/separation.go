@@ -21,6 +21,9 @@ func ComputeCentroid(activations [][]float64) ([]float64, error) {
 			return nil, fmt.Errorf("activation dimension mismatch: %d != %d", len(act), dim)
 		}
 		for i := 0; i < dim; i++ {
+			if math.IsNaN(act[i]) || math.IsInf(act[i], 0) {
+				return nil, fmt.Errorf("activation contains NaN or Inf")
+			}
 			centroid[i] += act[i]
 		}
 	}

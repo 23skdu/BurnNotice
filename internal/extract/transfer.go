@@ -49,7 +49,7 @@ func (t *DirectionTransfer) TransferDirection(source []float64) ([]float64, erro
 // CKASimilarity computes Centered Kernel Alignment between two matrices.
 func CKASimilarity(X, Y [][]float64) (float64, error) {
 	if len(X) != len(Y) {
-		return 0, fmt.Errorf("X rows %d != Y rows %d", len(X), len(Y))
+		return 0, fmt.Errorf("row count mismatch: X rows %d != Y rows %d", len(X), len(Y))
 	}
 	if len(X) == 0 {
 		return 0, fmt.Errorf("empty matrices")

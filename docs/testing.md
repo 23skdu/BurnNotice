@@ -1,157 +1,141 @@
-# BurnNotice Test Suite & Security Reference
+# BurnNotice Test Suite, Quality Gates & Security Reference
 
-BurnNotice employs a rigorous testing suite and static analysis configuration to ensure absolute reliability, mathematical precision, thread safety, and zero security vulnerabilities.
+BurnNotice employs a rigorous testing suite, deterministic oracle gates, property-based accuracy invariants, fuzzing across all packages, and static analysis to ensure mathematical precision, thread safety, and zero security vulnerabilities.
 
 ---
 
 ## 1. Testing Strategy
 
-The test suite prioritizes high-coverage unit and integration tests for all handwritten logic, alongside offline validation of external formats (like ONNX models and Gemma Scope NPZ archives).
+The test suite prioritizes 90%+ statement coverage across core packages, deterministic golden/oracle verification (`-count=2`), numerical-stability invariants (`NaN`/`Inf`/degenerate covariance), and offline validation of external formats (ONNX models, Safetensors, and Gemma Scope NPZ archives).
+
+```mermaid
+flowchart LR
+    subgraph Static["Static & Security Gates"]
+        FMT["gofmt -s -l ."]
+        VET["go vet ./...\n+ Cross-Platform Vet"]
+        LINT["golangci-lint\n(0 issues)"]
+        SEC["gosec + govulncheck\n(0 vulnerabilities)"]
+    end
+
+    subgraph Dynamic["Unit, Race & Fuzz Matrix"]
+        UNIT["Unit Suite\n(90%-100% Core Coverage)"]
+        RACE["Concurrent Race Detector\n(go test -race ./...)"]
+        FUZZ["72 Native Fuzz Targets\n(25 Packages)"]
+    end
+
+    subgraph Invariants["Mathematical & Release Gates"]
+        ACC["make accuracy-gate\n(CKA, KL, Calibration, Stability)"]
+        ORA["make oracle-gate\n(-count=2 Golden Fixtures)"]
+        EVID["make release-evidence\n(Manifest + SHA256SUMS)"]
+    end
+
+    FMT --> VET --> LINT --> SEC --> UNIT --> RACE --> FUZZ --> ACC --> ORA --> EVID
+```
 
 ### Programmatically Generated Mock Objects
-To allow fully offline and lightweight testing without needing massive model files, the test suite generates minimal, mathematically valid mock inputs:
-1. **Dynamic ONNX Models**: Built programmatically using `google.golang.org/protobuf` and `onnxpb`. The generator constructs a valid ONNX graph featuring a single `Gather` operator behaving as an embedding layer. This allows verifying `Load`, `Forward`, and `GetIntermediate` in unit tests, skipping gracefully when the native `onnxruntime.so` is absent.
-2. **NumPy v1/v2 NPY Arrays**: Generates raw byte buffers with Python-style dictionary descriptors (representing `shape`, `descr`, and `fortran_order`) to validate the parser.
-3. **NPZ Zip Archives**: Packages mock `.npy` files inside a zip writer to test `LoadGemmaScope` without actual binary assets.
+To allow fully offline and lightweight testing without massive model files, the test suite generates minimal, mathematically valid mock inputs:
+1. **Dynamic ONNX Models**: Built programmatically using `google.golang.org/protobuf` and `onnxpb`, with both native ORT execution and a pure-Go ONNX protobuf graph interpreter fallback (`internal/engine/onnx.go`).
+2. **NumPy v1/v2 NPY Arrays**: Generates raw byte buffers with Python-style dictionary descriptors (`shape`, `descr`, `fortran_order`) to validate the SAE parser.
+3. **NPZ Zip Archives**: Packages mock `.npy` files inside a zip writer to test `LoadGemmaScope` without external binary assets.
 
 ---
 
 ## 2. Package Coverage Summary
 
-Unit testing targets ~90%+ statement coverage on all core packages. Below is a breakdown of what is validated per component:
+All core packages meet or exceed the 90% statement coverage target:
 
-### `internal/math` (96.6% Coverage)
-- **Winsorization**: Extreme quantile bounds (e.g. quantiles $\le 0$, $\ge 1$) to verify indexing clamps inside `Winsorize` and `WinsorizeInPlace`.
-- **Covariance**: Unbiased Bessel-corrected covariance, Ledoit-Wolf optimal shrinkage, all-zero inputs, and empty/ragged arrays.
-- **Whitening**: Eigenvalue floor calculations, ZCA whitening matrices, unwhitening reconstruction, asymmetric input rejections, and infinite/NaN value handling.
-- **Projection**: Orthogonal projection and rejection onto unit-norm vectors, with degenerate (zero-norm) vector handling.
-
-### `internal/sae` (92.8% Coverage)
-- **NPZ Archiver**: Successful parsing of both standard names (`encoder_weights`, `decoder_weights`) and alternative schemas (`W_enc`, `W_dec`).
-- **NPY Format**: NumPy version 1 and version 2 headers, data truncation boundaries, non-float data-types, and non-2D/non-1D dimension checks.
-- **Errors**: Nonexistent files, corrupt JSON configurations, and missing zip archive entries.
-
-### `internal/zjson` (85.0% Coverage)
-- **Encoder**: Proper `uint64` and float bounds, omission of empty values (`omitempty`), and escape hex characters.
-- **Decoder**: Underflow/overflow tokenization, unexpected syntax character errors, and invalid null/bool formats.
-- **Headers**: Zero-allocation reflection castings for `SliceHeader` and `StringHeader`.
-
-### `internal/longbow` & `internal/telemetry` (90.8% / 94.5% Coverage)
-- **Fallback Mode**: Handles connection failures to Flight servers by automatically hot-swapping to local memory vector lists.
-- **SQLite Engine**: Verifies database constraints, WAL journal initialization, query parameterized placeholders, and handling of database close states.
-- **Telemetry**: Network timeout simulations, HTTP status error codes, and local file storage fallbacks on write failures.
-
-### `internal/analysis` (≥85% Coverage)
-- **AlignmentImprintDetector**: Empty map guard (returns `unknown`), single-layer guard (returns 0 for all metrics), multi-layer metric computation, and all four `ClassifyAlignment` branches.
-- **ConceptConeAnalyzer**: Minimum-2-category guard, `nil`-direction category skipping in `computeSingularValues`, pairwise cosine accuracy, and intrinsic dimensionality estimation.
-- **CrossLayerAlignmentAnalyzer**: Pairwise similarity matrix correctness, `DecisionLayer` with `threshold ≤ 0` defaulting to 0.8, `DirectionClusters` with `threshold ≤ 0` defaulting to 0.85, and empty-map guard.
-- **OuroborosDetector**: `CompensatingLayers` detection, `NetReduction` edge cases (zero pre-scores), `RequiresRefinement` thresholding, and `RefinementPasses` capping.
-- **CKA (standalone)**: Mismatched-length guard (returns 0), identical-matrix CKA = 1.0, orthogonal-matrix CKA = 0.
-
-### `internal/hallucination` (≥88% Coverage)
-- **HallucinationDetector**: `ComputeEnergy`, `DetectHallucination` (with and without explicit threshold), `DetectSpike` (window not full, window full, spike detected), `RiskScore` (below/above threshold), `UpdateHistory`, and `Validate` error paths.
-
-### `internal/metrics` (≥80% Coverage)
-- **Prometheus Handler**: Verifies the `/metrics` HTTP endpoint returns `200 OK` with `text/plain` content-type.
-- **OTel Exporter**: `OTelConfigFromEnv` with and without environment variables, no-op initialization (empty endpoint), URL parse error handling, and `ShutdownOTel` with un-initialized state.
-- **Sampler**: Rate limiter behavior and pass-through semantics.
-
-### `internal/onnxpb` (≥75% Coverage)
-- **Getter Functions**: `GetOpType`, `GetInputs`, `GetOutputs`, `GetInitializers` against programmatically constructed `ModelProto` messages.
-- **Edge Cases**: Nil node guards, empty graph guards.
-
-### `cmd/burnnotice` (≥80% Coverage)
-- **`inference.go`**: Direction projection, scoring thresholds, and activation sanitization on synthetic activations.
-- **`main.go`**: Command registration, flag parsing, and help output.
-
-### `templates` (78.9% Coverage)
-- **HTML Renderers**: Verifies layout tags, HTMX/SSE scripts, and Dashboard overview structure are parsed and output correctly.
-
----
-
-## 3. Fuzz Testing
-
-Several packages include corpus-seeded fuzz tests runnable with `go test -fuzz`:
-
-| Package | Fuzz Target | What It Tests |
+| Package | Coverage | Key Verified Invariants & Paths |
 |---|---|---|
-| `internal/math` | `FuzzWinsorize` | Extreme float inputs (NaN, Inf, ±1e30) to robust.go |
-| `internal/math` | `FuzzCovariance`, `FuzzWhitening` | Degenerate covariance inputs |
-| `internal/extract` | `FuzzDIM`, `FuzzPCA` | Extreme activations in direction extractors |
-| `internal/extract` | `FuzzWhitened` | SVD numerical stability under extreme whitening |
-| `internal/scoring` | `FuzzScorer` | Score computation under random activations |
-| `internal/steer` | `FuzzSteering`, `FuzzLoRA` | Steering vector application under random inputs |
-| `internal/metrics` | `FuzzMetrics` | Prometheus metric registration under concurrent load |
+| `internal/agent` | **98.9%** | LangChain/CrewAI/MCP middleware interception, multi-agent governor, SDK hooks |
+| `internal/analysis` | **93.2%** | Cached Thin SVD latent projection, worker-pool ConceptCone, CKA invariants, KL bounds, Ouroboros |
+| `internal/checkpoint` | **100.0%** | Atomic checkpoint save/load and corruption recovery |
+| `internal/compliance` | **94.2%** | Approval workflows, PDF compliance reports, `BenchmarkManifest`, `ReleaseEvidenceBundle` |
+| `internal/datasets` | **95.2%** | Contrastive dataset loading and validation |
+| `internal/engine` | **92.4%** | Multi-expert MoE offset extraction, softmax top-k routing, ONNX session & pure-Go fallback |
+| `internal/engine/native` | **100.0%** | SIMD/CGO kernel dispatch and fallbacks |
+| `internal/extract` | **92.3%** | DIM, PCA, RDO, INLP, whitened SVD, cross-layer transfer, NaN/Inf resilience |
+| `internal/hallucination` | **100.0%** | SAE-energy rolling window calibration, spike detection trajectories, risk thresholds |
+| `internal/ledger` | **96.0%** | SQLite WAL & Longbow alert persistence and querying |
+| `internal/longbow` | **92.1%** | Arrow Flight vector client, automatic SQLite/in-memory fallback, concurrent race safety |
+| `internal/math` | **96.6%** | Winsorization, Bessel/Ledoit-Wolf shrinkage covariance, ZCA whitening, ridge projection |
+| `internal/memory` | **100.0%** | Pooled activation buffer reuse and capacity bounds |
+| `internal/metrics` | **96.3%** | Prometheus `/metrics` handler, OTel exporter configuration, adaptive sampler |
+| `internal/policy` | **100.0%** | Policy evaluation engine, dynamic drift threshold calibration, semantic gater, killswitch |
+| `internal/policydetect` | **98.1%** | Whitened Mahalanobis policy violation detection |
+| `internal/profile` | **98.1%** | Architecture auto-detection, threshold calibration, drift detection, version manager |
+| `internal/profiler` | **90.4%** | Progressive and distributed activation profiling |
+| `internal/sae` | **92.7%** | Gemma Scope NPZ/NPY loader, Top-K sparse autoencoder encode/decode |
+| `internal/scheduler` | **100.0%** | Priority job preemption and concurrent worker scheduling |
+| `internal/scoring` | **92.8%** | Zero-copy direction scoring, pooled async ring-buffer bypass, temporal aggregation, oracle fixtures |
+| `internal/steer` | **93.3%** | MPOA, biprojection, CAST, in-place GCAD KV-cache decay, LoRA rank-1 updates, coherence |
+| `internal/telemetry` | **94.4%** | Batched telemetry aggregation, retry/fallback storage, concurrent race safety |
+| `internal/tokenizer` | **100.0%** | Word-hash and byte-level tokenizers |
+| `internal/wasm` | **92.1%** | Wazero WebAssembly sandbox execution and float32 tensor marshaling |
+| `internal/web` | **90.3%** | Dashboard HTTP handlers, SSE streaming, SVG manifold rendering |
+| `cmd/dashboard` | **90.9%** | Dashboard server lifecycle and routing |
 
-Run a single fuzz target for 30 seconds:
+---
+
+## 3. Fuzz Testing (72 Targets Across 25 Packages)
+
+Every package in `internal/` and `cmd/` includes native Go `Fuzz*` targets runnable via `make test-fuzz`:
+
+| Package | Fuzz Targets |
+|---|---|
+| `cmd/burnnotice` | `FuzzParseModelSize` |
+| `cmd/dashboard` | `FuzzDashboardHandler` |
+| `internal/agent` | `FuzzMiddlewareInterceptAndBlock`, `FuzzMultiAgentGovernor` |
+| `internal/analysis` | `FuzzProjectLatentSpace`, `FuzzConceptConeAnalyzer`, `FuzzKL`, `FuzzCKA`, `FuzzAlignmentImprintDetector` |
+| `internal/converter` | `FuzzParseSafetensors`, `FuzzGetTensorElementSize`, `FuzzTensorElementCount`, `FuzzParseHeader`, `FuzzFindSafetensorsFiles`, `FuzzReadUint64LE`, `FuzzONNXConverter` |
+| `internal/engine` | `FuzzMoEDetectRouting` |
+| `internal/extract` | `FuzzExtractDIM`, `FuzzNormalize`, `FuzzSigmoid`, `FuzzDot`, `FuzzExtractWhitenedSVD` |
+| `internal/hallucination` | `FuzzComputeEnergy`, `FuzzRiskScoreAndThreshold`, `FuzzDetectSpikeRollingWindow` |
+| `internal/ledger` | `FuzzSerializeDeserializeAlert`, `FuzzLongbowBackendQuery` |
+| `internal/longbow` | `FuzzSerializeDeserializeFloats`, `FuzzFallbackSearchAndMath` |
+| `internal/math` | `FuzzCovariance`, `FuzzShrinkageCovariance`, `FuzzWinsorize`, `FuzzWinsorizeInPlace`, `FuzzIsStable`, `FuzzClampToFloat64`, `FuzzWhiteningMatrix`, `FuzzApplyWhitening` |
+| `internal/memory` | `FuzzPoolGetPut` |
+| `internal/metrics` | `FuzzAdaptiveSampler`, `FuzzAdaptiveSamplerSetRate`, `FuzzDefaultSampler`, `FuzzMetricsHandler`, `FuzzOTelConfigFromEnv` |
+| `internal/onnxpb` | `FuzzModelProtoUnmarshal` |
+| `internal/policy` | `FuzzSemanticGater_ClassifyPrompt` |
+| `internal/profile` | `FuzzDetectModelFamilyAndPrompt`, `FuzzImportProfileAndDrift` |
+| `internal/profiler` | `FuzzProgressiveProfiler`, `FuzzDistributedProfiler` |
+| `internal/registry` | `FuzzRegistryAddListFilter` |
+| `internal/sae` | `FuzzSAEEncodeDecodeTopK`, `FuzzNpyHeaderParser` |
+| `internal/scheduler` | `FuzzSchedulerSubmitAndPreempt` |
+| `internal/scoring` | `FuzzScorer_Score`, `FuzzScorer_Subspace` |
+| `internal/steer` | `FuzzActAdd`, `FuzzAngular`, `FuzzAblate`, `FuzzDispatcher` |
+| `internal/telemetry` | `FuzzTelemetryAggregateAndSubmit` |
+| `internal/tokenizer` | `FuzzWordHashTokenizer`, `FuzzByteTokenizer` |
+| `internal/wasm` | `FuzzEncodeDecodeF32` |
+| `internal/web` | `FuzzHandlersAndSSE` |
+| `internal/zjson` | `FuzzUnmarshal`, `FuzzMarshal`, `FuzzParse`, `FuzzTokenizer`, `FuzzUnescape`, `FuzzDecodeStream`, `FuzzGetBytes`, `FuzzAppendJSON` |
+
+---
+
+## 4. Accuracy, Oracle & Profiling Quality Gates
 
 ```bash
-go test -fuzz=FuzzWinsorize -fuzztime=30s ./internal/math/
+# Run mathematical accuracy, CKA, KL, calibration, and numerical-stability invariants
+make accuracy-gate
+
+# Run deterministic golden/oracle fixtures twice (-count=2) to detect any drift
+make oracle-gate
+
+# Run CPU and memory allocation profiling on hot paths (saves baselines to benchmark_results.txt)
+make profile-cpu
+make profile-mem
+
+# Generate tamper-evident release evidence bundle in dist/evidence/
+make release-evidence
 ```
 
 ---
 
-## 4. Benchmark Tests
+## 5. Static Analysis & Security Auditing
 
-Benchmarks live alongside unit tests in `bench_test.go` files:
-
-| Package | Benchmark | Typical Result |
-|---|---|---|
-| `internal/scoring` | `BenchmarkScore` | ~27µs per 4096-dim activation |
-| `internal/scoring` | `BenchmarkSubspaceScore` | ~2µs per projection |
-| `internal/steer` | `BenchmarkActAdd` | ~10µs per activation addition |
-| `internal/steer` | `BenchmarkDot` | ~650ns dot product |
-
-Run all benchmarks:
-
-```bash
-go test -bench=. -benchmem ./...
-```
-
----
-
-## 5. Running the Tests
-
-To run the full suite with statement coverage logging, execute:
-
-```bash
-go test -cover ./...
-```
-
-To output a detailed coverage profile for visual analysis:
-
-```bash
-go test -coverprofile=coverage.out ./...
-go tool cover -html=coverage.out
-```
-
-To run with the race detector (required for CI):
-
-```bash
-go test -race ./...
-```
-
----
-
-## 6. Security Auditing (Gosec)
-
-BurnNotice integrates `gosec` to scan Go ASTs for security vulnerabilities. The repository maintains **0 security issues** (with 48 audited `#nosec` exclusions for necessary user file loading).
-
-For Go 1.27.2, the scanner must be built with `golang.org/x/tools` v0.52.0 or newer so its SSA importer can read the compiler's export data. The verified scan used gosec v2.29.0 with x/tools v0.52.0; the default gosec v2.29.0 dependency on x/tools v0.49.0 reports importer errors instead of completing analysis.
-
-Run a security audit locally using:
-
-```bash
-# Build gosec with a Go 1.27.2-compatible analyzer dependency.
-tool_dir=$(mktemp -d)
-(
-  cd "$tool_dir"
-  go mod init gosec-tools
-  go get github.com/securego/gosec/v2/cmd/gosec@v2.29.0
-  go get golang.org/x/tools@v0.52.0
-  go install github.com/securego/gosec/v2/cmd/gosec
-)
-
-# Run the scan from the repository root.
-"$(go env GOPATH)/bin/gosec" ./...
-```
+BurnNotice enforces zero lint and security findings across the entire repository:
+- `make fmt-check` (`gofmt -l .`)
+- `make vet` & `make vet-cross-platform`
+- `make lint` (`golangci-lint run ./...` -> **0 issues**)
+- `make sec-gosec` (`gosec ./...` -> **0 issues**)
+- `make sec-vulncheck` (`govulncheck ./...` -> **0 vulnerabilities**)

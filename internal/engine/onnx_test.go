@@ -258,7 +258,7 @@ func TestONNXEngine_EndToEnd(t *testing.T) {
 	}
 
 	e := NewONNXEngine(path, cfg)
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 
 	if err := e.Load(); err != nil {
 		if strings.Contains(err.Error(), "onnxruntime") || strings.Contains(err.Error(), "shared library") {
@@ -320,5 +320,72 @@ func TestONNXEngine_EndToEnd(t *testing.T) {
 	_, err = e.GetIntermediate("non_existent_layer", input, shape)
 	if err == nil {
 		t.Error("expected error for non-existent layer in GetIntermediate")
+	}
+
+	// 4. Negative token ID and 1D shape in Forward and GetIntermediate
+	out1D, err := e.Forward([]int64{-1, 2}, []int64{2})
+	if err != nil || len(out1D) != 8 {
+		t.Errorf("Forward 1D with negative token failed: len=%d err=%v", len(out1D), err)
+	}
+	inter1D, err := e.GetIntermediate("hidden_states", []int64{-1}, []int64{1})
+	if err != nil || len(inter1D) != 4 {
+		t.Errorf("GetIntermediate 1D failed: len=%d err=%v", len(inter1D), err)
+	}
+
+	// 5. Empty shape and invalid dimension validation
+	if _, err := e.Forward([]int64{1}, []int64{}); err == nil {
+		t.Error("expected error for empty shape in Forward")
+	}
+	if _, err := e.Forward([]int64{1}, []int64{0}); err == nil {
+		t.Error("expected error for zero dimension in Forward")
+	}
+
+	// 6. Session run error propagation
+	if ps, ok := e.session.(*protoSession); ok {
+		ps.runErr = os.ErrClosed
+		if _, err := e.Forward(input, shape); err == nil {
+			t.Error("expected error when session.Run fails")
+		}
+		ps.runErr = nil
+	}
+}
+
+func TestONNXEngine_EdgeCases(t *testing.T) {
+	// Empty ONNX file (valid protobuf, empty graph)
+	dir := t.TempDir()
+	emptyPath := filepath.Join(dir, "empty.onnx")
+	if err := os.WriteFile(emptyPath, []byte{}, 0644); err != nil {
+		t.Fatal(err)
+	}
+	engEmpty := NewONNXEngine(emptyPath, ModelConfig{HiddenDim: 4})
+	if err := engEmpty.Load(); err == nil {
+		t.Error("expected error for empty ONNX graph")
+	}
+
+	// Valid model with HiddenDim = 0 (invalid output tensor size)
+	modelBytes, err := createDummyONNXModel(4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	validPath := filepath.Join(dir, "valid.onnx")
+	if err := os.WriteFile(validPath, modelBytes, 0644); err != nil {
+		t.Fatal(err)
+	}
+	engZeroDim := NewONNXEngine(validPath, ModelConfig{HiddenDim: 0})
+	if err := engZeroDim.Load(); err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	defer func() { _ = engZeroDim.Close() }()
+
+	if _, err := engZeroDim.Forward([]int64{1}, []int64{1}); err == nil {
+		t.Error("expected error for zero HiddenDim in Forward")
+	}
+	if _, err := engZeroDim.GetIntermediate("hidden_states", []int64{1}, []int64{1}); err == nil {
+		t.Error("expected error for zero HiddenDim in GetIntermediate")
+	}
+
+	// newProtoSession with nonexistent file
+	if _, err := newProtoSession("/nonexistent/file.onnx", []string{"hidden_states"}); err == nil {
+		t.Error("expected error from newProtoSession on missing file")
 	}
 }

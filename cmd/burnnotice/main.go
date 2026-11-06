@@ -158,7 +158,7 @@ Extraction method:
 		if err != nil {
 			return fmt.Errorf("load ONNX model: %w", err)
 		}
-		defer model.Close()
+		defer func() { _ = model.Close() }()
 
 		scorer := scoring.NewScorer(nil)
 
@@ -473,7 +473,7 @@ input to verify the engine functions correctly end-to-end.`,
 		if err := eng.Load(); err != nil {
 			return fmt.Errorf("engine load failed: %w", err)
 		}
-		defer eng.Close()
+		defer func() { _ = eng.Close() }()
 
 		fmt.Printf("Engine loaded: %s\n", modelPath)
 		fmt.Printf("Output count: %d\n", eng.NumOutputs())

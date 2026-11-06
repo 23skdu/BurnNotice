@@ -20,7 +20,6 @@ type ONNXModel struct {
 
 func LoadONNXModel(path string) (*ONNXModel, error) {
 	hiddenDim := 4096
-	family := profile.FamilyUnknown
 
 	cfgCandidate := filepath.Clean(filepath.Join(filepath.Dir(path), "config.json"))
 	var configBytes []byte
@@ -33,7 +32,7 @@ func LoadONNXModel(path string) (*ONNXModel, error) {
 	}
 
 	archSpec := profile.DetectModelFamily(filepath.Base(path), configBytes, nil)
-	family = archSpec.Family
+	family := archSpec.Family
 
 	cfg := engine.ModelConfig{
 		HiddenDim:   hiddenDim,

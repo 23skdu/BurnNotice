@@ -125,7 +125,7 @@ func TestMultiAgentGovernor(t *testing.T) {
 		t.Fatal("message is nil")
 	}
 
-	msg, allowed = gov.MonitorMessage("agent-1", "agent-2", "deceptive", 0.9)
+	_, allowed = gov.MonitorMessage("agent-1", "agent-2", "deceptive", 0.9)
 	if allowed {
 		t.Fatal("message should be blocked")
 	}

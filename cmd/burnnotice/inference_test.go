@@ -113,7 +113,7 @@ func TestONNXModel_Inference(t *testing.T) {
 		}
 		t.Fatalf("LoadONNXModel failed: %v", err)
 	}
-	defer m.Close()
+	defer func() { _ = m.Close() }()
 
 	// Test ExtractActivation
 	act, err := m.ExtractActivation("hello", "world")
@@ -185,7 +185,7 @@ func TestONNXModel_ArchitectureCompatibility(t *testing.T) {
 				}
 				t.Fatalf("LoadONNXModel failed for %s: %v", tc.name, err)
 			}
-			defer m.Close()
+			defer func() { _ = m.Close() }()
 
 			if string(m.family) != tc.wantFamily {
 				t.Errorf("%s: expected family %s, got %s", tc.name, tc.wantFamily, m.family)

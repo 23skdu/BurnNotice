@@ -1,11 +1,11 @@
 # BurnNotice CLI Reference
 
-> **Version**: 0.6.0
-> **Updated**: 2026-06-12
+> **Version**: 0.8.0
+> **Updated**: 2026-11-05
 
 ## Overview
 
-The `burnnotice` CLI tool provides five commands for managing the model lifecycle:
+The `burnnotice` CLI tool provides six commands for managing the model lifecycle and privacy-preserving telemetry aggregation:
 
 | Command       | Description |
 |---------------|-------------|
@@ -14,6 +14,31 @@ The `burnnotice` CLI tool provides five commands for managing the model lifecycl
 | **`profile`**  | Generate behavioral direction profiles for deception detection |
 | **`validate`** | Load an ONNX model and run a forward pass to verify the engine |
 | **`recommend`** | Print the recommended test model and export instructions |
+| **`aggregate`** | Aggregate anonymous JSON telemetry reports across local runs |
+
+```mermaid
+flowchart LR
+    subgraph Acquire["1. Model Acquisition"]
+        REC["burnnotice recommend"]
+        DL["burnnotice download\n(HuggingFace Hub)"]
+        CONV["burnnotice convert\n(Safetensors -> ONNX)"]
+    end
+
+    subgraph Verify["2. Engine Verification"]
+        VAL["burnnotice validate\n(Forward Pass Check)"]
+    end
+
+    subgraph Extract["3. Direction Profiling"]
+        PROF["burnnotice profile\n(--whitened-svd / --cone-analysis / --rdo)"]
+        GOB["Model Profile\n(profile.gob / JSON)"]
+    end
+
+    subgraph Telemetry["4. Anonymous Telemetry"]
+        AGG["burnnotice aggregate\n(Zero-Knowledge Summary)"]
+    end
+
+    REC --> DL --> CONV --> VAL --> PROF --> GOB --> AGG
+```
 
 ## Installation
 

@@ -28,8 +28,8 @@ GCFLAGS_DEBUG   := -gcflags 'all=-N -l'
 # Tooling
 GO              ?= go
 GOLANGCI_LINT   ?= $(shell command -v golangci-lint 2>/dev/null || echo /home/rsd/go/bin/golangci-lint)
-GOSEC           ?= $(shell command -v gosec 2>/dev/null || echo /home/rsd/go/bin/gosec)
-GOVULNCHECK     ?= $(shell command -v govulncheck 2>/dev/null || echo /home/rsd/go/bin/govulncheck)
+GOSEC           ?= $(shell [ -x /home/rsd/go/bin/gosec ] && echo /home/rsd/go/bin/gosec || command -v gosec 2>/dev/null)
+GOVULNCHECK     ?= $(shell [ -x /home/rsd/go/bin/govulncheck ] && echo /home/rsd/go/bin/govulncheck || command -v govulncheck 2>/dev/null)
 DEADCODE        ?= $(shell command -v deadcode 2>/dev/null || echo /home/rsd/go/bin/deadcode)
 TEMPL           ?= $(shell command -v templ 2>/dev/null)
 PROTOC          ?= $(shell command -v protoc 2>/dev/null)
@@ -54,7 +54,7 @@ COLOR_YELLOW    := \033[33m
         test-all test-shuffle test-oracle test-e2e-playwright \
         security sec-gosec sec-vulncheck sec-audit \
         profile profile-cpu profile-mem \
-        accuracy-gate oracle-gate quality-gate \
+        accuracy-gate oracle-gate quality-gate release-evidence \
         vet-cross-platform \
         verify pre-commit makehooks install-hooks install-commit-hook
 
@@ -214,15 +214,23 @@ test-bench: ## Run Go benchmarks with allocation reporting
 test-fuzz: ## Run smoke fuzz tests across fuzz-enabled packages
 	@echo -e "$(COLOR_CYAN)Running smoke fuzz tests...$(COLOR_RESET)"
 	@set -e; \
-	for pkg in internal/math internal/extract internal/scoring internal/steer internal/metrics internal/zjson internal/converter internal/policy; do \
-		for fn in $$($(GO) test -list 'Fuzz' ./$$pkg 2>/dev/null | grep '^Fuzz'); do \
+	for pkg in $$($(GO) list ./internal/... ./cmd/...); do \
+		for fn in $$($(GO) test -list '^Fuzz' $$pkg 2>/dev/null | grep '^Fuzz'); do \
 			echo "  $$pkg :: $$fn"; \
-			$(GO) test -run='^$$' -fuzz="^$${fn}$$" -fuzztime=$(FUZZ_TIME)s ./$$pkg; \
+			$(GO) test -run='^$$' -fuzz="^$${fn}$$" -fuzztime=$(FUZZ_TIME)s $$pkg; \
 		done; \
 	done
 	@echo -e "$(COLOR_GREEN)Fuzz smoke tests passed.$(COLOR_RESET)"
 
-test-fuzz-all: test-fuzz ## Run all discovered native Go fuzz targets
+test-fuzz-all: ## Run all discovered native Go fuzz targets across the entire repository
+	@echo -e "$(COLOR_CYAN)Running all discovered fuzz targets...$(COLOR_RESET)"
+	@set -e; \
+	for pkg in $$($(GO) list ./...); do \
+		for fn in $$($(GO) test -list 'Fuzz' $$pkg 2>/dev/null | grep '^Fuzz'); do \
+			echo "  $$pkg :: $$fn"; \
+			$(GO) test -run='^$$' -fuzz="^$${fn}$$" -fuzztime=$(FUZZ_TIME)s $$pkg; \
+		done; \
+	done
 	@echo -e "$(COLOR_GREEN)All fuzz targets executed.$(COLOR_RESET)"
 
 test-shuffle: ## Run unit tests with randomized execution order
@@ -242,15 +250,21 @@ test-e2e-playwright: ## Run Playwright dashboard E2E tests
 ##@ Performance & Memory Profiling
 profile: profile-cpu profile-mem ## Run CPU and memory profiling benchmarks
 
-profile-cpu: ## Run benchmarks with CPU profiling
-	@echo -e "$(COLOR_CYAN)Running CPU profiling...$(COLOR_RESET)"
-	$(GO) test -run='^$$' -bench=. -cpuprofile=cpu.out -benchtime=1s ./internal/scoring ./internal/steer ./internal/math
-	@echo -e "$(COLOR_GREEN)CPU profile: cpu.out$(COLOR_RESET)"
+profile-cpu: ## Run benchmarks with CPU profiling and record baselines in benchmark_results.txt
+	@echo -e "$(COLOR_CYAN)Running CPU profiling on hot paths...$(COLOR_RESET)"
+	$(GO) test -run='^$$' -bench=. -benchmem -cpuprofile=cpu-scoring.out -benchtime=200ms ./internal/scoring | tee benchmark_results.txt
+	$(GO) test -run='^$$' -bench=. -benchmem -cpuprofile=cpu-steer.out -benchtime=200ms ./internal/steer | tee -a benchmark_results.txt
+	$(GO) test -run='^$$' -bench=. -benchmem -cpuprofile=cpu-math.out -benchtime=200ms ./internal/math | tee -a benchmark_results.txt
+	@cp -f cpu-scoring.out cpu.out
+	@echo -e "$(COLOR_GREEN)CPU profiles written (cpu.out, cpu-*.out) and baselines saved to benchmark_results.txt$(COLOR_RESET)"
 
-profile-mem: ## Run benchmarks with memory profiling
+profile-mem: ## Run benchmarks with memory profiling across buffer pools, scoring, and steering
 	@echo -e "$(COLOR_CYAN)Running memory profiling...$(COLOR_RESET)"
-	$(GO) test -run='^$$' -bench=. -memprofile=mem.out -benchtime=1s ./internal/scoring ./internal/steer ./internal/math
-	@echo -e "$(COLOR_GREEN)Memory profile: mem.out$(COLOR_RESET)"
+	$(GO) test -run='^$$' -bench=. -benchmem -memprofile=mem-memory.out -benchtime=200ms ./internal/memory
+	$(GO) test -run='^$$' -bench=. -benchmem -memprofile=mem-scoring.out -benchtime=200ms ./internal/scoring
+	$(GO) test -run='^$$' -bench=. -benchmem -memprofile=mem-steer.out -benchtime=200ms ./internal/steer
+	@cp -f mem-memory.out mem.out
+	@echo -e "$(COLOR_GREEN)Memory profiles written (mem.out, mem-*.out)$(COLOR_RESET)"
 
 ##@ Accuracy & Oracle Quality Gates
 accuracy-gate: ## Run accuracy-focused tests and invariants
@@ -265,6 +279,10 @@ oracle-gate: ## Run deterministic oracle/golden tests
 
 quality-gate: lint-full security accuracy-gate oracle-gate ## Run all quality gates
 	@echo -e "$(COLOR_GREEN)Quality gate passed.$(COLOR_RESET)"
+
+release-evidence: ## Generate reproducible release evidence bundle in dist/evidence
+	@chmod +x scripts/release-evidence.sh
+	bash scripts/release-evidence.sh dist/evidence
 
 ##@ Cross-Platform Verification
 vet-cross-platform: ## Vet packages for windows/darwin/linux targets

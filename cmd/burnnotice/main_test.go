@@ -237,6 +237,7 @@ func TestBurnNotice_ProfileCmd_Execution(t *testing.T) {
 	rootCmd.SetArgs([]string{
 		"profile", path,
 		"--dataset", datasetPath,
+		"--oversight-dataset", "",
 		"--output", dir,
 		"--layers", "0",
 		"--cone-analysis",

@@ -117,17 +117,24 @@ func (e *MoEEngine) DetectRouting(layerIdx int, activation []float64) ([]int, []
 	return indices, weights
 }
 
-// ExpertActivation extracts the activation for a specific expert.
+// ExpertActivation extracts the activation for a specific expert by summing prior expert dimensions.
 func (e *MoEEngine) ExpertActivation(activation []float64, expertIdx int) []float64 {
 	if expertIdx < 0 || expertIdx >= e.numExperts {
 		return nil
 	}
-	dim := e.expertDims[expertIdx]
-	if dim > len(activation) {
-		dim = len(activation)
+	start := 0
+	for i := 0; i < expertIdx; i++ {
+		start += e.expertDims[i]
 	}
-	result := make([]float64, dim)
-	copy(result, activation[:dim])
+	if start >= len(activation) {
+		return []float64{}
+	}
+	end := start + e.expertDims[expertIdx]
+	if end > len(activation) {
+		end = len(activation)
+	}
+	result := make([]float64, end-start)
+	copy(result, activation[start:end])
 	return result
 }
 
@@ -170,7 +177,7 @@ func (e *MoEEngine) DetectRoutingFromLogits(logits []float64) ([]int, []float64)
 	for i := 0; i < e.numExperts; i++ {
 		scores[i] = expertScore{index: i, logit: logits[i]}
 	}
-	sort.Slice(scores, func(i, j int) bool {
+	sort.SliceStable(scores, func(i, j int) bool {
 		return scores[i].logit > scores[j].logit
 	})
 
@@ -178,15 +185,19 @@ func (e *MoEEngine) DetectRoutingFromLogits(logits []float64) ([]int, []float64)
 	var sumExp float64
 	exps := make([]float64, topK)
 	for i := 0; i < topK; i++ {
-		exps[i] = math.Exp(scores[i].logit - maxLogit)
-		sumExp += exps[i]
+		v := math.Exp(scores[i].logit - maxLogit)
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			v = 0
+		}
+		exps[i] = v
+		sumExp += v
 	}
 
 	indices := make([]int, topK)
 	weights := make([]float64, topK)
 	for i := 0; i < topK; i++ {
 		indices[i] = scores[i].index
-		if sumExp > 0 {
+		if sumExp > 0 && !math.IsNaN(sumExp) && !math.IsInf(sumExp, 0) {
 			weights[i] = exps[i] / sumExp
 		} else {
 			weights[i] = 1.0 / float64(topK)

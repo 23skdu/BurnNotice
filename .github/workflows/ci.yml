@@ -1,0 +1,59 @@
+name: CI & Quality Gates
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality-gates:
+    name: Lint, Test, Accuracy & Oracle Gates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Format & Vet check
+        run: |
+          make fmt-check
+          make vet
+          make vet-cross-platform
+
+      - name: Unit & Race tests
+        run: make test-race
+
+      - name: Accuracy Gate (internal/ invariants, CKA, calibration, thresholds)
+        run: make accuracy-gate
+
+      - name: Oracle Gate (deterministic golden tests, -count=2)
+        run: make oracle-gate
+
+      - name: CPU & Memory Profiling Gate
+        run: make profile
+
+      - name: Fuzz Smoke Gate
+        run: make test-fuzz FUZZ_TIME=1
+
+      - name: Generate Release Evidence Bundle
+        run: make release-evidence
+
+      - name: Upload Release Evidence Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-evidence-bundle
+          path: |
+            dist/evidence/**
+            benchmark_results.txt
+          if-no-files-found: warn
+

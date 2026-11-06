@@ -77,3 +77,35 @@ func TestEvaluateHarmBenchCategories(t *testing.T) {
 		t.Errorf("cbrn metrics mismatch: %+v", cbrn)
 	}
 }
+
+func TestThresholdCalibrationHereticAndParetoBounds(t *testing.T) {
+	// Default weight fallback when wRefusal <= 0 && wKL <= 0
+	sDefault := ComputeHereticScore(0.8, 0.2, 0, 0)
+	sExplicit := ComputeHereticScore(0.8, 0.2, 0.7, 0.3)
+	if math.Abs(sDefault-sExplicit) > 1e-12 {
+		t.Errorf("default weight fallback mismatch: %v vs %v", sDefault, sExplicit)
+	}
+
+	// Negative KL and extreme KL (>2.0) clamping
+	sNegKL := ComputeHereticScore(0.5, -10.0, 0.7, 0.3)
+	sZeroKL := ComputeHereticScore(0.5, 0.0, 0.7, 0.3)
+	if math.Abs(sNegKL-sZeroKL) > 1e-12 {
+		t.Errorf("negative KL not clamped to 0: %v vs %v", sNegKL, sZeroKL)
+	}
+
+	sHugeKL := ComputeHereticScore(0.5, 100.0, 0.7, 0.3)
+	sMaxKL := ComputeHereticScore(0.5, 2.0, 0.7, 0.3)
+	if math.Abs(sHugeKL-sMaxKL) > 1e-12 {
+		t.Errorf("KL > 2.0 not clamped to 2.0: %v vs %v", sHugeKL, sMaxKL)
+	}
+
+	if _, err := ComputeParetoFrontier(nil); err == nil {
+		t.Error("expected error on empty Pareto points")
+	}
+
+	// Unclassified category fallback in EvaluateHarmBenchCategories
+	res := EvaluateHarmBenchCategories(map[string]bool{"p_unknown": true}, map[string]string{})
+	if res["unclassified"].TotalPrompts != 1 || res["unclassified"].RefusedCount != 1 {
+		t.Errorf("expected unclassified category count=1, got %+v", res["unclassified"])
+	}
+}

@@ -44,16 +44,29 @@ graph TD
 
 Given $N$ activation samples $\mathbf{a}_i \in \mathbb{R}^d$, the projection onto a 2D visualization manifold is computed either via data-driven Principal Component Analysis (thin SVD) or via pre-identified concept basis vectors:
 
-### 2.1 Data-Driven SVD Projection
+### 2.1 Data-Driven SVD Projection & Thread-Safe Factor Caching
 1. Compute activation centroid $\boldsymbol{\mu} = \frac{1}{N} \sum_{i=1}^N \mathbf{a}_i$.
 2. Form the mean-centered matrix $\mathbf{X} \in \mathbb{R}^{N \times d}$ where $\mathbf{X}_{i,:} = \mathbf{a}_i - \boldsymbol{\mu}$.
-3. Factorize $\mathbf{X}$ using thin Singular Value Decomposition:
+3. Compute an FNV-1a 64-bit fingerprint over the matrix dimensions and float64 bit patterns. If present in the thread-safe `svdCache`, reuse the cached principal components $(\mathbf{v}_1, \mathbf{v}_2)$ and explained variance $(\text{Var}_1, \text{Var}_2)$ directly (~35x speedup).
+4. Otherwise, factorize $\mathbf{X}$ using thin Singular Value Decomposition:
    $$\mathbf{X} = \mathbf{U} \boldsymbol{\Sigma} \mathbf{V}^T$$
-4. The first two columns of $\mathbf{V}$, $\mathbf{v}_1, \mathbf{v}_2 \in \mathbb{R}^d$, define the orthogonal projection subspace.
-5. The projected 2D coordinates for activation $\mathbf{a}_i$ are:
+5. The first two columns of $\mathbf{V}$, $\mathbf{v}_1, \mathbf{v}_2 \in \mathbb{R}^d$, define the orthogonal projection subspace and are stored in `svdCache`.
+6. The projected 2D coordinates for activation $\mathbf{a}_i$ are:
    $$x_i = \mathbf{a}_i \cdot \mathbf{v}_1, \quad y_i = \mathbf{a}_i \cdot \mathbf{v}_2$$
-6. The variance explained along each dimension is:
+7. The variance explained along each dimension is:
    $$\text{Var}_k = \frac{\sigma_k^2}{\sum_{j=1}^{\min(N, d)} \sigma_j^2}$$
+
+```mermaid
+flowchart LR
+    PTS["Input LatentPoints\n(N x d)"] --> HASH["FNV-1a 64-bit Fingerprint\nhashActivationMatrix(points, d)"]
+    HASH --> LOOKUP{"svdCache Hit?"}
+    LOOKUP -->|Yes (~72 µs)| PROJ["Orthogonal Dot-Product Projection\n(uX, uY, varExpl)"]
+    LOOKUP -->|No (~2.5 ms)| CENTER["Contiguous Mean-Centering\nmat.NewDense(N, d, raw)"]
+    CENTER --> SVD["Gonum Thin SVD\nsvd.Factorize(data, mat.SVDThin)"]
+    SVD --> STORE["Store in svdCache\n(Bounded 64-Entry Cache)"]
+    STORE --> PROJ
+    PROJ --> OUT["Clusters + Trajectories + SVG"]
+```
 
 ### 2.2 Contrastive Basis Projection
 When profiling specific target directions (e.g., Deception vs Truthfulness, or Refusal vs Compliance), $\mathbf{v}_1$ is defined as the unit-normalized difference-in-means direction $\mathbf{d}_{\text{target}}$, and $\mathbf{v}_2$ is obtained via Gram-Schmidt orthogonalization against the harmless prompt subspace.

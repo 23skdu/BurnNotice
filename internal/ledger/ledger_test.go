@@ -9,13 +9,13 @@ import (
 
 func TestNewBackend_SQLite(t *testing.T) {
 	tmp := t.TempDir() + "/test.db"
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	backend, err := NewBackend("sqlite", tmp)
 	if err != nil {
 		t.Fatalf("NewBackend error: %v", err)
 	}
-	defer backend.Close()
+	defer func() { _ = backend.Close() }()
 
 	if err := backend.Init(); err != nil {
 		t.Fatalf("Init error: %v", err)
@@ -27,7 +27,7 @@ func TestNewBackend_Longbow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewBackend error: %v", err)
 	}
-	defer backend.Close()
+	defer func() { _ = backend.Close() }()
 
 	if err := backend.Init(); err != nil {
 		t.Fatalf("Init error: %v", err)
@@ -43,11 +43,11 @@ func TestNewBackend_Unsupported(t *testing.T) {
 
 func TestSQLite_RecordAlert(t *testing.T) {
 	tmp := t.TempDir() + "/alert_test.db"
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	backend, _ := NewBackend("sqlite", tmp)
-	defer backend.Close()
-	backend.Init()
+	defer func() { _ = backend.Close() }()
+	_ = backend.Init()
 
 	alert := Alert{
 		Timestamp: time.Now(),
@@ -65,11 +65,11 @@ func TestSQLite_RecordAlert(t *testing.T) {
 
 func TestSQLite_RecordIntervention(t *testing.T) {
 	tmp := t.TempDir() + "/intervention_test.db"
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	backend, _ := NewBackend("sqlite", tmp)
-	defer backend.Close()
-	backend.Init()
+	defer func() { _ = backend.Close() }()
+	_ = backend.Init()
 
 	intervention := Intervention{
 		Timestamp: time.Now(),
@@ -86,11 +86,11 @@ func TestSQLite_RecordIntervention(t *testing.T) {
 
 func TestSQLite_QueryAlerts(t *testing.T) {
 	tmp := t.TempDir() + "/query_test.db"
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	backend, _ := NewBackend("sqlite", tmp)
-	defer backend.Close()
-	backend.Init()
+	defer func() { _ = backend.Close() }()
+	_ = backend.Init()
 
 	now := time.Now()
 	alerts := []Alert{
@@ -100,7 +100,7 @@ func TestSQLite_QueryAlerts(t *testing.T) {
 	}
 
 	for _, a := range alerts {
-		backend.RecordAlert(a)
+		_ = backend.RecordAlert(a)
 	}
 
 	// Query all
@@ -133,15 +133,15 @@ func TestSQLite_QueryAlerts(t *testing.T) {
 
 func TestSQLite_QueryAlerts_Pagination(t *testing.T) {
 	tmp := t.TempDir() + "/pagination_test.db"
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	backend, _ := NewBackend("sqlite", tmp)
-	defer backend.Close()
-	backend.Init()
+	defer func() { _ = backend.Close() }()
+	_ = backend.Init()
 
 	now := time.Now()
 	for i := 0; i < 10; i++ {
-		backend.RecordAlert(Alert{
+		_ = backend.RecordAlert(Alert{
 			Timestamp: now.Add(time.Duration(-i) * time.Minute),
 			SessionID: "sess-001",
 			Metric:    "deception_score",
@@ -172,15 +172,15 @@ func TestSQLite_QueryAlerts_Pagination(t *testing.T) {
 
 func TestSQLite_QueryInterventions(t *testing.T) {
 	tmp := t.TempDir() + "/query_intervention_test.db"
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	backend, _ := NewBackend("sqlite", tmp)
-	defer backend.Close()
-	backend.Init()
+	defer func() { _ = backend.Close() }()
+	_ = backend.Init()
 
 	now := time.Now()
-	backend.RecordIntervention(Intervention{Timestamp: now, SessionID: "sess-001", Method: "ActAdd", Layer: 5, Result: "steered"})
-	backend.RecordIntervention(Intervention{Timestamp: now, SessionID: "sess-002", Method: "Angular", Layer: 3, Result: "steered"})
+	_ = backend.RecordIntervention(Intervention{Timestamp: now, SessionID: "sess-001", Method: "ActAdd", Layer: 5, Result: "steered"})
+	_ = backend.RecordIntervention(Intervention{Timestamp: now, SessionID: "sess-002", Method: "Angular", Layer: 3, Result: "steered"})
 
 	interventions, err := backend.QueryInterventions("sess-001")
 	if err != nil {
@@ -196,15 +196,15 @@ func TestSQLite_QueryInterventions(t *testing.T) {
 
 func TestSQLite_CountAlerts(t *testing.T) {
 	tmp := t.TempDir() + "/count_test.db"
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	backend, _ := NewBackend("sqlite", tmp)
-	defer backend.Close()
-	backend.Init()
+	defer func() { _ = backend.Close() }()
+	_ = backend.Init()
 
 	now := time.Now()
-	backend.RecordAlert(Alert{Timestamp: now, SessionID: "sess-001", Metric: "deception_score", Score: 0.8, Threshold: 0.7, Action: "steer"})
-	backend.RecordAlert(Alert{Timestamp: now, SessionID: "sess-002", Metric: "conflict_score", Score: 0.6, Threshold: 0.8, Action: "log"})
+	_ = backend.RecordAlert(Alert{Timestamp: now, SessionID: "sess-001", Metric: "deception_score", Score: 0.8, Threshold: 0.7, Action: "steer"})
+	_ = backend.RecordAlert(Alert{Timestamp: now, SessionID: "sess-002", Metric: "conflict_score", Score: 0.6, Threshold: 0.8, Action: "log"})
 
 	count, err := backend.CountAlerts(AlertFilter{Metric: "deception_score"})
 	if err != nil {
@@ -217,16 +217,16 @@ func TestSQLite_CountAlerts(t *testing.T) {
 
 func TestSQLite_GetAlertStats(t *testing.T) {
 	tmp := t.TempDir() + "/stats_test.db"
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	backend, _ := NewBackend("sqlite", tmp)
-	defer backend.Close()
-	backend.Init()
+	defer func() { _ = backend.Close() }()
+	_ = backend.Init()
 
 	now := time.Now()
-	backend.RecordAlert(Alert{Timestamp: now, SessionID: "sess-001", Metric: "deception_score", Score: 0.8, Threshold: 0.7, Action: "steer"})
-	backend.RecordAlert(Alert{Timestamp: now, SessionID: "sess-002", Metric: "deception_score", Score: 0.9, Threshold: 0.7, Action: "block"})
-	backend.RecordAlert(Alert{Timestamp: now, SessionID: "sess-003", Metric: "conflict_score", Score: 0.6, Threshold: 0.8, Action: "log"})
+	_ = backend.RecordAlert(Alert{Timestamp: now, SessionID: "sess-001", Metric: "deception_score", Score: 0.8, Threshold: 0.7, Action: "steer"})
+	_ = backend.RecordAlert(Alert{Timestamp: now, SessionID: "sess-002", Metric: "deception_score", Score: 0.9, Threshold: 0.7, Action: "block"})
+	_ = backend.RecordAlert(Alert{Timestamp: now, SessionID: "sess-003", Metric: "conflict_score", Score: 0.6, Threshold: 0.8, Action: "log"})
 
 	stats, err := backend.GetAlertStats()
 	if err != nil {
@@ -242,15 +242,15 @@ func TestSQLite_GetAlertStats(t *testing.T) {
 
 func TestSQLite_DeleteOldAlerts(t *testing.T) {
 	tmp := t.TempDir() + "/delete_test.db"
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	backend, _ := NewBackend("sqlite", tmp)
-	defer backend.Close()
-	backend.Init()
+	defer func() { _ = backend.Close() }()
+	_ = backend.Init()
 
 	now := time.Now()
-	backend.RecordAlert(Alert{Timestamp: now.Add(-2 * time.Hour), SessionID: "sess-001", Metric: "deception_score", Score: 0.8, Threshold: 0.7, Action: "steer"})
-	backend.RecordAlert(Alert{Timestamp: now, SessionID: "sess-002", Metric: "deception_score", Score: 0.9, Threshold: 0.7, Action: "block"})
+	_ = backend.RecordAlert(Alert{Timestamp: now.Add(-2 * time.Hour), SessionID: "sess-001", Metric: "deception_score", Score: 0.8, Threshold: 0.7, Action: "steer"})
+	_ = backend.RecordAlert(Alert{Timestamp: now, SessionID: "sess-002", Metric: "deception_score", Score: 0.9, Threshold: 0.7, Action: "block"})
 
 	deleted, err := backend.DeleteOldAlerts(1 * time.Hour)
 	if err != nil {
@@ -268,14 +268,14 @@ func TestSQLite_DeleteOldAlerts(t *testing.T) {
 
 func TestSQLite_ExportAlertsCSV(t *testing.T) {
 	tmp := t.TempDir() + "/csv_test.db"
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	backend, _ := NewBackend("sqlite", tmp)
-	defer backend.Close()
-	backend.Init()
+	defer func() { _ = backend.Close() }()
+	_ = backend.Init()
 
 	now := time.Now()
-	backend.RecordAlert(Alert{Timestamp: now, SessionID: "sess-001", Metric: "deception_score", Score: 0.8, Threshold: 0.7, Action: "steer"})
+	_ = backend.RecordAlert(Alert{Timestamp: now, SessionID: "sess-001", Metric: "deception_score", Score: 0.8, Threshold: 0.7, Action: "steer"})
 
 	csv, err := backend.ExportAlertsCSV(AlertFilter{})
 	if err != nil {
@@ -288,12 +288,12 @@ func TestSQLite_ExportAlertsCSV(t *testing.T) {
 
 func TestLongbowBackend_RecordAndQuery(t *testing.T) {
 	backend, _ := NewBackend("longbow", "localhost:9090")
-	defer backend.Close()
-	backend.Init()
+	defer func() { _ = backend.Close() }()
+	_ = backend.Init()
 
 	now := time.Now()
-	backend.RecordAlert(Alert{Timestamp: now, SessionID: "sess-001", Metric: "deception_score", Score: 0.8, Threshold: 0.7, Action: "steer"})
-	backend.RecordAlert(Alert{Timestamp: now, SessionID: "sess-002", Metric: "conflict_score", Score: 0.6, Threshold: 0.8, Action: "log"})
+	_ = backend.RecordAlert(Alert{Timestamp: now, SessionID: "sess-001", Metric: "deception_score", Score: 0.8, Threshold: 0.7, Action: "steer"})
+	_ = backend.RecordAlert(Alert{Timestamp: now, SessionID: "sess-002", Metric: "conflict_score", Score: 0.6, Threshold: 0.8, Action: "log"})
 
 	alerts, err := backend.QueryAlerts(AlertFilter{Metric: "deception_score"})
 	if err != nil {
@@ -306,8 +306,8 @@ func TestLongbowBackend_RecordAndQuery(t *testing.T) {
 
 func TestLongbowBackend_IngestBatch(t *testing.T) {
 	backend, _ := NewBackend("longbow", "localhost:9090")
-	defer backend.Close()
-	backend.Init()
+	defer func() { _ = backend.Close() }()
+	_ = backend.Init()
 
 	now := time.Now()
 	batch := []Alert{
@@ -327,11 +327,11 @@ func TestLongbowBackend_IngestBatch(t *testing.T) {
 
 func TestLongbowBackend_RetrieveBatch(t *testing.T) {
 	backend, _ := NewBackend("longbow", "localhost:9090")
-	defer backend.Close()
-	backend.Init()
+	defer func() { _ = backend.Close() }()
+	_ = backend.Init()
 
 	now := time.Now()
-	backend.RecordAlert(Alert{Timestamp: now, SessionID: "sess-001", Metric: "deception_score", Score: 0.8, Threshold: 0.7, Action: "steer"})
+	_ = backend.RecordAlert(Alert{Timestamp: now, SessionID: "sess-001", Metric: "deception_score", Score: 0.8, Threshold: 0.7, Action: "steer"})
 
 	retrieved, err := backend.RetrieveBatch("sess-001")
 	if err != nil {
@@ -373,12 +373,12 @@ func TestSerializeDeserializeAlert(t *testing.T) {
 
 func TestLongbowBackend_DeleteOldAlerts(t *testing.T) {
 	backend, _ := NewBackend("longbow", "localhost:9090")
-	defer backend.Close()
-	backend.Init()
+	defer func() { _ = backend.Close() }()
+	_ = backend.Init()
 
 	now := time.Now()
-	backend.RecordAlert(Alert{Timestamp: now.Add(-2 * time.Hour), SessionID: "sess-001", Metric: "deception_score", Score: 0.8, Threshold: 0.7, Action: "steer"})
-	backend.RecordAlert(Alert{Timestamp: now, SessionID: "sess-002", Metric: "deception_score", Score: 0.9, Threshold: 0.7, Action: "block"})
+	_ = backend.RecordAlert(Alert{Timestamp: now.Add(-2 * time.Hour), SessionID: "sess-001", Metric: "deception_score", Score: 0.8, Threshold: 0.7, Action: "steer"})
+	_ = backend.RecordAlert(Alert{Timestamp: now, SessionID: "sess-002", Metric: "deception_score", Score: 0.9, Threshold: 0.7, Action: "block"})
 
 	deleted, err := backend.DeleteOldAlerts(1 * time.Hour)
 	if err != nil {
@@ -391,13 +391,13 @@ func TestLongbowBackend_DeleteOldAlerts(t *testing.T) {
 
 func TestLongbowBackend_GetAlertStats(t *testing.T) {
 	backend, _ := NewBackend("longbow", "localhost:9090")
-	defer backend.Close()
-	backend.Init()
+	defer func() { _ = backend.Close() }()
+	_ = backend.Init()
 
 	now := time.Now()
-	backend.RecordAlert(Alert{Timestamp: now, SessionID: "sess-001", Metric: "deception_score", Score: 0.8, Threshold: 0.7, Action: "steer"})
-	backend.RecordAlert(Alert{Timestamp: now, SessionID: "sess-002", Metric: "deception_score", Score: 0.9, Threshold: 0.7, Action: "block"})
-	backend.RecordAlert(Alert{Timestamp: now, SessionID: "sess-003", Metric: "conflict_score", Score: 0.6, Threshold: 0.8, Action: "log"})
+	_ = backend.RecordAlert(Alert{Timestamp: now, SessionID: "sess-001", Metric: "deception_score", Score: 0.8, Threshold: 0.7, Action: "steer"})
+	_ = backend.RecordAlert(Alert{Timestamp: now, SessionID: "sess-002", Metric: "deception_score", Score: 0.9, Threshold: 0.7, Action: "block"})
+	_ = backend.RecordAlert(Alert{Timestamp: now, SessionID: "sess-003", Metric: "conflict_score", Score: 0.6, Threshold: 0.8, Action: "log"})
 
 	stats, err := backend.GetAlertStats()
 	if err != nil {
@@ -410,11 +410,11 @@ func TestLongbowBackend_GetAlertStats(t *testing.T) {
 
 func TestSQLite_Batch(t *testing.T) {
 	tmp := t.TempDir() + "/sqlite_batch_test.db"
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	backend, _ := NewBackend("sqlite", tmp)
-	defer backend.Close()
-	backend.Init()
+	defer func() { _ = backend.Close() }()
+	_ = backend.Init()
 
 	now := time.Now()
 	batch := []Alert{
@@ -440,8 +440,8 @@ func TestLongbow_InterventionsAndCSV(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create longbow backend: %v", err)
 	}
-	defer backend.Close()
-	backend.Init()
+	defer func() { _ = backend.Close() }()
+	_ = backend.Init()
 
 	now := time.Now()
 	intervention := Intervention{
@@ -468,7 +468,7 @@ func TestLongbow_InterventionsAndCSV(t *testing.T) {
 	}
 
 	// Test ExportAlertsCSV on Longbow backend
-	backend.RecordAlert(Alert{
+	_ = backend.RecordAlert(Alert{
 		Timestamp: now,
 		SessionID: "sess-longbow-interventions",
 		Metric:    "deception_score",
@@ -488,7 +488,7 @@ func TestLongbow_InterventionsAndCSV(t *testing.T) {
 
 func TestSQLite_ClosedDBErrors(t *testing.T) {
 	tmp := t.TempDir() + "/closed_test.db"
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	backend, err := NewBackend("sqlite", tmp)
 	if err != nil {
@@ -544,7 +544,7 @@ func TestLongbow_PaginationAndJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer backend.Close()
+	defer func() { _ = backend.Close() }()
 
 	if err := backend.Init(); err != nil {
 		t.Fatal(err)
@@ -588,16 +588,16 @@ func TestLongbow_PaginationAndJSON(t *testing.T) {
 }
 
 func TestSQLite_DefaultDSN(t *testing.T) {
-	defer os.Remove("ledger.db")
-	defer os.Remove("ledger.db-journal")
-	defer os.Remove("ledger.db-shm")
-	defer os.Remove("ledger.db-wal")
+	defer func() { _ = os.Remove("ledger.db") }()
+	defer func() { _ = os.Remove("ledger.db-journal") }()
+	defer func() { _ = os.Remove("ledger.db-shm") }()
+	defer func() { _ = os.Remove("ledger.db-wal") }()
 
 	backend, err := NewBackend("sqlite", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer backend.Close()
+	defer func() { _ = backend.Close() }()
 	if err := backend.Init(); err != nil {
 		t.Fatal(err)
 	}
@@ -605,13 +605,13 @@ func TestSQLite_DefaultDSN(t *testing.T) {
 
 func TestSQLite_FiltersAndSorting(t *testing.T) {
 	tmp := t.TempDir() + "/filters_test.db"
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	backend, err := NewBackend("sqlite", tmp)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer backend.Close()
+	defer func() { _ = backend.Close() }()
 	_ = backend.Init()
 
 	now := time.Now()
@@ -655,7 +655,7 @@ func TestLongbow_FiltersAndSorting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer backend.Close()
+	defer func() { _ = backend.Close() }()
 	_ = backend.Init()
 
 	now := time.Now()
@@ -734,13 +734,13 @@ func TestLongbow_FiltersAndSorting(t *testing.T) {
 
 func TestSQLite_ScanErrors(t *testing.T) {
 	tmp := t.TempDir() + "/scan_error.db"
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	backend, err := NewBackend("sqlite", tmp)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer backend.Close()
+	defer func() { _ = backend.Close() }()
 
 	if err := backend.Init(); err != nil {
 		t.Fatal(err)

@@ -154,39 +154,58 @@ func GCADApply(steered, unsteered []float64, turnDelta int, cfg GCADConfig) ([]f
 		return steered, false
 	}
 
+	out := make([]float64, len(steered))
+	wasCropped := GCADApplyInto(out, steered, unsteered, turnDelta, cfg)
+	return out, wasCropped
+}
+
+// GCADApplyInPlace crops and attenuates attention-delta vectors in-place inside steered,
+// avoiding any heap allocation on the KV-cache update hot path.
+func GCADApplyInPlace(steered, unsteered []float64, turnDelta int, cfg GCADConfig) bool {
+	if len(steered) == 0 || len(steered) != len(unsteered) {
+		return false
+	}
+	return GCADApplyInto(steered, steered, unsteered, turnDelta, cfg)
+}
+
+// GCADApplyInto computes the GCAD-bounded activation directly into dst without intermediate delta slice allocations.
+func GCADApplyInto(dst, steered, unsteered []float64, turnDelta int, cfg GCADConfig) bool {
 	dim := len(steered)
-	delta := make([]float64, dim)
-	for i := 0; i < dim; i++ {
-		delta[i] = steered[i] - unsteered[i]
+	if dim == 0 || len(unsteered) != dim || len(dst) < dim {
+		return false
 	}
 
-	deltaNorm := floats.Norm(delta, 2)
-	wasCropped := false
+	var sumSq float64
+	for i := 0; i < dim; i++ {
+		d := steered[i] - unsteered[i]
+		sumSq += d * d
+	}
+	deltaNorm := math.Sqrt(sumSq)
 
 	maxNorm := cfg.MaxDeltaNorm
 	if maxNorm <= 0 {
 		maxNorm = 1.5
 	}
 
+	scale := 1.0
+	wasCropped := false
+
 	// Crop if delta exceeds bound
 	if deltaNorm > maxNorm && deltaNorm > 1e-9 {
-		scale := maxNorm / deltaNorm
-		floats.Scale(scale, delta)
+		scale = maxNorm / deltaNorm
 		wasCropped = true
 	}
 
 	// Apply age decay
 	if turnDelta > 0 && cfg.GateDecay > 0 && cfg.GateDecay < 1.0 {
-		decay := math.Pow(cfg.GateDecay, float64(turnDelta))
-		floats.Scale(decay, delta)
+		scale *= math.Pow(cfg.GateDecay, float64(turnDelta))
 		wasCropped = true
 	}
 
-	// Reconstruct bounded steered activation: unsteered + bounded delta
-	result := make([]float64, dim)
+	// Write reconstructed bounded steered activation directly into dst: unsteered + scale * (steered - unsteered)
 	for i := 0; i < dim; i++ {
-		result[i] = unsteered[i] + delta[i]
+		dst[i] = unsteered[i] + scale*(steered[i]-unsteered[i])
 	}
 
-	return result, wasCropped
+	return wasCropped
 }

@@ -167,13 +167,13 @@ func (r *Reporter) ExportPDF(report *Report) ([]byte, error) {
 	buf.WriteString("0000000009 00000 n \n")
 
 	contentStart := len("%PDF-1.4\n") + len("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n")
-	buf.WriteString(fmt.Sprintf("%010d 00000 n \n", contentStart))
+	_, _ = fmt.Fprintf(&buf, "%010d 00000 n \n", contentStart)
 
 	pageStart := contentStart + len(contentStream)
-	buf.WriteString(fmt.Sprintf("%010d 00000 n \n", pageStart))
+	_, _ = fmt.Fprintf(&buf, "%010d 00000 n \n", pageStart)
 
 	fontStart := pageStart + len(pageObj)
-	buf.WriteString(fmt.Sprintf("%010d 00000 n \n", fontStart))
+	_, _ = fmt.Fprintf(&buf, "%010d 00000 n \n", fontStart)
 
 	trailer := fmt.Sprintf("trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", xrefOffset)
 	buf.WriteString(trailer)

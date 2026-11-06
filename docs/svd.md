@@ -1,8 +1,26 @@
 # Whitened SVD Extraction
 
+> **Status**: Current
+> **Last Updated**: 2026-11-05
+> **Version**: 0.8
+
 BurnNotice implements a robust method for extracting deception and behavioral directions using **Whitened Singular Value Decomposition (SVD)**. This method identifies the most significant directions of variance distinguishing positive (e.g., truthful) from negative (e.g., deceptive) activations. 
 
 Standard Difference-in-Means (DIM) or raw SVD can sometimes be dominated by high-variance components of the residual stream that are not necessarily semantic. By applying a whitening transformation first, we normalize the variance in all directions, allowing SVD to find the true underlying discriminative subspace.
+
+```mermaid
+flowchart TD
+    POS["Positive Activations\n(Truthful / Compliant)"] --> WIN["1. Percentile Winsorization\n(0.5th - 99.5th Clamping)"]
+    NEG["Negative Activations\n(Deceptive / Violating)"] --> WIN
+    WIN --> COV["2. Ledoit-Wolf Shrinkage Covariance\nΣ_shrink = (1 - α)S + α(Tr(S)/d)I"]
+    COV --> ZCA["3. ZCA Whitening Matrix\nW = Σ_shrink^(-1/2) (with Eigenvalue Floor)"]
+    WIN --> DIFF["4. Centered Difference Matrix\nX_diff = X_pos - μ_neg"]
+    DIFF --> WHITE["5. Whitened Difference Space\nX_white = X_diff · W"]
+    ZCA --> WHITE
+    WHITE --> SVD["6. Thin SVD Factorization\nX_white = U Σ V_white^T"]
+    SVD --> UNWHITE["7. Back-Transform (Unwhitening)\nV_orig = Σ_shrink^(1/2) · V_white"]
+    UNWHITE --> NORM["8. L2 Unit Normalization\nTop-K Orthonormal Directions"]
+```
 
 ## Process Overview
 

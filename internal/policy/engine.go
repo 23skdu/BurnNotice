@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"math"
 	"sync"
 	"time"
 )
@@ -112,7 +113,7 @@ func (e *Engine) UpdateThresholds(thresholds map[string]float64) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	for i, p := range e.policies {
-		if t, ok := thresholds[p.Metric]; ok {
+		if t, ok := thresholds[p.Metric]; ok && !math.IsNaN(t) && !math.IsInf(t, 0) {
 			e.policies[i].Threshold = t
 		}
 	}
@@ -123,7 +124,7 @@ func (e *Engine) AdjustThresholdsForDrift(drifts map[string]float64) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	for i, p := range e.policies {
-		if drift, ok := drifts[p.Metric]; ok {
+		if drift, ok := drifts[p.Metric]; ok && !math.IsNaN(drift) && !math.IsInf(drift, 0) {
 			e.policies[i].Threshold += drift
 		}
 	}

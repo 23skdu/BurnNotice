@@ -96,3 +96,34 @@ func TestDifferentSizes(t *testing.T) {
 		t.Fatal("different size buffers should not share memory")
 	}
 }
+
+func TestShouldGC_ZeroMaxUsage(t *testing.T) {
+	p := NewPool(0)
+	buf := p.Get(100)
+	p.Put(buf)
+	if p.ShouldGC() {
+		t.Error("ShouldGC should return false when maxUsage <= 0")
+	}
+}
+
+func BenchmarkPool_GetPut(b *testing.B) {
+	p := NewPool(1 << 20)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		buf := p.Get(4096)
+		p.Put(buf)
+	}
+}
+
+func BenchmarkPool_ConcurrentGetPut(b *testing.B) {
+	p := NewPool(1 << 22)
+	b.ReportAllocs()
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			buf := p.Get(1024)
+			p.Put(buf)
+		}
+	})
+}

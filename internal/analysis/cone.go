@@ -2,7 +2,9 @@ package analysis
 
 import (
 	"math"
+	"runtime"
 	"sort"
+	"sync"
 )
 
 // HarmCategory represents a category of harmful or deceptive behavior.
@@ -29,13 +31,58 @@ type ConceptConeAnalyzer struct {
 // NewConceptConeAnalyzer creates an analyzer for the given categories.
 func NewConceptConeAnalyzer(categories []HarmCategory) *ConceptConeAnalyzer {
 	dim := 0
-	if len(categories) > 0 && len(categories[0].Activations) > 0 {
-		dim = len(categories[0].Activations[0])
+	for _, cat := range categories {
+		for _, act := range cat.Activations {
+			if len(act) > 0 {
+				dim = len(act)
+				break
+			}
+		}
+		if dim > 0 {
+			break
+		}
 	}
 	return &ConceptConeAnalyzer{
 		categories: categories,
 		dim:        dim,
 	}
+}
+
+// parallelFor executes fn across [0, total) partitioned across a bounded worker pool.
+func parallelFor(total int, fn func(start, end int)) {
+	if total <= 0 {
+		return
+	}
+	workers := runtime.GOMAXPROCS(0)
+	if workers < 1 {
+		workers = 1
+	}
+	if workers > total {
+		workers = total
+	}
+	if workers == 1 {
+		fn(0, total)
+		return
+	}
+
+	chunkSize := (total + workers - 1) / workers
+	var wg sync.WaitGroup
+	for w := 0; w < workers; w++ {
+		start := w * chunkSize
+		if start >= total {
+			break
+		}
+		end := start + chunkSize
+		if end > total {
+			end = total
+		}
+		wg.Add(1)
+		go func(s, e int) {
+			defer wg.Done()
+			fn(s, e)
+		}(start, end)
+	}
+	wg.Wait()
 }
 
 // Analyze computes the full concept cone geometry across all categories.
@@ -67,10 +114,14 @@ func (c *ConceptConeAnalyzer) PairwiseSimilarities() [][]float64 {
 	sim := make([][]float64, n)
 	for i := 0; i < n; i++ {
 		sim[i] = make([]float64, n)
-		for j := 0; j < n; j++ {
-			sim[i][j] = cosineSimilarity(dirs[i], dirs[j])
-		}
 	}
+	parallelFor(n, func(start, end int) {
+		for i := start; i < end; i++ {
+			for j := 0; j < n; j++ {
+				sim[i][j] = cosineSimilarity(dirs[i], dirs[j])
+			}
+		}
+	})
 	return sim
 }
 
@@ -83,29 +134,48 @@ func (c *ConceptConeAnalyzer) IntrinsicDimensionality() int {
 }
 
 func (c *ConceptConeAnalyzer) extractDirections() [][]float64 {
-	dirs := make([][]float64, len(c.categories))
-	for i, cat := range c.categories {
-		if len(cat.Activations) == 0 {
-			continue
-		}
-		mean := make([]float64, c.dim)
-		for _, act := range cat.Activations {
-			for j := 0; j < c.dim; j++ {
-				mean[j] += act[j]
-			}
-		}
-		invN := 1.0 / float64(len(cat.Activations))
-		for j := 0; j < c.dim; j++ {
-			mean[j] *= invN
-		}
-		dirs[i] = normalize(mean)
+	n := len(c.categories)
+	dirs := make([][]float64, n)
+	if c.dim <= 0 {
+		return dirs
 	}
+	parallelFor(n, func(start, end int) {
+		for i := start; i < end; i++ {
+			cat := c.categories[i]
+			if len(cat.Activations) == 0 {
+				continue
+			}
+			mean := make([]float64, c.dim)
+			validActs := 0
+			for _, act := range cat.Activations {
+				if len(act) == 0 || hasNonFinite(act) {
+					continue
+				}
+				limit := c.dim
+				if len(act) < limit {
+					limit = len(act)
+				}
+				for j := 0; j < limit; j++ {
+					mean[j] += act[j]
+				}
+				validActs++
+			}
+			if validActs == 0 {
+				continue
+			}
+			invN := 1.0 / float64(validActs)
+			for j := 0; j < c.dim; j++ {
+				mean[j] *= invN
+			}
+			dirs[i] = normalize(mean)
+		}
+	})
 	return dirs
 }
 
 func (c *ConceptConeAnalyzer) computeSingularValues(dirs [][]float64) []float64 {
 	n := len(dirs)
-	if n == 0 {
+	if n == 0 || c.dim <= 0 {
 		return nil
 	}
 	d := c.dim
@@ -113,7 +183,7 @@ func (c *ConceptConeAnalyzer) computeSingularValues(dirs [][]float64) []float64 
 	mean := make([]float64, d)
 	count := 0
 	for _, dir := range dirs {
-		if dir == nil {
+		if len(dir) < d || hasNonFinite(dir) {
 			continue
 		}
 		for j := 0; j < d; j++ {
@@ -130,7 +200,7 @@ func (c *ConceptConeAnalyzer) computeSingularValues(dirs [][]float64) []float64 
 	}
 	idx := 0
 	for _, dir := range dirs {
-		if dir == nil {
+		if len(dir) < d || hasNonFinite(dir) {
 			continue
 		}
 		centered[idx] = make([]float64, d)
@@ -141,19 +211,31 @@ func (c *ConceptConeAnalyzer) computeSingularValues(dirs [][]float64) []float64 
 	}
 	centered = centered[:count]
 
+	denom := float64(count - 1)
+	if count <= 1 {
+		denom = 1.0
+	}
+	inv := 1.0 / denom
+
 	cov := make([][]float64, d)
 	for i := 0; i < d; i++ {
 		cov[i] = make([]float64, d)
-		for k := 0; k < count; k++ {
+	}
+	parallelFor(d, func(start, end int) {
+		for i := start; i < end; i++ {
+			row := cov[i]
+			for k := 0; k < count; k++ {
+				cki := centered[k][i]
+				ck := centered[k]
+				for j := 0; j < d; j++ {
+					row[j] += cki * ck[j]
+				}
+			}
 			for j := 0; j < d; j++ {
-				cov[i][j] += centered[k][i] * centered[k][j]
+				row[j] *= inv
 			}
 		}
-		inv := 1.0 / float64(count-1)
-		for j := 0; j < d; j++ {
-			cov[i][j] *= inv
-		}
-	}
+	})
 
 	sv := powerIterationSVD(cov, min(d, count))
 	return sv
@@ -165,14 +247,18 @@ func (c *ConceptConeAnalyzer) estimateIntrinsicDimensionality(singularValues []f
 	}
 	var total float64
 	for _, v := range singularValues {
-		total += v
+		if !math.IsNaN(v) && !math.IsInf(v, 0) && v > 0 {
+			total += v
+		}
 	}
 	if total == 0 {
 		return 0
 	}
 	var cumulative float64
 	for i, v := range singularValues {
-		cumulative += v
+		if !math.IsNaN(v) && !math.IsInf(v, 0) && v > 0 {
+			cumulative += v
+		}
 		if cumulative/total >= 0.9 {
 			return i + 1
 		}
@@ -180,16 +266,33 @@ func (c *ConceptConeAnalyzer) estimateIntrinsicDimensionality(singularValues []f
 	return len(singularValues)
 }
 
+type indexPair struct {
+	i, j int
+}
+
 func (c *ConceptConeAnalyzer) computePairwiseCosines(dirs [][]float64) map[string]float64 {
-	result := make(map[string]float64)
-	for i := 0; i < len(dirs); i++ {
-		for j := i + 1; j < len(dirs); j++ {
+	n := len(dirs)
+	var pairs []indexPair
+	for i := 0; i < n; i++ {
+		for j := i + 1; j < n; j++ {
 			if dirs[i] == nil || dirs[j] == nil {
 				continue
 			}
-			key := c.categories[i].Name + ":" + c.categories[j].Name
-			result[key] = cosineSimilarity(dirs[i], dirs[j])
+			pairs = append(pairs, indexPair{i: i, j: j})
 		}
+	}
+	vals := make([]float64, len(pairs))
+	parallelFor(len(pairs), func(start, end int) {
+		for idx := start; idx < end; idx++ {
+			p := pairs[idx]
+			vals[idx] = cosineSimilarity(dirs[p.i], dirs[p.j])
+		}
+	})
+
+	result := make(map[string]float64, len(pairs))
+	for idx, p := range pairs {
+		key := c.categories[p.i].Name + ":" + c.categories[p.j].Name
+		result[key] = vals[idx]
 	}
 	return result
 }
@@ -197,23 +300,39 @@ func (c *ConceptConeAnalyzer) computePairwiseCosines(dirs [][]float64) map[strin
 func cosineSimilarity(a, b []float64) float64 {
 	var dot, na, nb float64
 	for i := 0; i < len(a) && i < len(b); i++ {
-		dot += a[i] * b[i]
-		na += a[i] * a[i]
-		nb += b[i] * b[i]
+		ai, bi := a[i], b[i]
+		if math.IsNaN(ai) || math.IsInf(ai, 0) || math.IsNaN(bi) || math.IsInf(bi, 0) {
+			return 0
+		}
+		dot += ai * bi
+		na += ai * ai
+		nb += bi * bi
 	}
-	if na == 0 || nb == 0 {
+	if na == 0 || nb == 0 || math.IsInf(na, 0) || math.IsInf(nb, 0) {
 		return 0
 	}
-	return dot / (math.Sqrt(na) * math.Sqrt(nb))
+	sim := dot / (math.Sqrt(na) * math.Sqrt(nb))
+	if math.IsNaN(sim) || math.IsInf(sim, 0) {
+		return 0
+	}
+	if sim > 1.0 {
+		sim = 1.0
+	} else if sim < -1.0 {
+		sim = -1.0
+	}
+	return sim
 }
 
 func normalize(v []float64) []float64 {
+	if hasNonFinite(v) {
+		return make([]float64, len(v))
+	}
 	var norm float64
 	for _, x := range v {
 		norm += x * x
 	}
 	norm = math.Sqrt(norm)
-	if norm < 1e-10 {
+	if norm < 1e-10 || math.IsNaN(norm) || math.IsInf(norm, 0) {
 		return v
 	}
 	out := make([]float64, len(v))

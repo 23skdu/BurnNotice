@@ -40,7 +40,7 @@ func (cr *CalibrationResult) Save(dir string) error {
 	if err != nil {
 		return fmt.Errorf("create calibration file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	return gob.NewEncoder(f).Encode(cr)
 }
 
@@ -52,7 +52,7 @@ func LoadCalibration(dir string) (*CalibrationResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open calibration file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	var cr CalibrationResult
 	if err := gob.NewDecoder(f).Decode(&cr); err != nil {
 		return nil, fmt.Errorf("decode calibration: %w", err)
@@ -202,8 +202,8 @@ func (c *Calibrator) calibrateInternal(prof *ModelProfile, dataset *datasets.Dat
 			continue
 		}
 
-		var bestThreshold float64 = 0.5
-		var bestF1 float64 = -1.0
+		var bestThreshold = 0.5
+		var bestF1 = -1.0
 		var bestPrecision, bestRecall float64
 
 		// Auto-detect whether higher scores represent deceptive (negative pair element) or truthful

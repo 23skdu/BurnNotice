@@ -79,6 +79,36 @@ The following 10 steps were added to close that gap and ensure performance, accu
    - This turns claims into reviewable evidence and ensures full testability and reproducibility in future model updates or downstream forks.
    - Evidence: the project already has a substantial documentation and testing foundation; the missing step is to package results as a release artifact rather than ad hoc developer output.
 
+```mermaid
+flowchart LR
+    subgraph Env["Environment & Provenance"]
+        SHA["Git Commit SHA & Version"]
+        DS["Dataset SHA-256 Digest"]
+        HW["OS / Arch / CPU / Go / ORT Version"]
+    end
+
+    subgraph Gates["Automated Quality Gates"]
+        UNIT["Unit & Race Suite\n(90%+ Core Coverage)"]
+        ACC["Accuracy Gate\n(CKA, KL, Calibration)"]
+        ORA["Oracle Gate\n(-count=2 Golden Fixtures)"]
+        BENCH["Hot-Path Profiling\n(benchmark_results.txt)"]
+    end
+
+    subgraph Bundle["Release Evidence Bundle (dist/evidence/)"]
+        MAN["BenchmarkManifest\n(manifest.json)"]
+        SUMS["Cryptographic Digest\n(SHA256SUMS / BundleDigest)"]
+    end
+
+    SHA --> MAN
+    DS --> MAN
+    HW --> MAN
+    UNIT --> MAN
+    ACC --> MAN
+    ORA --> MAN
+    BENCH --> MAN
+    MAN --> SUMS
+```
+
 ---
 
 ## 🚀 10-Part Strategic Improvement Plan (v0.7+ Architecture)

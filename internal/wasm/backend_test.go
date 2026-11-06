@@ -2,7 +2,6 @@ package wasm
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -86,7 +85,7 @@ func TestTestModuleIsValid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWASMBackend failed: %v", err)
 	}
-	backend.Close()
+	_ = backend.Close()
 }
 
 func TestNewWASMBackend_FileNotFound(t *testing.T) {
@@ -137,7 +136,7 @@ func TestForward_Identity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWASMBackend failed: %v", err)
 	}
-	defer backend.Close()
+	defer func() { _ = backend.Close() }()
 
 	input := []float32{1.5, -2.0, 3.0, 0.0, -0.5}
 	out, err := backend.Forward(input)
@@ -161,7 +160,7 @@ func TestGetIntermediate_NoExport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWASMBackend failed: %v", err)
 	}
-	defer backend.Close()
+	defer func() { _ = backend.Close() }()
 
 	_, err = backend.GetIntermediate(0)
 	if err == nil {
@@ -176,7 +175,7 @@ func TestMultipleForwardCalls(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWASMBackend failed: %v", err)
 	}
-	defer backend.Close()
+	defer func() { _ = backend.Close() }()
 
 	for i := 0; i < 5; i++ {
 		input := []float32{float32(i), float32(i) * 2}
@@ -200,7 +199,7 @@ func TestLargeInput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWASMBackend failed: %v", err)
 	}
-	defer backend.Close()
+	defer func() { _ = backend.Close() }()
 
 	input := make([]float32, 10000)
 	for i := range input {
@@ -228,7 +227,7 @@ func TestForward_ValidModule(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWASMBackend failed: %v\nModule bytes:\n%x", err, testMod)
 	}
-	defer backend.Close()
+	defer func() { _ = backend.Close() }()
 
 	if !backend.loaded {
 		t.Error("expected backend.loaded to be true")
@@ -242,7 +241,7 @@ func TestForward_EmptyInput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWASMBackend failed: %v", err)
 	}
-	defer backend.Close()
+	defer func() { _ = backend.Close() }()
 
 	out, err := backend.Forward(nil)
 	if err != nil {
@@ -251,18 +250,6 @@ func TestForward_EmptyInput(t *testing.T) {
 	if len(out) != 0 {
 		t.Errorf("got %d outputs, want 0", len(out))
 	}
-}
-
-// dumpModuleHex prints the full WASM binary for debugging.
-func dumpModuleHex(t *testing.T, data []byte) {
-	t.Helper()
-	for i, b := range data {
-		if i > 0 && i%16 == 0 {
-			fmt.Fprint(os.Stderr, "\n")
-		}
-		fmt.Fprintf(os.Stderr, "0x%02x, ", b)
-	}
-	fmt.Fprintln(os.Stderr)
 }
 
 func buildTestModuleWithIntermediate() []byte {
@@ -343,7 +330,7 @@ func TestGetIntermediate_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWASMBackend failed: %v", err)
 	}
-	defer backend.Close()
+	defer func() { _ = backend.Close() }()
 
 	// Extract intermediate (which should point to offset 0, length 4)
 	out, err := backend.GetIntermediate(0)
@@ -377,7 +364,7 @@ func TestGetIntermediate_NegativeLayerIndex(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWASMBackend failed: %v", err)
 	}
-	defer backend.Close()
+	defer func() { _ = backend.Close() }()
 
 	_, err = backend.GetIntermediate(-1)
 	if err == nil {
@@ -427,7 +414,7 @@ func TestForward_MissingMemoryExport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWASMBackend failed: %v", err)
 	}
-	defer backend.Close()
+	defer func() { _ = backend.Close() }()
 
 	_, err = backend.Forward([]float32{1.0})
 	if err == nil {
@@ -467,7 +454,7 @@ func TestForward_MissingForwardExport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWASMBackend failed: %v", err)
 	}
-	defer backend.Close()
+	defer func() { _ = backend.Close() }()
 
 	_, err = backend.Forward([]float32{1.0})
 	if err == nil {
@@ -508,7 +495,7 @@ func TestForward_LargeOutputLen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWASMBackend failed: %v", err)
 	}
-	defer backend.Close()
+	defer func() { _ = backend.Close() }()
 
 	_, err = backend.Forward([]float32{1.0})
 	if err == nil {
@@ -558,7 +545,7 @@ func TestGetIntermediate_InvalidResultCount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWASMBackend failed: %v", err)
 	}
-	defer backend.Close()
+	defer func() { _ = backend.Close() }()
 
 	_, err = backend.GetIntermediate(0)
 	if err == nil {
@@ -608,7 +595,7 @@ func TestGetIntermediate_ResultOutOfBounds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWASMBackend failed: %v", err)
 	}
-	defer backend.Close()
+	defer func() { _ = backend.Close() }()
 
 	_, err = backend.GetIntermediate(0)
 	if err == nil {
@@ -658,7 +645,7 @@ func TestGetIntermediate_ZeroLength(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWASMBackend failed: %v", err)
 	}
-	defer backend.Close()
+	defer func() { _ = backend.Close() }()
 
 	out, err := backend.GetIntermediate(0)
 	if err != nil {
@@ -710,7 +697,7 @@ func TestForward_MemWriteFailed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWASMBackend failed: %v", err)
 	}
-	defer backend.Close()
+	defer func() { _ = backend.Close() }()
 
 	_, err = backend.Forward([]float32{1.0})
 	if err == nil {
@@ -751,7 +738,7 @@ func TestForward_Trap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWASMBackend failed: %v", err)
 	}
-	defer backend.Close()
+	defer func() { _ = backend.Close() }()
 
 	_, err = backend.Forward([]float32{1.0})
 	if err == nil {
@@ -801,7 +788,7 @@ func TestGetIntermediate_Trap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWASMBackend failed: %v", err)
 	}
-	defer backend.Close()
+	defer func() { _ = backend.Close() }()
 
 	_, err = backend.GetIntermediate(0)
 	if err == nil {
@@ -851,7 +838,7 @@ func TestGetIntermediate_ReadMemFailed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWASMBackend failed: %v", err)
 	}
-	defer backend.Close()
+	defer func() { _ = backend.Close() }()
 
 	_, err = backend.GetIntermediate(0)
 	if err == nil {

@@ -1,6 +1,7 @@
 package analysis
 
 import (
+	"math"
 	"testing"
 )
 
@@ -65,4 +66,64 @@ func TestAlignmentImprintDetector_ClassifyDPO(t *testing.T) {
 		t.Error("expected non-empty classification method")
 	}
 	_ = metrics
+}
+
+func TestAccuracyNumericalStabilityAlignmentAndCone(t *testing.T) {
+	// Single-layer, zero-norm, and NaN directions in AlignmentImprintDetector
+	d := NewAlignmentImprintDetector()
+	d.AddLayerDirection(0, []float64{1.0, 2.0, 3.0})
+	m1 := d.Metrics()
+	if math.IsNaN(m1.EffectiveRank) || math.IsNaN(m1.SVDDecayRate) || math.IsNaN(m1.CrossLayerCoherence) || math.IsNaN(m1.DirectionStability) {
+		t.Errorf("single-layer detector returned NaN metrics: %+v", m1)
+	}
+
+	d.AddLayerDirection(1, []float64{0.0, 0.0, 0.0})
+	d.AddLayerDirection(2, []float64{math.NaN(), 1.0, 0.0})
+	d.AddLayerDirection(3, []float64{math.Inf(1), 0.0, 0.0})
+	m2 := d.Metrics()
+	if math.IsNaN(m2.EffectiveRank) || math.IsNaN(m2.SVDDecayRate) || math.IsNaN(m2.CrossLayerCoherence) || math.IsNaN(m2.DirectionStability) {
+		t.Errorf("degenerate detector returned NaN metrics: %+v", m2)
+	}
+
+	// ConceptConeAnalyzer with NaN, zero-norm, and single valid category
+	cats := []HarmCategory{
+		{Name: "nan_cat", Activations: [][]float64{{math.NaN(), 1.0, 0.0}}},
+		{Name: "zero_cat", Activations: [][]float64{{0.0, 0.0, 0.0}}},
+		{Name: "valid_cat", Activations: [][]float64{{1.0, 2.0, 3.0}}},
+	}
+	cone := NewConceptConeAnalyzer(cats)
+	res := cone.Analyze()
+	if res == nil {
+		t.Fatal("expected non-nil ConeResult")
+	}
+	for _, sv := range res.SingularValues {
+		if math.IsNaN(sv) || math.IsInf(sv, 0) {
+			t.Errorf("unexpected non-finite singular value: %v", sv)
+		}
+	}
+	for k, v := range res.CategoryPairwiseCosines {
+		if math.IsNaN(v) || math.IsInf(v, 0) || v < -1.0 || v > 1.0 {
+			t.Errorf("invalid pairwise cosine for %s: %v", k, v)
+		}
+	}
+
+	// ProjectLatentSpace with NaN / Inf / degenerate inputs
+	if _, err := ProjectLatentSpace(nil, nil, nil); err == nil {
+		t.Error("expected error for empty points")
+	}
+	if _, err := ProjectLatentSpace([]LatentPoint{{Vector: []float64{1.0}}}, nil, nil); err == nil {
+		t.Error("expected error for 1D vector")
+	}
+	if _, err := ProjectLatentSpace([]LatentPoint{
+		{Vector: []float64{math.NaN(), 1.0}},
+		{Vector: []float64{1.0, 2.0}},
+	}, nil, nil); err == nil {
+		t.Error("expected error for NaN activation vector")
+	}
+	if _, err := ProjectLatentSpace([]LatentPoint{
+		{Vector: []float64{1.0, 2.0}},
+		{Vector: []float64{3.0, 4.0}},
+	}, []float64{math.Inf(1), 0.0}, []float64{0.0, 1.0}); err == nil {
+		t.Error("expected error for Inf basis vector")
+	}
 }

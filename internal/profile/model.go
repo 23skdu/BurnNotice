@@ -42,7 +42,7 @@ func (p *ModelProfile) Save(dir string) error {
 	if err != nil {
 		return fmt.Errorf("create file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	enc := gob.NewEncoder(f)
 	return enc.Encode(p)
@@ -55,7 +55,7 @@ func LoadProfile(dir string) (*ModelProfile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open profile: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var p ModelProfile
 	if err := gob.NewDecoder(f).Decode(&p); err != nil {

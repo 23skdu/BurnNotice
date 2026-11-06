@@ -3,6 +3,8 @@ package longbow
 import (
 	"context"
 	"math"
+	"path/filepath"
+	"sync"
 	"testing"
 )
 
@@ -151,7 +153,7 @@ func TestNewClient_SQLiteBackend(t *testing.T) {
 
 func TestIngest_Query_Search_SQLite(t *testing.T) {
 	c := NewClient(Config{Dim: 3, Backend: "sqlite"})
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	ctx := context.Background()
 	acts := [][]float32{
@@ -259,7 +261,7 @@ func TestClient_AdditionalEdgeCases(t *testing.T) {
 
 	// 4. Closed SQLite database errors
 	cSqlite := NewClient(Config{Dim: 3, Backend: "sqlite", Addr: "file::memory:?cache=shared"})
-	cSqlite.Close() // Close immediately
+	_ = cSqlite.Close() // Close immediately
 
 	// Ingest on closed SQLite db should fail
 	err = cSqlite.Ingest(ctx, [][]float32{{1, 2, 3}}, []uint64{10})
@@ -309,7 +311,8 @@ func TestClient_AdditionalEdgeCases(t *testing.T) {
 		t.Error("expected Query to activate fallback mode when sc is nil")
 	}
 
-	// Search with sc=nil switches to fallback
+	// Reset fallbackMode to 0 so Search with sc=nil switches to fallback
+	cFlightMock.SetFallbackMode(false)
 	sIDs, sDists, err := cFlightMock.Search(ctx, []float32{1, 2, 3}, 5)
 	if err != nil {
 		t.Fatalf("Search on mock client failed: %v", err)
@@ -317,4 +320,78 @@ func TestClient_AdditionalEdgeCases(t *testing.T) {
 	if len(sIDs) != 0 || len(sDists) != 0 {
 		t.Errorf("expected empty search results on fresh fallback, got %v, %v", sIDs, sDists)
 	}
+	if !cFlightMock.IsFallbackActive() {
+		t.Error("expected Search to activate fallback mode when sc is nil")
+	}
+	if err := cFlightMock.Close(); err != nil {
+		t.Errorf("Close on mock client failed: %v", err)
+	}
+
+	// 8. Query and Search directly triggering Flight fallback when sc != nil
+	cDirectQuery := NewClient(Config{Addr: "localhost:0", Dim: 3})
+	defer func() { _ = cDirectQuery.Close() }()
+	_, err = cDirectQuery.Query(ctx, []uint64{1})
+	if err != nil {
+		t.Fatalf("Direct Query fallback failed: %v", err)
+	}
+	if !cDirectQuery.IsFallbackActive() {
+		t.Error("expected Direct Query to activate fallback")
+	}
+
+	cDirectSearch := NewClient(Config{Addr: "localhost:0", Dim: 3})
+	defer func() { _ = cDirectSearch.Close() }()
+	_, _, err = cDirectSearch.Search(ctx, []float32{1, 0, 0}, 2)
+	if err != nil {
+		t.Fatalf("Direct Search fallback failed: %v", err)
+	}
+	if !cDirectSearch.IsFallbackActive() {
+		t.Error("expected Direct Search to activate fallback")
+	}
+
+	// 9. SQLite euclidean distance and k > len(list), plus dropped table error
+	dbPath := filepath.Join(t.TempDir(), "euc.db")
+	cEuc := NewClient(Config{Addr: dbPath, Dim: 2, Metric: "euclidean", Backend: "sqlite"})
+	defer func() { _ = cEuc.Close() }()
+	if err := cEuc.Ingest(ctx, [][]float32{{1, 0}, {0, 1}}, []uint64{1, 2}); err != nil {
+		t.Fatalf("Ingest euclidean sqlite failed: %v", err)
+	}
+	eIDs, _, err := cEuc.Search(ctx, []float32{1, 0}, 10)
+	if err != nil || len(eIDs) != 2 {
+		t.Fatalf("Search euclidean sqlite got %v, err %v", eIDs, err)
+	}
+	_, _ = cEuc.db.Exec(`DROP TABLE vectors`)
+	if err := cEuc.Ingest(ctx, [][]float32{{1, 0}}, []uint64{3}); err == nil {
+		t.Error("expected error ingesting into dropped table")
+	}
+}
+
+func TestConcurrentRace_Client(t *testing.T) {
+	c := NewClient(Config{
+		Addr:   "localhost:0",
+		Dim:    4,
+		Metric: "cosine",
+	})
+	defer func() { _ = c.Close() }()
+	c.SetFallbackMode(true)
+
+	ctx := context.Background()
+	var wg sync.WaitGroup
+	workers := 16
+	iters := 25
+
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			for i := 0; i < iters; i++ {
+				id := uint64(workerID*1000 + i)
+				vec := []float32{float32(workerID + 1), float32(i + 1), 0.5, 0.25}
+				_ = c.Ingest(ctx, [][]float32{vec}, []uint64{id})
+				_, _ = c.Query(ctx, []uint64{id})
+				_, _, _ = c.Search(ctx, vec, 3)
+				_ = c.IsFallbackActive()
+			}
+		}(w)
+	}
+	wg.Wait()
 }
