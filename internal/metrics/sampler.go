@@ -7,8 +7,8 @@ import (
 // AdaptiveSampler determines whether an event should be sampled.
 // It uses a simple atomic counter to sample 1 in every N events.
 type AdaptiveSampler struct {
-	counter   atomic.Uint64
-	sampleN   atomic.Uint64
+	counter atomic.Uint64
+	sampleN atomic.Uint64
 }
 
 // NewAdaptiveSampler creates a new sampler that samples 1 in every n events.

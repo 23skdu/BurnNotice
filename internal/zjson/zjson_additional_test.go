@@ -45,12 +45,12 @@ func TestZJSON_HasOmitEmpty(t *testing.T) {
 
 func TestZJSON_IsEmptyValue(t *testing.T) {
 	type OmitStruct struct {
-		A []int    `json:"a,omitempty"`
-		B bool     `json:"b,omitempty"`
-		C int      `json:"c,omitempty"`
-		D uint     `json:"d,omitempty"`
-		E float64  `json:"e,omitempty"`
-		F *int     `json:"f,omitempty"`
+		A []int   `json:"a,omitempty"`
+		B bool    `json:"b,omitempty"`
+		C int     `json:"c,omitempty"`
+		D uint    `json:"d,omitempty"`
+		E float64 `json:"e,omitempty"`
+		F *int    `json:"f,omitempty"`
 	}
 	// All empty values should be omitted
 	res, err := Marshal(OmitStruct{})

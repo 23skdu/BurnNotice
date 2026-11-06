@@ -17,27 +17,27 @@ type Config struct {
 
 // Request represents an intercepted agent request.
 type Request struct {
-	Prompt     string
-	SessionID  string
-	Timestamp  time.Time
-	Metadata   map[string]string
+	Prompt    string
+	SessionID string
+	Timestamp time.Time
+	Metadata  map[string]string
 }
 
 // Response represents an intercepted agent response.
 type Response struct {
-	Text       string
-	SessionID  string
-	Timestamp  time.Time
-	Scores     map[string]float64
-	Metadata   map[string]string
+	Text      string
+	SessionID string
+	Timestamp time.Time
+	Scores    map[string]float64
+	Metadata  map[string]string
 }
 
 // Middleware intercepts agent requests and responses for monitoring.
 type Middleware struct {
-	config   Config
-	scorer   interface{}
-	steerer  interface{}
-	ledger   interface{}
+	config  Config
+	scorer  interface{}
+	steerer interface{}
+	ledger  interface{}
 }
 
 // NewMiddleware creates a new BurnNotice middleware.

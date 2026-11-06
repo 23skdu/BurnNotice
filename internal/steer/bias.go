@@ -29,7 +29,9 @@ func IsBiasSupported(c TransformerComponent) bool {
 }
 
 // ComputeBiasSteering projects the steering direction out of a transformer component bias vector:
-//   b' = b - strength * (b · v / (||v||^2 + regAlpha)) * v
+//
+//	b' = b - strength * (b · v / (||v||^2 + regAlpha)) * v
+//
 // This enables permanent or inference-time bias-only concept ablation without altering activation buffers.
 func ComputeBiasSteering(bias, direction []float64, strength, regAlpha float64) ([]float64, error) {
 	if len(bias) == 0 {

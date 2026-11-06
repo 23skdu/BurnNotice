@@ -16,17 +16,17 @@ type SafetensorsHeader struct {
 
 // TensorInfo holds metadata for a single tensor.
 type TensorInfo struct {
-	DType    string   `json:"dtype"`
-	Shape    []uint64 `json:"shape"`
+	DType       string   `json:"dtype"`
+	Shape       []uint64 `json:"shape"`
 	DataOffsets []uint64 `json:"data_offsets"`
 }
 
 // Tensor represents a loaded tensor with its name and data.
 type Tensor struct {
-	Name   string
-	DType  string
-	Shape  []uint64
-	Data   []byte
+	Name  string
+	DType string
+	Shape []uint64
+	Data  []byte
 }
 
 // ParseSafetensors reads a .safetensors file and returns all tensors.

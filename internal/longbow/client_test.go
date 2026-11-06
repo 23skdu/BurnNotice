@@ -318,6 +318,3 @@ func TestClient_AdditionalEdgeCases(t *testing.T) {
 		t.Errorf("expected empty search results on fresh fallback, got %v, %v", sIDs, sDists)
 	}
 }
-
-
-

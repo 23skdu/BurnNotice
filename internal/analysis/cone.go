@@ -7,7 +7,7 @@ import (
 
 // HarmCategory represents a category of harmful or deceptive behavior.
 type HarmCategory struct {
-	Name       string
+	Name        string
 	Activations [][]float64
 }
 

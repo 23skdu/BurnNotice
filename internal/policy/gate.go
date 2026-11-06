@@ -8,9 +8,9 @@ import (
 type IntentType string
 
 const (
-	IntentCreativeWriting IntentType = "creative_writing"
-	IntentAcademicQuery   IntentType = "academic_query"
-	IntentFictionalRoleplay IntentType = "fictional_roleplay"
+	IntentCreativeWriting     IntentType = "creative_writing"
+	IntentAcademicQuery       IntentType = "academic_query"
+	IntentFictionalRoleplay   IntentType = "fictional_roleplay"
 	IntentGeneralConversation IntentType = "general_conversation"
 )
 
@@ -21,8 +21,8 @@ type LLMClient interface {
 
 // SemanticGater classifies conversational prompts to adjust safety steering policies dynamically.
 type SemanticGater struct {
-	mu           sync.RWMutex
-	llm          LLMClient
+	mu            sync.RWMutex
+	llm           LLMClient
 	bypassIntents map[IntentType]bool
 	intentWeights map[IntentType]float64
 }
@@ -32,13 +32,13 @@ func NewSemanticGater(llm LLMClient) *SemanticGater {
 	return &SemanticGater{
 		llm: llm,
 		bypassIntents: map[IntentType]bool{
-			IntentCreativeWriting: true,
+			IntentCreativeWriting:   true,
 			IntentFictionalRoleplay: true,
 		},
 		intentWeights: map[IntentType]float64{
-			IntentCreativeWriting: 0.1,
-			IntentFictionalRoleplay: 0.0,
-			IntentAcademicQuery:   0.3,
+			IntentCreativeWriting:     0.1,
+			IntentFictionalRoleplay:   0.0,
+			IntentAcademicQuery:       0.3,
 			IntentGeneralConversation: 1.0,
 		},
 	}

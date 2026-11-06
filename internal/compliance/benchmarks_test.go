@@ -10,7 +10,7 @@ func TestCapabilityEvaluator_Evaluate(t *testing.T) {
 
 	t.Run("Safe Degradation", func(t *testing.T) {
 		benchmarks := []CapabilityBenchmark{
-			{Name: "MMLU", Baseline: 0.80, Current: 0.76}, // 5% degradation
+			{Name: "MMLU", Baseline: 0.80, Current: 0.76},  // 5% degradation
 			{Name: "GSM8K", Baseline: 0.90, Current: 0.85}, // 5.5% degradation
 		}
 
@@ -25,7 +25,7 @@ func TestCapabilityEvaluator_Evaluate(t *testing.T) {
 
 	t.Run("Unsafe Degradation", func(t *testing.T) {
 		benchmarks := []CapabilityBenchmark{
-			{Name: "MMLU", Baseline: 0.80, Current: 0.60}, // 25% degradation
+			{Name: "MMLU", Baseline: 0.80, Current: 0.60},  // 25% degradation
 			{Name: "GSM8K", Baseline: 0.90, Current: 0.80}, // 11% degradation
 		}
 

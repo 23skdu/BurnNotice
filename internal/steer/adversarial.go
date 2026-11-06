@@ -33,10 +33,10 @@ func DefaultAdversarialShieldConfig() AdversarialShieldConfig {
 
 // AdversarialShieldStats maintains thread-safe live shield metrics for dashboard telemetry.
 type AdversarialShieldStats struct {
-	BlockedSuffixes     int64   `json:"blocked_suffixes"`
-	PerturbationsAdded  int64   `json:"perturbations_added"`
-	MaskedGradients     int64   `json:"masked_gradients"`
-	MeanNoiseMagnitude  float64 `json:"mean_noise_magnitude"`
+	BlockedSuffixes    int64   `json:"blocked_suffixes"`
+	PerturbationsAdded int64   `json:"perturbations_added"`
+	MaskedGradients    int64   `json:"masked_gradients"`
+	MeanNoiseMagnitude float64 `json:"mean_noise_magnitude"`
 }
 
 // AdversarialShield provides multi-layered defenses against gradient-based suffix optimization (GCG)

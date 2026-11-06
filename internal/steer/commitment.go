@@ -7,10 +7,10 @@ import (
 
 // CommitmentWindowConfig defines parameters for prefill behavioral commitment analysis.
 type CommitmentWindowConfig struct {
-	ModelFamily      string  `json:"model_family"`
-	DefaultWindow    int     `json:"default_window"`    // window span in tokens around commitment peak (e.g. 16)
-	PrefillDominant  bool    `json:"prefill_dominant"`  // if true, steering deactivates post-prefill
-	PostCommitDecay  float64 `json:"post_commit_decay"` // decay factor for decoding tokens [0.0, 1.0]
+	ModelFamily     string  `json:"model_family"`
+	DefaultWindow   int     `json:"default_window"`    // window span in tokens around commitment peak (e.g. 16)
+	PrefillDominant bool    `json:"prefill_dominant"`  // if true, steering deactivates post-prefill
+	PostCommitDecay float64 `json:"post_commit_decay"` // decay factor for decoding tokens [0.0, 1.0]
 }
 
 // DefaultCommitmentConfig returns architecture-calibrated defaults for a model family.

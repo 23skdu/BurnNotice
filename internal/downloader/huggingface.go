@@ -12,9 +12,9 @@ import (
 
 // HuggingFaceDownloader downloads models from the HuggingFace Hub.
 type HuggingFaceDownloader struct {
-	token    string
-	client   *http.Client
-	baseURL  string
+	token   string
+	client  *http.Client
+	baseURL string
 }
 
 // NewHuggingFaceDownloader creates a downloader with optional API token.

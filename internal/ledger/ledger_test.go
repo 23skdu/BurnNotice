@@ -807,8 +807,3 @@ func TestSQLite_ScanErrors(t *testing.T) {
 		t.Error("expected error QueryInterventions on malformed layer value")
 	}
 }
-
-
-
-
-

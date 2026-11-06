@@ -34,7 +34,9 @@ func ComputeCentroid(activations [][]float64) ([]float64, error) {
 }
 
 // ComputeLatentSeparation measures the geometric cosine distance between harmful and benign cluster centroids:
-//   Separation = 1.0 - CosineSimilarity(c_harm, c_benign)
+//
+//	Separation = 1.0 - CosineSimilarity(c_harm, c_benign)
+//
 // Higher values indicate distinct, non-overlapping representation manifolds.
 func ComputeLatentSeparation(harmfulActs, benignActs [][]float64) (float64, error) {
 	cHarm, err := ComputeCentroid(harmfulActs)
@@ -88,7 +90,7 @@ func MeasureSeparationRetention(preHarm, preBenign, postHarm, postBenign [][]flo
 
 	retentionRatio = sepPost / sepPre
 	// Flag if drop > 25% (retention < 75%)
-	isDegraded = (sepPre - sepPost) / sepPre > 0.25
+	isDegraded = (sepPre-sepPost)/sepPre > 0.25
 
 	return retentionRatio, isDegraded, nil
 }

@@ -12,7 +12,7 @@ func TestAdaptiveSampler(t *testing.T) {
 	// count=0 (initially), ShouldSample calls Add(1) -> returns 1 -> 1%3 != 0 (false)
 	// next -> 2%3 != 0 (false)
 	// next -> 3%3 == 0 (true)
-	
+
 	if s.ShouldSample() {
 		t.Error("expected no sample on 1st call for n=3")
 	}

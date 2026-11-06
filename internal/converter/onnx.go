@@ -89,7 +89,7 @@ func serializeONNXModel(tensors []Tensor, opts Options) ([]byte, error) {
 
 	for _, t := range tensors {
 		dataType := dtypeToONNX(t.DType)
-		
+
 		tensorProto := &onnxpb.TensorProto{
 			Name:     proto.String(t.Name),
 			DataType: proto.Int32(int32(dataType)),

@@ -15,13 +15,13 @@ func TestReporter_LocalSave(t *testing.T) {
 	r := NewReporter("", tmpDir)
 
 	report := &Report{
-		ModelArchitecture: "llama",
-		ModelSize:         "7B",
-		SteeringMethod:    "whitened_svd",
-		RefusalRate:       0.05,
-		KLDivergence:      0.12,
+		ModelArchitecture:   "llama",
+		ModelSize:           "7B",
+		SteeringMethod:      "whitened_svd",
+		RefusalRate:         0.05,
+		KLDivergence:        0.12,
 		CapabilityRetention: 0.99,
-		Hardware:          "cuda",
+		Hardware:            "cuda",
 	}
 
 	if err := r.Submit(report); err != nil {
@@ -61,13 +61,13 @@ func TestReporter_HTTPS(t *testing.T) {
 
 	r := NewReporter(server.URL, "")
 	report := &Report{
-		ModelArchitecture: "llama",
-		ModelSize:         "7B",
-		SteeringMethod:    "whitened_svd",
-		RefusalRate:       0.05,
-		KLDivergence:      0.12,
+		ModelArchitecture:   "llama",
+		ModelSize:           "7B",
+		SteeringMethod:      "whitened_svd",
+		RefusalRate:         0.05,
+		KLDivergence:        0.12,
 		CapabilityRetention: 0.99,
-		Hardware:          "cuda",
+		Hardware:            "cuda",
 	}
 
 	if err := r.Submit(report); err != nil {
@@ -199,4 +199,3 @@ func TestLoadReports(t *testing.T) {
 		t.Error("expected error for malformed json in LoadReports")
 	}
 }
-

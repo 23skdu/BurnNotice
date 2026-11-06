@@ -14,13 +14,13 @@ import (
 
 // Metadata holds profile metadata.
 type Metadata struct {
-	ModelID          string    `json:"model_id"`
-	Architecture     string    `json:"architecture"`
-	Date             time.Time `json:"date"`
-	DirectionCount   int       `json:"direction_count"`
-	ValidationScore  float64   `json:"validation_score"`
-	Version          int       `json:"version"`
-	Path             string    `json:"path"`
+	ModelID         string    `json:"model_id"`
+	Architecture    string    `json:"architecture"`
+	Date            time.Time `json:"date"`
+	DirectionCount  int       `json:"direction_count"`
+	ValidationScore float64   `json:"validation_score"`
+	Version         int       `json:"version"`
+	Path            string    `json:"path"`
 }
 
 // Registry manages a searchable index of profiles.

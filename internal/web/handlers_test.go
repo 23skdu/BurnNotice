@@ -384,7 +384,7 @@ func (e *errorResponseWriter) WriteHeader(statusCode int) {}
 func TestHandlers_DashboardSummary_Error(t *testing.T) {
 	hub := NewSSEHub()
 	h := NewHandlers(hub)
-	
+
 	req := httptest.NewRequest("GET", "/api/summary", nil)
 	w := &errorResponseWriter{}
 
@@ -455,4 +455,3 @@ func TestHandlers_LatentSpaceData(t *testing.T) {
 		t.Errorf("latent data JSON missing expected elements: %s", body)
 	}
 }
-

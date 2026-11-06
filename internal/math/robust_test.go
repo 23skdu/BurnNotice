@@ -149,4 +149,3 @@ func TestWinsorizeInPlace_ExtremeClamping(t *testing.T) {
 		t.Errorf("expected all clamped to loVal, got %v", input2)
 	}
 }
-

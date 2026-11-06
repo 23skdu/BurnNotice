@@ -13,7 +13,7 @@ func TestExtractWhitenedSVD(t *testing.T) {
 		{0.9, 1.9, 0.4},
 		{1.1, 2.2, 0.5},
 	}
-	
+
 	negative := [][]float64{
 		{-1.0, -2.0, -0.5},
 		{-1.2, -2.1, -0.6},

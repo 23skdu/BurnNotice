@@ -87,4 +87,3 @@ func TestOODAnomalyDetector_IsAnomaly_MismatchedDimension(t *testing.T) {
 		t.Error("expected mismatched vector to be flagged as anomaly")
 	}
 }
-

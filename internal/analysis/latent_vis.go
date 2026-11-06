@@ -15,12 +15,12 @@ import (
 type SemanticCategory string
 
 const (
-	CategoryTruthful        SemanticCategory = "truthful"
-	CategoryDeceptive       SemanticCategory = "deceptive"
-	CategoryRefusal         SemanticCategory = "refusal"
-	CategoryCreative        SemanticCategory = "creative"
-	CategoryHarmful         SemanticCategory = "harmful"
-	CategoryHarmless        SemanticCategory = "harmless"
+	CategoryTruthful         SemanticCategory = "truthful"
+	CategoryDeceptive        SemanticCategory = "deceptive"
+	CategoryRefusal          SemanticCategory = "refusal"
+	CategoryCreative         SemanticCategory = "creative"
+	CategoryHarmful          SemanticCategory = "harmful"
+	CategoryHarmless         SemanticCategory = "harmless"
 	CategoryHarmlessBaseline SemanticCategory = "baseline"
 )
 
@@ -50,12 +50,12 @@ type LatentPoint struct {
 
 // TokenTrajectory represents a sequence of layer activations for a specific token or prompt.
 type TokenTrajectory struct {
-	PromptID       string        `json:"prompt_id"`
-	Token          string        `json:"token"`
+	PromptID       string           `json:"prompt_id"`
+	Token          string           `json:"token"`
 	Category       SemanticCategory `json:"category"`
-	Points         []LatentPoint `json:"points"`
-	TotalCurvature float64       `json:"total_curvature"`
-	Velocity       []float64     `json:"velocity"` // step-to-step euclidean delta
+	Points         []LatentPoint    `json:"points"`
+	TotalCurvature float64          `json:"total_curvature"`
+	Velocity       []float64        `json:"velocity"` // step-to-step euclidean delta
 }
 
 // ClusterSummary describes the statistical dispersion of a semantic category.
@@ -70,22 +70,22 @@ type ClusterSummary struct {
 
 // LatentSpaceProjection encapsulates the projected manifold and its topological features.
 type LatentSpaceProjection struct {
-	Points            []LatentPoint                   `json:"points"`
-	Trajectories      []TokenTrajectory               `json:"trajectories"`
+	Points            []LatentPoint                       `json:"points"`
+	Trajectories      []TokenTrajectory                   `json:"trajectories"`
 	Clusters          map[SemanticCategory]ClusterSummary `json:"clusters"`
-	VarianceExplained [2]float64                      `json:"variance_explained"`
-	Method            string                          `json:"method"`
+	VarianceExplained [2]float64                          `json:"variance_explained"`
+	Method            string                              `json:"method"`
 }
 
 // LatentVisualizerConfig controls visual styling and rendering attributes.
 type LatentVisualizerConfig struct {
-	Width              int
-	Height             int
-	ShowTrajectories   bool
+	Width               int
+	Height              int
+	ShowTrajectories    bool
 	ShowConfidenceHulls bool
-	ShowGrid           bool
-	DarkMode           bool
-	Title              string
+	ShowGrid            bool
+	DarkMode            bool
+	Title               string
 }
 
 // DefaultVisualizerConfig returns balanced defaults for SVG generation.
@@ -427,10 +427,10 @@ func GenerateSVG(proj *LatentSpaceProjection, cfg LatentVisualizerConfig) (strin
 	plotH := float64(height) - marginT - marginB
 
 	toScreenX := func(x float64) float64 {
-		return marginL + ((x - minX) / (maxX - minX)) * plotW
+		return marginL + ((x-minX)/(maxX-minX))*plotW
 	}
 	toScreenY := func(y float64) float64 {
-		return marginT + plotH - ((y - minY) / (maxY - minY)) * plotH
+		return marginT + plotH - ((y-minY)/(maxY-minY))*plotH
 	}
 	toScreenRadiusX := func(rx float64) float64 {
 		return (rx / (maxX - minX)) * plotW
@@ -603,8 +603,8 @@ func GenerateSVG(proj *LatentSpaceProjection, cfg LatentVisualizerConfig) (strin
 	col := 0
 	cats := []SemanticCategory{CategoryTruthful, CategoryDeceptive, CategoryRefusal, CategoryCreative, CategoryHarmful, CategoryHarmless}
 	for _, cat := range cats {
-		lx := float64(col * 100) + 12
-		ly := float64(row * 20) + 16
+		lx := float64(col*100) + 12
+		ly := float64(row*20) + 16
 		color := CategoryColors[cat]
 
 		buf.WriteString(fmt.Sprintf(`<circle cx="%f" cy="%f" r="4" fill="%s" />`+"\n", lx, ly, color))

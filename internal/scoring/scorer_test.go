@@ -120,12 +120,12 @@ func TestScorer_ConcurrentAccess(t *testing.T) {
 func TestScorer_ZeroNormDirection(t *testing.T) {
 	s := NewScorer(nil)
 	s.RegisterDirection("zero", []float64{0, 0, 0})
-	
+
 	scores := s.Score([]float64{1, 0, 0})
 	if scores == nil {
 		t.Fatal("expected scores, got nil")
 	}
-	
+
 	if val, ok := scores["zero"]; !ok || val != 0.0 {
 		t.Errorf("expected score for zero direction to be 0.0, got %v (ok=%v)", val, ok)
 	}
@@ -133,28 +133,28 @@ func TestScorer_ZeroNormDirection(t *testing.T) {
 
 func TestAggregator_Basic(t *testing.T) {
 	agg := NewAggregator()
-	
+
 	if agg.TokenCount() != 0 {
 		t.Errorf("expected TokenCount 0, got %d", agg.TokenCount())
 	}
-	
+
 	metrics := agg.Compute()
 	if metrics.TokenCount != 0 {
 		t.Errorf("expected ResponseMetrics.TokenCount 0, got %d", metrics.TokenCount)
 	}
-	
+
 	agg.AddToken("token1", map[string]float64{"deception": 0.5, "truth": 0.8})
 	agg.AddToken("token2", map[string]float64{"deception": 0.7, "truth": 0.6})
-	
+
 	if agg.TokenCount() != 2 {
 		t.Errorf("expected TokenCount 2, got %d", agg.TokenCount())
 	}
-	
+
 	metrics = agg.Compute()
 	if metrics.TokenCount != 2 {
 		t.Errorf("expected ResponseMetrics.TokenCount 2, got %d", metrics.TokenCount)
 	}
-	
+
 	// Check means
 	if math.Abs(metrics.MeanScores["deception"]-0.6) > 1e-9 {
 		t.Errorf("expected mean deception 0.6, got %f", metrics.MeanScores["deception"])
@@ -162,7 +162,7 @@ func TestAggregator_Basic(t *testing.T) {
 	if math.Abs(metrics.MeanScores["truth"]-0.7) > 1e-9 {
 		t.Errorf("expected mean truth 0.7, got %f", metrics.MeanScores["truth"])
 	}
-	
+
 	// Check maxes
 	if metrics.MaxScores["deception"] != 0.7 {
 		t.Errorf("expected max deception 0.7, got %f", metrics.MaxScores["deception"])
@@ -170,7 +170,7 @@ func TestAggregator_Basic(t *testing.T) {
 	if metrics.MaxScores["truth"] != 0.8 {
 		t.Errorf("expected max truth 0.8, got %f", metrics.MaxScores["truth"])
 	}
-	
+
 	// Test Reset
 	agg.Reset()
 	if agg.TokenCount() != 0 {
@@ -180,19 +180,19 @@ func TestAggregator_Basic(t *testing.T) {
 
 func TestAggregator_ComputeAUC(t *testing.T) {
 	agg := NewAggregator()
-	
+
 	// AUC with < 2 elements should return 0.0
 	agg.AddToken("t1", map[string]float64{"m1": 0.5})
 	m := agg.Compute()
 	if m.AUC["m1"] != 0.0 {
 		t.Errorf("expected AUC 0.0 for 1 token, got %f", m.AUC["m1"])
 	}
-	
+
 	agg.Reset()
 	agg.AddToken("t1", map[string]float64{"m1": 0.2})
 	agg.AddToken("t2", map[string]float64{"m1": 0.4})
 	agg.AddToken("t3", map[string]float64{"m1": 0.8})
-	
+
 	m = agg.Compute()
 	auc := m.AUC["m1"]
 	// Sorted: 0.2, 0.4, 0.8

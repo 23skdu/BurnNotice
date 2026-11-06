@@ -8,14 +8,14 @@ import (
 
 // AsyncScorer handles non-blocking activation scoring with a synchronous bypass fallback.
 type AsyncScorer struct {
-	ringBuffer     chan []float64
-	capacity       int
-	bypassActive   int32 // Atomic flag (0 = Async, 1 = Synchronous Bypass Active)
-	latencyLimit   time.Duration
-	bypassRatio    float64
-	scorer         *Scorer
-	onViolation    func(map[string]float64)
-	latencyTrack   int64 // Atomic nanoseconds processing latency
+	ringBuffer   chan []float64
+	capacity     int
+	bypassActive int32 // Atomic flag (0 = Async, 1 = Synchronous Bypass Active)
+	latencyLimit time.Duration
+	bypassRatio  float64
+	scorer       *Scorer
+	onViolation  func(map[string]float64)
+	latencyTrack int64 // Atomic nanoseconds processing latency
 }
 
 // NewAsyncScorer creates a non-blocking scorer with capacity and safety limits.
@@ -26,7 +26,7 @@ func NewAsyncScorer(scorer *Scorer, capacity int, onViolation func(map[string]fl
 	return &AsyncScorer{
 		ringBuffer:   make(chan []float64, capacity),
 		capacity:     capacity,
-		bypassRatio:  0.85,                      // 85% depth threshold
+		bypassRatio:  0.85,                    // 85% depth threshold
 		latencyLimit: 2500 * time.Microsecond, // 2.5ms latency limit
 		scorer:       scorer,
 		onViolation:  onViolation,

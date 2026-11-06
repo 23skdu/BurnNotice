@@ -1,9 +1,9 @@
 package scoring
 
 import (
+	"gonum.org/v1/gonum/floats"
 	"math"
 	"math/rand/v2"
-	"gonum.org/v1/gonum/floats"
 	"sync"
 )
 

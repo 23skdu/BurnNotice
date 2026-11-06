@@ -248,5 +248,3 @@ func TestDetectArchitecture_LlamaQwenGemma(t *testing.T) {
 		})
 	}
 }
-
-

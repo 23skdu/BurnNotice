@@ -26,10 +26,10 @@ type CalibratedThreshold struct {
 
 // CalibrationResult holds all calibrated thresholds for a model profile.
 type CalibrationResult struct {
-	ModelID    string                          `json:"model_id"`
-	Thresholds map[string]*CalibratedThreshold `json:"thresholds"`
-	Timestamp  int64                           `json:"timestamp"`
-	DatasetSize int                            `json:"dataset_size"`
+	ModelID     string                          `json:"model_id"`
+	Thresholds  map[string]*CalibratedThreshold `json:"thresholds"`
+	Timestamp   int64                           `json:"timestamp"`
+	DatasetSize int                             `json:"dataset_size"`
 }
 
 // Save persists calibration results to a gob file alongside the profile.
@@ -62,13 +62,13 @@ func LoadCalibration(dir string) (*CalibrationResult, error) {
 
 // DriftDetector monitors rolling average projection drift and triggers recalibration.
 type DriftDetector struct {
-	mu             sync.Mutex
-	window         []float64
-	windowSize     int
-	mean           float64
-	variance       float64
+	mu               sync.Mutex
+	window           []float64
+	windowSize       int
+	mean             float64
+	variance         float64
 	lastRecalibrated time.Time
-	sigmaThreshold float64
+	sigmaThreshold   float64
 }
 
 // NewDriftDetector creates a drift detector with the given window size and sigma threshold.

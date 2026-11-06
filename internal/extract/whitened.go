@@ -9,13 +9,13 @@ import (
 // the difference matrix between positive and negative activations. The
 // pipeline is:
 //
-//	1. D = positive − mean(negative)            (n × d difference matrix)
-//	2. cov_combined = ShrinkageCovariance(pos ∪ neg, shrinkage)
-//	3. W = cov^(-1/2)   (ZCA whitening matrix)
-//	4. U = cov^(1/2)    (un-whitening matrix)
-//	5. D_white = D · W
-//	6. SVD: D_white = Σ_white · U_white · V_whiteᵀ
-//	7. V_orig = U · V_white                    (per nextsteps.md 7.3)
+//  1. D = positive − mean(negative)            (n × d difference matrix)
+//  2. cov_combined = ShrinkageCovariance(pos ∪ neg, shrinkage)
+//  3. W = cov^(-1/2)   (ZCA whitening matrix)
+//  4. U = cov^(1/2)    (un-whitening matrix)
+//  5. D_white = D · W
+//  6. SVD: D_white = Σ_white · U_white · V_whiteᵀ
+//  7. V_orig = U · V_white                    (per nextsteps.md 7.3)
 //
 // Each returned direction is L2-normalized. Singular values are returned in
 // descending SVD order.

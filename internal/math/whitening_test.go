@@ -387,4 +387,3 @@ func TestWhitening_EdgeCases(t *testing.T) {
 		t.Errorf("expected sqrt(negative) == 0, got %f", s)
 	}
 }
-
