@@ -20,6 +20,7 @@ By interfacing directly with the model's inner representations, BurnNotice bypas
 * **Chain-of-Thought (CoT) State Machine**: Monitors internal reasoning delimiters (`<think>` and `</think>`) in reasoning architectures (e.g. QwQ, DeepSeek-R1), enforcing zero-steering passivity during deliberation and activating calibrated intervention upon answer generation.
 * **Standardized Safety Evaluation & Heretic Score**: Evaluates steering configurations across 400 test prompts spanning 7 HarmBench categories. Identifies non-dominated configurations along the empirical Pareto frontier (KL divergence vs. Attack Success Rate) and outputs a composite Heretic safety score.
 * **Adversarial Robustness Shield**: Sanitizes input tokens against gradient-optimized adversarial suffixes (GCG attacks), injects controlled stochastic Gaussian noise into probe passes, and masks probe gradients with orthogonal decoys.
+* **Open Policy Agent (OPA) Latent-Aware Authorization**: Combines white-box latent activation telemetry (`deception`, `conflict`, `truth`, `oversight`, `kv_drift`) with structured black-box request context (MCP tool names, blast radius, arguments, CoT phase, and multi-agent trust tiers). Supports in-process OPA-compiled WebAssembly (`.wasm`) bundles via `wazero` with SHA-256 bundle digests, remote OPA REST sidecars (`/v1/data/...`), and compound declarative rules.
 * **Zero-Allocation Tokenizer & Parser (`zjson`)**: Uses a custom zero-copy JSON tokenizer and decoder for sub-millisecond serialization of structured activations and messages.
 * **Zero-Knowledge Privacy Telemetry**: Complies with formal privacy specifications, collecting zero prompts, outputs, user identities, or IP addresses. Provides local aggregation via `burnnotice aggregate`.
 
@@ -78,7 +79,7 @@ BurnNotice provides native, architecture-calibrated profiling, extraction, and s
 │   ├── svd.md                        # Winsorized Ledoit-Wolf ZCA Whitened SVD mathematical pipeline
 │   └── testing.md                    # Testing strategy, 90%+ coverage, 72 fuzz targets, accuracy & oracle gates
 ├── internal/
-│   ├── agent/             # Multi-agent monitoring hooks (MCP, LangChain, CrewAI)
+│   ├── agent/             # Multi-agent & MCP monitoring hooks with OPA Latent-Aware Authorization
 │   ├── analysis/          # Geometry: latent visualizer, concept cone, externalities, Heretic score
 │   ├── checkpoint/        # Job checkpoint manager (resume long-running profiling)
 │   ├── compliance/        # Regulatory compliance evaluation and reporting
@@ -94,7 +95,7 @@ BurnNotice provides native, architecture-calibrated profiling, extraction, and s
 │   ├── memory/            # sync.Pool activation buffer management
 │   ├── metrics/           # Prometheus instruments (50+) and OTel OTLP exporter
 │   ├── onnxpb/            # ONNX protobuf bindings and accessor helpers
-│   ├── policy/            # Policy engine, YAML parser, kill-switch guards
+│   ├── policy/            # Policy engine, OPA WASM/REST/compound evaluator, semantic gater, kill-switch
 │   ├── policydetect/      # Policy violation detector
 │   ├── profile/           # Model profile, architecture detection, versioning
 │   ├── profiler/          # Long-running profiler with progressive checkpointing

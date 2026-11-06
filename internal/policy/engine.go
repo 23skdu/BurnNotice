@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"context"
 	"math"
 	"sync"
 	"time"
@@ -18,10 +19,11 @@ type PolicyViolation struct {
 
 // Engine evaluates scores against registered policies.
 type Engine struct {
-	mu         sync.RWMutex
-	policies   []Policy
-	violations map[string]int // policy_name -> violation count
-	killSwitch *KillSwitch
+	mu           sync.RWMutex
+	policies     []Policy
+	violations   map[string]int // policy_name -> violation count
+	killSwitch   *KillSwitch
+	opaEvaluator *OPAEvaluator
 }
 
 // NewEngine creates a policy engine with the given policies.
@@ -37,6 +39,70 @@ func (e *Engine) RegisterKillSwitch(ks *KillSwitch) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.killSwitch = ks
+}
+
+// SetOPAEvaluator registers an Open Policy Agent evaluator for contextual,
+// multi-signal authorization across latent scores, MCP tools, CoT phases, and agents.
+func (e *Engine) SetOPAEvaluator(opa *OPAEvaluator) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.opaEvaluator = opa
+}
+
+// OPAEvaluator returns the currently registered OPAEvaluator, if any.
+func (e *Engine) OPAEvaluator() *OPAEvaluator {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.opaEvaluator
+}
+
+// EvaluateContext evaluates both fast scalar thresholds and the registered OPAEvaluator
+// against a rich contextual input (latent scores + MCP tool metadata + CoT state + agent tiers).
+func (e *Engine) EvaluateContext(ctx context.Context, input OPAInput) (OPADecision, []PolicyViolation, error) {
+	violations := e.Evaluate(input.Latent)
+
+	e.mu.RLock()
+	opa := e.opaEvaluator
+	ks := e.killSwitch
+	e.mu.RUnlock()
+
+	if opa == nil {
+		dec := OPADecision{Allow: true, Action: ActionAllow, Reason: "scalar_pass"}
+		for _, v := range violations {
+			dec.Action = v.Action
+			dec.PolicyID = v.PolicyName
+			dec.Reason = "scalar_violation:" + v.PolicyName
+			if v.Action == ActionBlock || v.Action == ActionTerminate {
+				dec.Allow = false
+				break
+			}
+		}
+		return dec, violations, nil
+	}
+
+	dec, err := opa.Evaluate(ctx, input)
+	if dec.Action != "" && dec.Action != ActionAllow {
+		polName := dec.PolicyID
+		if polName == "" {
+			polName = "opa_policy"
+		}
+		e.mu.Lock()
+		e.violations[polName]++
+		e.mu.Unlock()
+
+		violations = append(violations, PolicyViolation{
+			PolicyName: polName,
+			Metric:     "opa_contextual",
+			Score:      input.Latent["deception"],
+			Threshold:  0,
+			Action:     dec.Action,
+			Timestamp:  time.Now(),
+		})
+		if dec.Action == ActionTerminate && ks != nil {
+			ks.Trigger(polName + " OPA violation: emergency terminate triggered")
+		}
+	}
+	return dec, violations, err
 }
 
 // Evaluate checks all policies against the provided scores and returns violations.

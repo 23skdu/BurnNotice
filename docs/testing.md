@@ -60,7 +60,7 @@ All core packages meet or exceed the 90% statement coverage target:
 | `internal/math` | **96.6%** | Winsorization, Bessel/Ledoit-Wolf shrinkage covariance, ZCA whitening, ridge projection |
 | `internal/memory` | **100.0%** | Pooled activation buffer reuse and capacity bounds |
 | `internal/metrics` | **96.3%** | Prometheus `/metrics` handler, OTel exporter configuration, adaptive sampler |
-| `internal/policy` | **100.0%** | Policy evaluation engine, dynamic drift threshold calibration, semantic gater, killswitch |
+| `internal/policy` | **90.1%** | Policy evaluation engine, OPA WASM/HTTP/compound evaluator (`OPAEvaluator`), dynamic drift threshold calibration, semantic gater, killswitch |
 | `internal/policydetect` | **98.1%** | Whitened Mahalanobis policy violation detection |
 | `internal/profile` | **98.1%** | Architecture auto-detection, threshold calibration, drift detection, version manager |
 | `internal/profiler` | **90.4%** | Progressive and distributed activation profiling |
@@ -76,7 +76,7 @@ All core packages meet or exceed the 90% statement coverage target:
 
 ---
 
-## 3. Fuzz Testing (72 Targets Across 25 Packages)
+## 3. Fuzz Testing (73 Targets Across 25 Packages)
 
 Every package in `internal/` and `cmd/` includes native Go `Fuzz*` targets runnable via `make test-fuzz`:
 
@@ -96,7 +96,7 @@ Every package in `internal/` and `cmd/` includes native Go `Fuzz*` targets runna
 | `internal/memory` | `FuzzPoolGetPut` |
 | `internal/metrics` | `FuzzAdaptiveSampler`, `FuzzAdaptiveSamplerSetRate`, `FuzzDefaultSampler`, `FuzzMetricsHandler`, `FuzzOTelConfigFromEnv` |
 | `internal/onnxpb` | `FuzzModelProtoUnmarshal` |
-| `internal/policy` | `FuzzSemanticGater_ClassifyPrompt` |
+| `internal/policy` | `FuzzSemanticGater_ClassifyPrompt`, `FuzzOPAEvaluator` |
 | `internal/profile` | `FuzzDetectModelFamilyAndPrompt`, `FuzzImportProfileAndDrift` |
 | `internal/profiler` | `FuzzProgressiveProfiler`, `FuzzDistributedProfiler` |
 | `internal/registry` | `FuzzRegistryAddListFilter` |

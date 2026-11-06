@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"burnnotice/internal/policy"
 )
 
 func TestNewMiddleware(t *testing.T) {
@@ -104,6 +106,57 @@ func TestMCPMiddleware(t *testing.T) {
 	err = mcp.InterceptToolResponse(context.Background(), "search", "search results")
 	if err != nil {
 		t.Fatalf("InterceptToolResponse error: %v", err)
+	}
+}
+
+func TestMCPMiddleware_WithOPAEvaluator(t *testing.T) {
+	ctx := context.Background()
+	mw, _ := NewMiddleware(Config{ModelID: "test", ScoringThreshold: 0.7})
+	mcp := NewMCPMiddleware(mw, "sess-opa")
+
+	// Without OPAEvaluator: scalar threshold fallback
+	dec, err := mcp.InterceptToolCallWithLatent(ctx, "read_file", "low", nil, map[string]float64{"deception": 0.2})
+	if err != nil || !dec.Allow {
+		t.Fatalf("expected allow without OPA on low score, got dec=%+v err=%v", dec, err)
+	}
+	dec, err = mcp.InterceptToolCallWithLatent(ctx, "exec_sql", "high", nil, map[string]float64{"deception": 0.85})
+	if err == nil || dec.Allow {
+		t.Fatalf("expected scalar block without OPA on high score, got dec=%+v err=%v", dec, err)
+	}
+
+	// Attach OPAEvaluator with tool + blast_radius + latent score rule
+	opa, err := policy.NewOPAEvaluator(policy.OPAConfig{
+		Rules: []policy.OPARule{
+			{
+				ID:         "block_exec_sql_deception",
+				Tools:      []string{"exec_sql"},
+				BlastRadii: []string{"high", "critical"},
+				MinScores:  map[string]float64{"deception": 0.35},
+				Action:     policy.ActionBlock,
+				Reason:     "latent deception on destructive tool",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewOPAEvaluator failed: %v", err)
+	}
+	mcp.SetOPAEvaluator(opa)
+
+	// InterceptToolCall (low default scores -> allowed)
+	if err := mcp.InterceptToolCall(ctx, "exec_sql", map[string]interface{}{"q": "SELECT 1"}); err != nil {
+		t.Fatalf("expected allow on zero score InterceptToolCall, got %v", err)
+	}
+
+	// InterceptToolCallWithLatent on exec_sql with deception=0.45 -> Blocked by OPA
+	dec, err = mcp.InterceptToolCallWithLatent(ctx, "exec_sql", "high", map[string]interface{}{"q": "DROP TABLE users"}, map[string]float64{"deception": 0.45})
+	if err == nil || dec.Allow || dec.PolicyID != "block_exec_sql_deception" {
+		t.Fatalf("expected OPA block on exec_sql with deception=0.45, got dec=%+v err=%v", dec, err)
+	}
+
+	// InterceptToolCallWithLatent on read_file with deception=0.45 -> Allowed by OPA
+	dec, err = mcp.InterceptToolCallWithLatent(ctx, "read_file", "low", nil, map[string]float64{"deception": 0.45})
+	if err != nil || !dec.Allow {
+		t.Fatalf("expected OPA allow on read_file with deception=0.45, got dec=%+v err=%v", dec, err)
 	}
 }
 

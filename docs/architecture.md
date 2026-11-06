@@ -672,9 +672,44 @@ flowchart LR
 
 ---
 
-## Declarative Policy Engine & Semantic Intent Gating
+## Declarative Policy Engine, Open Policy Agent (OPA) & Semantic Intent Gating
 
-BurnNotice's policy engine (`internal/policy/`) evaluates live activation scores against declarative YAML rules, supporting both `greater` and `less` operators, F1-calibrated dynamic thresholds (`internal/profile/calibration.go`), and `SemanticGater` intent weighting (`internal/policy/gate.go`) to prevent topic-confusion false positives on benign creative writing or academic queries:
+BurnNotice separates policy enforcement into two latency tiers:
+1. **Per-Token / Per-Layer Hot Path (`internal/policy/engine.go`, `internal/steer/cast.go`)**: Sub-65µs, zero-allocation scalar and boolean condition tree evaluation (`greater`/`less` operators, F1-calibrated dynamic thresholds).
+2. **Control Plane & Tool/Agent Boundary (`internal/policy/opa.go`, `internal/agent/mcp.go`)**: **Open Policy Agent (OPA) Latent-Aware Authorization** (`OPAEvaluator`), which combines white-box residual activation telemetry (`OPAInput.Latent`) with structured black-box context (`OPAMCPContext` tool names/arguments/blast radius, `OPAAgentContext` sender/receiver trust tiers, `CoTPhase`, and `SemanticGater` `IntentType`).
+
+```mermaid
+flowchart LR
+    subgraph Inputs["Latent-Aware Authorization Input (OPAInput)"]
+        LAT["White-Box Latent Scores\n(deception, conflict, truth,\noversight, kv_drift)"]
+        MCP["MCP Tool Context\n(tool_name, arguments,\nblast_radius, read_only)"]
+        AG["Multi-Agent & CoT State\n(from_tier, to_tier,\ncot_phase, intent)"]
+    end
+
+    subgraph Eval["OPAEvaluator (internal/policy/opa.go)"]
+        WASM["1. OPA-Compiled WASM\n(wazero Sandbox + SHA-256 Digest)"]
+        HTTP["2. OPA REST Sidecar\n(POST /v1/data/burnnotice/authz)"]
+        RULES["3. Compound Contextual Rules\n(OPARule Fallback)"]
+    end
+
+    subgraph Verdict["Governance Verdict (OPADecision)"]
+        ALLOW["allow\n(Passthrough)"]
+        STEER["steer\n(Method + Vector + Strength)"]
+        BLOCK["block / terminate\n(Reject Tool / Trigger KillSwitch)"]
+    end
+
+    LAT --> Eval
+    MCP --> Eval
+    AG --> Eval
+    WASM --> Verdict
+    HTTP --> Verdict
+    RULES --> Verdict
+```
+
+`OPAEvaluator` supports three execution backends with zero external Go dependencies:
+- **In-Process OPA-WASM (`OPAConfig.WASMPath` / `WASMBytes`)**: Executes Rego policies compiled via `opa build -t wasm` inside a memory-capped `wazero` WebAssembly sandbox and records the SHA-256 `BundleDigest` on every `OPADecision`.
+- **Remote OPA HTTP Sidecar (`OPAConfig.Endpoint`)**: Queries an external OPA daemon (`POST /v1/data/...`) with configurable timeouts and fail-closed/fail-open semantics.
+- **Compound Declarative Rules (`OPAConfig.Rules`)**: Evaluates multi-predicate `OPARule` definitions combining `Tools`, `BlastRadii`, `CoTPhases`, `ExcludeIntents`, `FromTiers`, `ToTiers`, `MinScores`, and `MaxScores`.
 
 ```yaml
 policies:
