@@ -249,3 +249,52 @@ mutex.prof
 goroutine.prof
 threadcreate.prof
 models/
+
+# Test, benchmark, and quality-gate outputs
+benchmark_results.txt
+unit_tests.txt
+accuracy_gate.txt
+oracle_gate.txt
+coverage.txt
+test_results*
+test-results/
+*.cov
+
+# macOS personal / Finder / Desktop metadata files
+.DS_Store
+**/.DS_Store
+.DSStore
+**/.DSStore
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Linux / XDG / KDE / GNOME personal & desktop files
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+nohup.out
+*.swp
+*.swo
+
+# Windows thumbnail / folder metadata
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+[Dd]esktop.ini

@@ -132,7 +132,7 @@ All core infrastructure, extraction, steering, analysis, and observability miles
 | **Adversarial Robustness Shield** | `internal/profile/obfuscation.go`, `internal/steer/adversarial.go` | Non-linear `MLPProbe`, Mahalanobis OOD, 2% Gaussian noise, GCG sanitization, query-similarity gradient masking |
 | **OPA Latent-Aware Authorization** | `internal/policy/opa.go`, `internal/agent/mcp.go` | In-process OPA WASM (`wazero`) + SHA-256 bundle digests, OPA REST sidecar, and compound MCP/CoT/agent rules |
 | **Native GPU Serving Plugins** | `plugins/cuda_kernels.cu`, `plugins/metal/`, `plugins/vllm/`, `plugins/tensorrt/` | CUDA warp-reduction kernels, Apple Silicon Metal MSL shaders, vLLM PyBind11 & TensorRT-LLM plugins |
-| **Zero-Knowledge Telemetry & Observability** | `internal/telemetry/`, `internal/metrics/`, `TELEMETRY.md` | 50+ Prometheus metrics, OTLP/HTTP exporter, `burnnotice aggregate` CLI |
+| **Zero-Knowledge Telemetry & Observability** | `internal/telemetry/`, `internal/metrics/`, `docs/telemetry.md` | 50+ Prometheus metrics, OTLP/HTTP exporter, `burnnotice aggregate` CLI |
 
 ---
 

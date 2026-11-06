@@ -318,7 +318,7 @@ burnnotice recommend
 
 ### `aggregate`
 
-Load all anonymous JSON telemetry reports from a local directory and compute aggregate metrics without transmitting any data over the network. Complies with the zero-knowledge specification in [`TELEMETRY.md`](../TELEMETRY.md).
+Load all anonymous JSON telemetry reports from a local directory and compute aggregate metrics without transmitting any data over the network. Complies with the zero-knowledge specification in [`telemetry.md`](telemetry.md).
 
 **Usage:**
 
