@@ -57,7 +57,9 @@ func TestLoRASteerer_ApplyLoRA(t *testing.T) {
 	l := NewLoRASteerer(2, 1)
 
 	direction := []float64{1, 0}
-	l.ComputeLoRAWeights(direction, 1.0)
+	if err := l.ComputeLoRAWeights(direction, 1.0); err != nil {
+		t.Fatalf("ComputeLoRAWeights error: %v", err)
+	}
 
 	weights := [][]float64{
 		{0, 0},
@@ -81,7 +83,9 @@ func TestLoRASteerer_ApplyLoRA(t *testing.T) {
 
 func TestLoRASteerer_ApplyLoRA_WrongDim(t *testing.T) {
 	l := NewLoRASteerer(2, 1)
-	l.ComputeLoRAWeights([]float64{1, 0}, 1.0)
+	if err := l.ComputeLoRAWeights([]float64{1, 0}, 1.0); err != nil {
+		t.Fatalf("ComputeLoRAWeights error: %v", err)
+	}
 
 	_, err := l.ApplyLoRA([][]float64{{0}})
 	if err == nil {
@@ -93,7 +97,9 @@ func TestLoRASteerer_ReverseLoRA(t *testing.T) {
 	l := NewLoRASteerer(2, 1)
 
 	direction := []float64{1, 0}
-	l.ComputeLoRAWeights(direction, 1.0)
+	if err := l.ComputeLoRAWeights(direction, 1.0); err != nil {
+		t.Fatalf("ComputeLoRAWeights error: %v", err)
+	}
 
 	weights := [][]float64{
 		{1, 2},
@@ -141,7 +147,9 @@ func TestLoRASteerer_RoundTrip(t *testing.T) {
 	l := NewLoRASteerer(3, 2)
 
 	direction := []float64{0.5, 0.3, 0.2}
-	l.ComputeLoRAWeights(direction, 0.5)
+	if err := l.ComputeLoRAWeights(direction, 0.5); err != nil {
+		t.Fatalf("ComputeLoRAWeights error: %v", err)
+	}
 
 	weights := [][]float64{
 		{1, 0, 0},
@@ -163,7 +171,9 @@ func TestLoRASteerer_RoundTrip(t *testing.T) {
 
 func TestLoRASteerer_ReverseLoRA_WrongDim(t *testing.T) {
 	l := NewLoRASteerer(2, 1)
-	l.ComputeLoRAWeights([]float64{1, 0}, 1.0)
+	if err := l.ComputeLoRAWeights([]float64{1, 0}, 1.0); err != nil {
+		t.Fatalf("ComputeLoRAWeights error: %v", err)
+	}
 	_, _ = l.ApplyLoRA([][]float64{{1, 2}, {3, 4}})
 
 	_, err := l.ReverseLoRA([][]float64{{1}})

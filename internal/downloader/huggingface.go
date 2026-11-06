@@ -86,7 +86,7 @@ func (d *HuggingFaceDownloader) listModelFiles(modelID string) ([]hfFile, error)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("API returned %d", resp.StatusCode)
@@ -127,7 +127,7 @@ func (d *HuggingFaceDownloader) downloadFile(modelID, filePath, outputDir string
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
 		return fmt.Errorf("download returned %d", resp.StatusCode)
@@ -138,7 +138,7 @@ func (d *HuggingFaceDownloader) downloadFile(modelID, filePath, outputDir string
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 
 	_, err = io.Copy(out, resp.Body)
 	return err

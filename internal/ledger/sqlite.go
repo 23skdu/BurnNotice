@@ -117,7 +117,7 @@ func (b *sqliteBackend) QueryAlerts(filter AlertFilter) ([]Alert, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var alerts []Alert
 	for rows.Next() {
@@ -140,7 +140,7 @@ func (b *sqliteBackend) QueryInterventions(sessionID string) ([]Intervention, er
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var interventions []Intervention
 	for rows.Next() {
@@ -188,7 +188,7 @@ func (b *sqliteBackend) GetAlertStats() (map[string]int, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	stats := make(map[string]int)
 	for rows.Next() {
@@ -226,8 +226,8 @@ func (b *sqliteBackend) ExportAlertsCSV(filter AlertFilter) (string, error) {
 	var sb strings.Builder
 	sb.WriteString("id,timestamp,session_id,metric,score,threshold,action\n")
 	for _, a := range alerts {
-		sb.WriteString(fmt.Sprintf("%d,%s,%s,%s,%.4f,%.4f,%s\n",
-			a.ID, a.Timestamp.Format(time.RFC3339), a.SessionID, a.Metric, a.Score, a.Threshold, a.Action))
+		_, _ = fmt.Fprintf(&sb, "%d,%s,%s,%s,%.4f,%.4f,%s\n",
+			a.ID, a.Timestamp.Format(time.RFC3339), a.SessionID, a.Metric, a.Score, a.Threshold, a.Action)
 	}
 	return sb.String(), nil
 }
@@ -238,13 +238,13 @@ func (b *sqliteBackend) IngestBatch(alerts []Alert) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	stmt, err := tx.Prepare("INSERT INTO alerts (timestamp, session_id, metric, score, threshold, action) VALUES (?, ?, ?, ?, ?, ?)")
 	if err != nil {
 		return err
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 
 	for _, a := range alerts {
 		if _, err := stmt.Exec(a.Timestamp.Format(time.RFC3339), a.SessionID, a.Metric, a.Score, a.Threshold, a.Action); err != nil {

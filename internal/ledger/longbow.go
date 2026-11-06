@@ -188,8 +188,8 @@ func (b *longbowBackend) ExportAlertsCSV(filter AlertFilter) (string, error) {
 	var sb strings.Builder
 	sb.WriteString("id,timestamp,session_id,metric,score,threshold,action\n")
 	for _, a := range alerts {
-		sb.WriteString(fmt.Sprintf("%d,%s,%s,%s,%.4f,%.4f,%s\n",
-			a.ID, a.Timestamp.Format(time.RFC3339), a.SessionID, a.Metric, a.Score, a.Threshold, a.Action))
+		_, _ = fmt.Fprintf(&sb, "%d,%s,%s,%s,%.4f,%.4f,%s\n",
+			a.ID, a.Timestamp.Format(time.RFC3339), a.SessionID, a.Metric, a.Score, a.Threshold, a.Action)
 	}
 	return sb.String(), nil
 }

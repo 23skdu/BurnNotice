@@ -1,6 +1,8 @@
 package scheduler
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 )
 
@@ -166,4 +168,40 @@ func TestGetRunningJobsAndQueue(t *testing.T) {
 	if queue[0].ID != "q1" {
 		t.Errorf("queued job ID = %s, want q1", queue[0].ID)
 	}
+}
+
+func TestConcurrentRace_Scheduler(t *testing.T) {
+	s := NewScheduler(500)
+	var wg sync.WaitGroup
+	workers := 16
+	iters := 25
+
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			for i := 0; i < iters; i++ {
+				jobID := fmt.Sprintf("job-%d-%d", workerID, i)
+				job := &Job{
+					ID:        jobID,
+					ModelSize: int64((i%5 + 1) * 10 * 1024 * 1024),
+					Priority:  (workerID + i) % 10,
+				}
+				s.Submit(job)
+				_ = s.Schedule()
+				_ = s.GetRunningJobs()
+				_ = s.GetQueue()
+				_ = s.AvailableMemory()
+				high := &Job{
+					ID:        fmt.Sprintf("high-%d-%d", workerID, i),
+					ModelSize: 100 * 1024 * 1024,
+					Priority:  20,
+					MemoryReq: 400 * 1024 * 1024,
+				}
+				_, _ = s.Preempt(high)
+				_ = s.Complete(jobID)
+			}
+		}(w)
+	}
+	wg.Wait()
 }

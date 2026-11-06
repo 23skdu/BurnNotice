@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 )
 
@@ -137,7 +138,7 @@ func TestReporter_ErrorsAndEdgeCases(t *testing.T) {
 	rLocalDefault := NewReporter("", "")
 	rLocalDefault.OutputDir = "" // forces "./telemetry" default
 	// Clean up after the test
-	defer os.RemoveAll("./telemetry")
+	defer func() { _ = os.RemoveAll("./telemetry") }()
 	if err := rLocalDefault.Submit(report); err != nil {
 		t.Fatalf("local default submit failed: %v", err)
 	}
@@ -198,4 +199,47 @@ func TestLoadReports(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for malformed json in LoadReports")
 	}
+}
+
+func TestConcurrentRace_Reporter(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer server.Close()
+
+	httpsReporter := NewReporter(server.URL, "")
+	var wg sync.WaitGroup
+	workers := 12
+	iters := 15
+
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			localDir := filepath.Join(t.TempDir(), "worker")
+			localReporter := NewReporter("", localDir)
+			for i := 0; i < iters; i++ {
+				rep := &Report{
+					ModelArchitecture:   "llama",
+					ModelSize:           "8B",
+					SteeringMethod:      "svd",
+					RefusalRate:         0.05,
+					KLDivergence:        0.10,
+					CapabilityRetention: 0.98,
+					Hardware:            "cuda",
+				}
+				if err := httpsReporter.Submit(rep); err != nil {
+					t.Errorf("https Submit failed: %v", err)
+				}
+				if err := localReporter.Submit(rep); err != nil {
+					t.Errorf("local Submit failed: %v", err)
+				}
+				loaded, err := LoadReports(localDir)
+				if err == nil {
+					_ = Aggregate(loaded)
+				}
+			}
+		}(w)
+	}
+	wg.Wait()
 }

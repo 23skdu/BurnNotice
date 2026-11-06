@@ -16,7 +16,7 @@ func Unmarshal(data []byte, v any) error {
 	}
 
 	rv := reflect.ValueOf(v)
-	if rv.Kind() != reflect.Ptr || rv.IsNil() {
+	if rv.Kind() != reflect.Pointer || rv.IsNil() {
 		return errors.New("zjson: Unmarshal(non-pointer)")
 	}
 
@@ -42,7 +42,7 @@ func (d *decoder) decodeValue(rv reflect.Value) error {
 		if d.pos+4 <= len(d.src) && string(d.src[d.pos:d.pos+4]) == "null" {
 			d.pos += 4
 			switch rv.Kind() {
-			case reflect.Ptr, reflect.Interface, reflect.Slice, reflect.Map:
+			case reflect.Pointer, reflect.Interface, reflect.Slice, reflect.Map:
 				rv.Set(reflect.Zero(rv.Type()))
 			default:
 				// For non-nullable types, just leave as zero value
@@ -52,7 +52,7 @@ func (d *decoder) decodeValue(rv reflect.Value) error {
 	}
 
 	// Handle pointer types
-	for rv.Kind() == reflect.Ptr {
+	for rv.Kind() == reflect.Pointer {
 		if rv.IsNil() {
 			rv.Set(reflect.New(rv.Type().Elem()))
 		}

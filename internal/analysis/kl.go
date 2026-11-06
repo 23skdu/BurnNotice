@@ -16,7 +16,10 @@ func LogSoftmax(logits []float64) ([]float64, error) {
 	}
 
 	maxLogit := logits[0]
-	for _, v := range logits[1:] {
+	for _, v := range logits {
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			return nil, errors.New("logits contain NaN or Inf")
+		}
 		if v > maxLogit {
 			maxLogit = v
 		}
@@ -68,7 +71,7 @@ func ComputeKLDivergence(pLogits, qLogits []float64) (float64, error) {
 	}
 
 	// Guard against tiny negative values due to floating-point rounding
-	if kl < 0 && kl > -1e-12 {
+	if kl < 0 || math.IsNaN(kl) {
 		kl = 0
 	}
 	return kl, nil

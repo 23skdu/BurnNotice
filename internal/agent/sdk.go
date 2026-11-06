@@ -34,10 +34,7 @@ type Response struct {
 
 // Middleware intercepts agent requests and responses for monitoring.
 type Middleware struct {
-	config  Config
-	scorer  interface{}
-	steerer interface{}
-	ledger  interface{}
+	config Config
 }
 
 // NewMiddleware creates a new BurnNotice middleware.

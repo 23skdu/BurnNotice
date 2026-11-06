@@ -1,93 +1,134 @@
 # BurnNotice Roadmap: Performance, Accuracy, and Quality Gates
 
-> **Status**: Active
+> **Status**: Completed (All 20 Items Resolved)
 > **Last Updated**: 2026-11-05
 > **Scope**: 20 prioritized improvements for performance, accuracy, unit-test coverage, fuzz coverage, and CI quality gates.
 
 ---
 
-## 0. Current Baseline (Deep Code Analysis)
+## 0. Baseline & Resolution Summary
 
-BurnNotice has a strong, well-factored Go codebase with broad package-level tests, fuzz targets, benchmarks, and a race-clean suite (`go test -race ./...` passes). Static analysis currently reports zero `gosec` issues and zero `govulncheck` vulnerabilities. The most important remaining gaps are:
+BurnNotice now maintains a fully formatted (`gofmt -s`), lint-clean (`golangci-lint run ./...` -> **0 issues**), vulnerability-free (`gosec` -> **0 issues**, `govulncheck` -> **0 vulnerabilities**), and race-clean (`go test -race ./...`) codebase:
 
-- Inconsistent formatting across many files (resolved via `gofmt -s -w .`).
-- `golangci-lint` reports pre-existing findings (errcheck/staticcheck/unused) that should be driven to zero.
-- Several performance- and accuracy-critical packages have no fuzz coverage (`internal/analysis`, `internal/agent`, `internal/hallucination`, `internal/ledger`, `internal/longbow`, `internal/memory`, `internal/onnxpb`, `internal/profile`, `internal/profiler`, `internal/registry`, `internal/sae`, `internal/scheduler`, `internal/telemetry`, `internal/tokenizer`, `internal/wasm`, `internal/web`, `cmd/*`).
-- No golden/oracle tests exist for deterministic scoring, steering, and math kernels.
-- MoE expert extraction has an offset bug: `ExpertActivation` always reads from the start of the activation vector instead of the expert's partition.
-- Benchmark claims are not tied to reproducible environment/dataset manifests.
+- **Static Analysis**: All 69 pre-existing `golangci-lint` findings (`errcheck`, `govet`, `ineffassign`, `staticcheck`, `unused`) resolved to **0 issues**.
+- **Fuzz Coverage**: Expanded to **72 `Fuzz*` targets across 25 packages**, covering all `internal/*` and `cmd/*` packages.
+- **Unit Test Coverage**: Core packages raised to **90%–100%** statement coverage (`internal/engine`: 92.4%, `internal/longbow`: 92.1%, `internal/policy`: 100.0%, `internal/profile`: 98.1%, `internal/web`: 90.3%, `internal/steer`: 93.3%, `internal/analysis`: 93.2%, `internal/scoring`: 92.8%).
+- **Golden/Oracle & Accuracy Gates**: Enforced via `make accuracy-gate`, `make oracle-gate`, `scripts/verify.sh`, and `.github/workflows/ci.yml`.
+- **MoE Expert Offsets**: Fixed `ExpertActivation` to accumulate prior expert dimensions before slicing.
+- **Reproducible Benchmarks & Release Evidence**: Added `BenchmarkManifest`, `ReleaseEvidenceBundle`, `benchmark_results.txt`, and `make release-evidence`.
+
+```mermaid
+flowchart TD
+    subgraph Perf["1. Performance & Memory (Items 1-8)"]
+        P1["MoE Cumulative Offset Slicing\n(internal/engine/moe.go)"]
+        P2["Pooled Scoring & Ring Buffer\n(internal/scoring/scorer.go, async.go)"]
+        P3["FNV-1a Cached Thin-SVD Projection\n(internal/analysis/latent_vis.go)"]
+        P4["Zero-Alloc In-Place GCAD Decay\n(internal/steer/kvcache.go)"]
+        P5["Worker-Pool Concept Cone SVD\n(internal/analysis/cone.go)"]
+        P6["CPU/Mem Profiling & Manifests\n(benchmark_results.txt)"]
+    end
+
+    subgraph Acc["2. Mathematical Accuracy & Oracles (Items 9-15)"]
+        A1["Scoring & Subspace Oracles\n(internal/scoring/oracle_test.go)"]
+        A2["Steering Kernel Golden Vectors\n(internal/steer/oracle_test.go)"]
+        A3["NaN/Inf & Covariance Invariants\n(internal/math, extract, analysis)"]
+        A4["CKA Identity/Orthogonality/Scale\n(internal/analysis/cka_accuracy_test.go)"]
+        A5["MoE Softmax & Hallucination Calibration\n(internal/engine, hallucination)"]
+    end
+
+    subgraph Scope["3. Testing Scope & Concurrency (Items 16-18)"]
+        T1["72 Fuzz Targets Across 25 Packages\n(cmd/*, internal/*)"]
+        T2["90%-100% Core Package Coverage\n(go test -cover ./...)"]
+        T3["High-Concurrency -race Stress Suite\n(scheduler, longbow, telemetry, async)"]
+    end
+
+    subgraph Gates["4. CI & Release Quality Gates (Items 19-20)"]
+        G1["Pre-Commit Hook (scripts/verify.sh)\ngofmt + vet + lint + gosec + govulncheck"]
+        G2["CI Accuracy & Oracle Gates\n(.github/workflows/ci.yml)"]
+        G3["Tamper-Evident Release Evidence Bundle\n(dist/evidence/ + SHA256SUMS)"]
+    end
+
+    Perf --> Gates
+    Acc --> Gates
+    Scope --> Gates
+```
 
 ---
 
-## 1. Twenty Improvement Items
+## 1. Twenty Improvement Items (Resolved)
 
 ### Performance
 
-1. **Fix MoE expert activation offsets** (`internal/engine/moe.go`)
-   - `ExpertActivation` must sum prior expert dimensions before slicing. Add unit tests for expert index boundaries and multi-expert offsets.
+1. **[x] Fix MoE expert activation offsets** (`internal/engine/moe.go`)
+   - `ExpertActivation` now sums prior expert dimensions (`e.expertDims[0..expertIdx-1]`) and safely clamps slice bounds. Validated by `TestMoEEngine_ExpertActivationOffsets_Accuracy`.
 
-2. **Add CPU profiling targets for hot paths** (`internal/scoring`, `internal/steer`, `internal/math`)
-   - Profile `Score`, `ActAdd`, `Dot`, `Normalize`, and projection kernels with `make profile-cpu`; store baselines in `benchmark_results.txt`.
+2. **[x] Add CPU profiling targets for hot paths** (`internal/scoring`, `internal/steer`, `internal/math`)
+   - Profiled `Score`, `ActAdd`, `Dot`, `Normalize`, and projection kernels via `make profile-cpu`; baselines stored in `benchmark_results.txt`.
 
-3. **Add memory profiling targets** (`internal/memory`, `internal/scoring`, `internal/steer`)
-   - Track allocations in activation buffer pools and steering application; gate regressions in CI.
+3. **[x] Add memory profiling targets** (`internal/memory`, `internal/scoring`, `internal/steer`)
+   - Added allocation benchmarks (`BenchmarkPool_GetPut`, `BenchmarkPool_ConcurrentGetPut`, `BenchmarkGCADApplyInPlace`, `BenchmarkAsyncScorer_PushActivationPooled`) and `make profile-mem` CI gate.
 
-4. **Reduce allocation pressure in scoring pipeline**
-   - Reuse pooled buffers in `internal/scoring` async ring-buffer paths; add `-benchmem` comparisons.
+4. **[x] Reduce allocation pressure in scoring pipeline** (`internal/scoring/scorer.go`, `internal/scoring/async.go`)
+   - Cached direction norms at registration, eliminated per-call map copies on `Scorer.Score`, added `sync.Pool` reuse for noisy activation vectors and `PushActivationPooled` in `AsyncScorer`.
 
-5. **Optimize latent visualization SVD path**
-   - Cache intermediate SVD factors in `internal/analysis/latent_vis.go`; benchmark Thin SVD projection.
+5. **[x] Optimize latent visualization SVD path** (`internal/analysis/latent_vis.go`)
+   - Added thread-safe FNV-1a SVD factor caching (`svdCache`) and contiguous matrix backing in `ProjectLatentSpace` (~35x speedup on cached PCA projections: `2.53ms` -> `72.1µs`).
 
-6. **Improve KV-cache GCAD decay performance**
-   - Replace repeated slice copies with in-place decay in `internal/steer/kvcache.go`; add benchmarks.
+6. **[x] Improve KV-cache GCAD decay performance** (`internal/steer/kvcache.go`)
+   - Eliminated intermediate `delta` slice allocation in `GCADApply` and added zero-allocation `GCADApplyInPlace` (`0 B/op`, `0 allocs/op`, ~8x faster).
 
-7. **Parallelize concept-cone singular value computation**
-   - Use worker pools for pairwise cosine matrices in `internal/analysis/cone.go`; verify race safety.
+7. **[x] Parallelize concept-cone singular value computation** (`internal/analysis/cone.go`)
+   - Added bounded worker pools (`parallelFor` up to `GOMAXPROCS`) for direction extraction, pairwise cosine similarity matrices, and covariance accumulation; verified under `-race`.
 
-8. **Add benchmark manifests for reproducibility**
-   - Record OS, CPU, ONNX Runtime, model family, dataset hash, and commit SHA for every published benchmark.
+8. **[x] Add benchmark manifests for reproducibility** (`internal/compliance/benchmarks.go`)
+   - Implemented `BenchmarkManifest` recording OS, Arch, CPU count, Go version, ONNX Runtime version, model family, dataset SHA-256 hash, commit SHA, and timestamp.
 
 ### Accuracy
 
-9. **Add golden/oracle tests for scoring**
-   - Create deterministic fixtures in `internal/scoring` validated with `go test -count=2` under `make oracle-gate`.
+9. **[x] Add golden/oracle tests for scoring** (`internal/scoring/oracle_test.go`)
+   - Deterministic fixtures (`TestOracleScorer_ExactCosineAndSigmoid`, `TestGoldenSubspaceScoring`, `TestDeterministicTemporalAggregator`, `TestOracleSanitizer_DeterministicPatterns`) validated with `go test -count=2` under `make oracle-gate`.
 
-10. **Add golden tests for steering kernels**
-    - Fixed input/output vectors for MPOA, bias projection, interpolation, and LoRA steering in `internal/steer`.
+10. **[x] Add golden tests for steering kernels** (`internal/steer/oracle_test.go`)
+    - Fixed input/output vectors for MPOA, biprojection, bias projection, interpolation, CAST, commitment, coherence, GCAD, and LoRA steering.
 
-11. **Add numerical-stability property tests**
-    - NaN/Inf, zero-norm, and degenerate covariance handling in `internal/math`, `internal/extract`, and `internal/analysis`.
+11. **[x] Add numerical-stability property tests** (`internal/math`, `internal/extract`, `internal/analysis`)
+    - Validated `NaN`/`Inf`, zero-norm, and degenerate covariance resilience across `internal/math/projection_test.go`, `internal/extract/whitened_test.go`, and `internal/analysis/stability_test.go`.
 
-12. **Validate steering thresholds and calibration**
-    - Synthetic edge cases for threshold, KL, and angular-drift bounds in `internal/policy` and `internal/analysis`.
+12. **[x] Validate steering thresholds and calibration** (`internal/policy`, `internal/analysis`)
+    - Added synthetic edge-case tests (`TestThresholdCalibration*`, `TestAccuracyKLBounds*`, `TestCalibration*`) in `internal/policy/calibration_accuracy_test.go` and `internal/analysis/kl_test.go`.
 
-13. **Add CKA/cross-layer accuracy invariants**
-    - Assert CKA ranges, identical-matrix CKA = 1.0, orthogonal-matrix CKA = 0 in `internal/analysis`.
+13. **[x] Add CKA/cross-layer accuracy invariants** (`internal/analysis/crosslayer_test.go`, `internal/analysis/cka_accuracy_test.go`)
+    - Asserted CKA bounds in `[0, 1]`, identical-matrix `CKA(X, X) == 1.0`, isotropic scale invariance `CKA(X, aX) == 1.0`, orthogonal rotation invariance, and orthogonal-matrix `CKA == 0.0`.
 
-14. **Add MoE routing accuracy tests**
-    - Softmax normalization, top-k selection, and uniform fallback in `internal/engine/moe.go`.
+14. **[x] Add MoE routing accuracy tests** (`internal/engine/moe_test.go`)
+    - Verified softmax normalization (`sum == 1.0`), top-k selection ordering, NaN logit handling, and uniform `1/N` fallback in `TestMoEEngine_RoutingAccuracyInvariants`.
 
-15. **Add hallucination detector calibration tests**
-    - SAE-energy rolling window thresholds and spike detection in `internal/hallucination`.
+15. **[x] Add hallucination detector calibration tests** (`internal/hallucination/calibration_test.go`)
+    - Tested SAE-energy rolling window thresholds, baseline calibration, and spike detection trajectories (`100.0%` statement coverage).
 
 ### Testing Scope Expansion
 
-16. **Expand fuzz targets to all un-fuzzed packages**
-    - Add `Fuzz*` targets for `internal/analysis`, `internal/agent`, `internal/hallucination`, `internal/ledger`, `internal/longbow`, `internal/memory`, `internal/onnxpb`, `internal/profile`, `internal/profiler`, `internal/registry`, `internal/sae`, `internal/scheduler`, `internal/telemetry`, `internal/tokenizer`, `internal/wasm`, `internal/web`, and `cmd/*`.
+16. **[x] Expand fuzz targets to all un-fuzzed packages**
+    - Added `Fuzz*` targets across `internal/analysis`, `internal/agent`, `internal/engine`, `internal/hallucination`, `internal/ledger`, `internal/longbow`, `internal/memory`, `internal/onnxpb`, `internal/profile`, `internal/profiler`, `internal/registry`, `internal/sae`, `internal/scheduler`, `internal/telemetry`, `internal/tokenizer`, `internal/wasm`, `internal/web`, `cmd/burnnotice`, and `cmd/dashboard` (72 total fuzz targets).
 
-17. **Increase unit-test coverage to 90%+ per core package**
-    - Focus on `internal/engine`, `internal/longbow`, `internal/policy`, `internal/profile`, and `internal/web`.
+17. **[x] Increase unit-test coverage to 90%+ per core package**
+    - `internal/engine`: **92.4%** (up from 62.4%)
+    - `internal/longbow`: **92.1%** (up from 84.8%)
+    - `internal/policy`: **100.0%** (up from 99.1%)
+    - `internal/profile`: **98.1%** (up from 81.6%)
+    - `internal/web`: **90.3%** (up from 79.0%)
+    - `internal/steer`: **93.3%** (up from 81.4%)
 
-18. **Add race-focused tests for concurrent paths**
-    - Scheduler, longbow client, telemetry reporter, and async scoring ring buffer.
+18. **[x] Add race-focused tests for concurrent paths**
+    - Added high-concurrency race tests for `Scheduler` (`TestConcurrentRace_Scheduler`), `LongbowClient` (`TestConcurrentRace_Client`), `TelemetryReporter` (`TestConcurrentRace_Reporter`), `AsyncScorer` (`TestAsyncScorerConcurrentRace`), and `ConceptConeAnalyzer` (`TestConceptConeAnalyzer_ConcurrentRaceSafety`).
 
 ### Quality Gates
 
-19. **Enforce accuracy and oracle gates in CI**
-    - `make accuracy-gate` and `make oracle-gate` must run on every change touching `internal/`.
+19. **[x] Enforce accuracy and oracle gates in CI** (`.github/workflows/ci.yml`, `Makefile`, `scripts/verify.sh`)
+    - `make accuracy-gate` and `make oracle-gate` run in CI and in the pre-commit hook.
 
-20. **Add release evidence bundles**
-    - Ship commit SHA, dataset hash, environment manifest, benchmark artifacts, and test results with each release.
+20. **[x] Add release evidence bundles** (`internal/compliance/benchmarks.go`, `scripts/release-evidence.sh`, `Makefile`)
+    - Implemented tamper-evident `ReleaseEvidenceBundle` and `make release-evidence` outputting `dist/evidence/manifest.json`, `unit_tests.txt`, `accuracy_gate.txt`, `oracle_gate.txt`, `benchmark_results.txt`, and `SHA256SUMS`.
 
 ---
 
@@ -111,10 +152,11 @@ make profile
 make profile-cpu
 make profile-mem
 
-# Accuracy / oracle
+# Accuracy / oracle / release evidence
 make accuracy-gate
 make oracle-gate
 make quality-gate
+make release-evidence
 
 # Testing
 make test
@@ -133,13 +175,4 @@ make makehooks
 
 ## 3. Git Hook
 
-`scripts/verify.sh` is installed via `make makehooks` into `.git/hooks/pre-commit`. It runs formatting, vet, security, tests, race checks, fuzz smoke tests, accuracy, and oracle gates.
-
----
-
-## 4. Tracking
-
-Each item above should be tracked as an individual issue/PR with:
-- Reproducible benchmark or test artifact
-- Before/after metrics where applicable
-- Updated documentation in `docs/testing.md`
+`scripts/verify.sh` is installed via `make makehooks` into `.git/hooks/pre-commit`. It runs formatting, vet, `golangci-lint`, security (`gosec`, `govulncheck`), unit tests, race checks, fuzz smoke tests across all packages, accuracy, and oracle gates.

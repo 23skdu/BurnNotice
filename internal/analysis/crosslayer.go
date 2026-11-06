@@ -50,9 +50,12 @@ func (c *CrossLayerAlignmentAnalyzer) DecisionLayer(threshold float64) (int, boo
 	}
 
 	mean := make([]float64, len(c.layerDirections[layers[0]]))
+	if len(mean) == 0 {
+		return layers[len(layers)-1], false
+	}
 	for _, l := range layers {
 		dir := c.layerDirections[l]
-		for j := 0; j < len(dir); j++ {
+		for j := 0; j < len(dir) && j < len(mean); j++ {
 			mean[j] += dir[j]
 		}
 	}
@@ -62,12 +65,11 @@ func (c *CrossLayerAlignmentAnalyzer) DecisionLayer(threshold float64) (int, boo
 	}
 	mean = normalize(mean)
 
-	for i, l := range layers {
+	for _, l := range layers {
 		sim := cosineSimilarity(c.layerDirections[l], mean)
 		if sim >= threshold {
 			return l, true
 		}
-		_ = i
 	}
 
 	return layers[len(layers)-1], false
@@ -122,12 +124,21 @@ func CKA(activationsA, activationsB [][]float64) float64 {
 		return 0
 	}
 	n := len(activationsA)
+	if len(activationsA[0]) == 0 || len(activationsB[0]) == 0 {
+		return 0
+	}
 
-	center := func(X [][]float64) [][]float64 {
-		centered := make([][]float64, n)
-		colMeans := make([]float64, len(X[0]))
+	center := func(X [][]float64) ([][]float64, bool) {
+		cols := len(X[0])
+		if cols == 0 {
+			return nil, false
+		}
+		colMeans := make([]float64, cols)
 		for i := 0; i < n; i++ {
-			for j := 0; j < len(X[i]); j++ {
+			if len(X[i]) != cols || hasNonFinite(X[i]) {
+				return nil, false
+			}
+			for j := 0; j < cols; j++ {
 				colMeans[j] += X[i][j]
 			}
 		}
@@ -135,25 +146,21 @@ func CKA(activationsA, activationsB [][]float64) float64 {
 		for j := range colMeans {
 			colMeans[j] *= inv
 		}
-		var grandMean float64
+		centered := make([][]float64, n)
 		for i := 0; i < n; i++ {
-			centered[i] = make([]float64, len(X[i]))
-			for j := 0; j < len(X[i]); j++ {
+			centered[i] = make([]float64, cols)
+			for j := 0; j < cols; j++ {
 				centered[i][j] = X[i][j] - colMeans[j]
-				grandMean += centered[i][j]
 			}
 		}
-		grandMean /= float64(n * len(X[0]))
-		for i := 0; i < n; i++ {
-			for j := 0; j < len(X[i]); j++ {
-				centered[i][j] -= grandMean
-			}
-		}
-		return centered
+		return centered, true
 	}
 
-	centeredA := center(activationsA)
-	centeredB := center(activationsB)
+	centeredA, okA := center(activationsA)
+	centeredB, okB := center(activationsB)
+	if !okA || !okB {
+		return 0
+	}
 
 	ka := make([][]float64, n)
 	kb := make([][]float64, n)
@@ -179,8 +186,15 @@ func CKA(activationsA, activationsB [][]float64) float64 {
 		}
 	}
 
-	if hsicXX == 0 || hsicYY == 0 {
+	if hsicXX <= 0 || hsicYY <= 0 || math.IsNaN(hsicXX) || math.IsNaN(hsicYY) || math.IsInf(hsicXX, 0) || math.IsInf(hsicYY, 0) {
 		return 0
 	}
-	return hsicXY / math.Sqrt(hsicXX*hsicYY)
+	val := hsicXY / math.Sqrt(hsicXX*hsicYY)
+	if math.IsNaN(val) || math.IsInf(val, 0) || val < 0 {
+		return 0
+	}
+	if val > 1.0 {
+		return 1.0
+	}
+	return val
 }

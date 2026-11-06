@@ -36,7 +36,7 @@ func ParseSafetensors(path string) ([]Tensor, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open safetensors: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	// Read header size (first 8 bytes, little-endian uint64)
 	var headerSize uint64

@@ -77,7 +77,7 @@ func (b *WASMBackend) Forward(input []float32) ([]float32, error) {
 	if err != nil {
 		return nil, fmt.Errorf("instantiate module: %w", err)
 	}
-	defer mod.Close(ctx)
+	defer func() { _ = mod.Close(ctx) }()
 
 	mem := mod.ExportedMemory("memory")
 	if mem == nil {
@@ -129,7 +129,7 @@ func (b *WASMBackend) GetIntermediate(layerIdx int) ([]float32, error) {
 	if err != nil {
 		return nil, fmt.Errorf("instantiate module: %w", err)
 	}
-	defer mod.Close(ctx)
+	defer func() { _ = mod.Close(ctx) }()
 
 	getIntermediate := mod.ExportedFunction("get_intermediate")
 	if getIntermediate == nil {

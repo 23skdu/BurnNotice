@@ -1,10 +1,15 @@
 package web
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/a-h/templ"
+	templruntime "github.com/a-h/templ/runtime"
 )
 
 func TestMiddleware_LoggingAndRequestID(t *testing.T) {
@@ -453,5 +458,65 @@ func TestHandlers_LatentSpaceData(t *testing.T) {
 	body := w.Body.String()
 	if !containsAll(body, `"model_id"`, `"variance_explained"`, `"status":"projected"`) {
 		t.Errorf("latent data JSON missing expected elements: %s", body)
+	}
+}
+
+type failAfterNWriter struct {
+	remaining int
+}
+
+func (f *failAfterNWriter) Write(p []byte) (int, error) {
+	if f.remaining <= 0 {
+		return 0, errors.New("write error")
+	}
+	f.remaining--
+	return len(p), nil
+}
+
+func (f *failAfterNWriter) WriteString(s string) (int, error) {
+	if f.remaining <= 0 {
+		return 0, errors.New("write string error")
+	}
+	f.remaining--
+	return len(s), nil
+}
+
+func TestTemplates_CancelledContextAndWriteErrors(t *testing.T) {
+	origSize := templruntime.DefaultBufferSize
+	templruntime.DefaultBufferSize = 1
+	defer func() {
+		templruntime.DefaultBufferSize = origSize
+	}()
+
+	components := []templ.Component{
+		layout("Test Title"),
+		dashboardHTML(10, 20),
+		profilerHTML(),
+		modelProfileHTML("llama-3-8b"),
+		monitorHTML("sess-1"),
+		heatmapHTML("llama-3-8b"),
+		subspaceHTML("llama-3-8b"),
+		circuitsHTML("llama-3-8b"),
+		policiesHTML(),
+		alertsHTML(),
+		latentSpaceHTML("llama-3-8b"),
+	}
+
+	cancelledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	for _, comp := range components {
+		if err := comp.Render(cancelledCtx, httptest.NewRecorder()); err == nil {
+			t.Error("expected error rendering component with cancelled context")
+		}
+		// Render directly to non-buffer writer that fails on flush/write
+		_ = comp.Render(context.Background(), &failAfterNWriter{remaining: 0})
+
+		// Render using 1-byte *templruntime.Buffer failing at each write step
+		for step := 0; step <= 25; step++ {
+			buf := new(templruntime.Buffer)
+			buf.Reset(&failAfterNWriter{remaining: step})
+			_ = comp.Render(context.Background(), buf)
+		}
 	}
 }

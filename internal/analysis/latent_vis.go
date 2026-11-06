@@ -6,10 +6,65 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"sync"
 
 	"gonum.org/v1/gonum/floats"
 	"gonum.org/v1/gonum/mat"
 )
+
+type svdCacheEntry struct {
+	uX      []float64
+	uY      []float64
+	varExpl [2]float64
+}
+
+const maxSVDCacheEntries = 64
+
+var (
+	svdCacheMu sync.RWMutex
+	svdCache   = make(map[uint64]svdCacheEntry, maxSVDCacheEntries)
+)
+
+// ClearLatentSVDCache clears the cached SVD principal components used by ProjectLatentSpace.
+func ClearLatentSVDCache() {
+	svdCacheMu.Lock()
+	svdCache = make(map[uint64]svdCacheEntry, maxSVDCacheEntries)
+	svdCacheMu.Unlock()
+}
+
+func hashActivationMatrix(points []LatentPoint, dim int) (uint64, bool) {
+	if dim < 0 {
+		return 0, false
+	}
+	const (
+		offset64 = 14695981039346656037
+		prime64  = 1099511628211
+	)
+	h := uint64(offset64)
+	h = (h ^ uint64(len(points))) * prime64
+	h = (h ^ uint64(dim)) * prime64 // #nosec G115 -- dim is validated non-negative slice length
+	for i := range points {
+		vec := points[i].Vector
+		h = (h ^ uint64(len(vec))) * prime64
+		for _, v := range vec {
+			if math.IsNaN(v) || math.IsInf(v, 0) {
+				return 0, false
+			}
+			bits := math.Float64bits(v)
+			h = (h ^ bits) * prime64
+		}
+	}
+	return h, true
+}
+
+func hasNonFinite(xs []float64) bool {
+	for _, v := range xs {
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			return true
+		}
+	}
+	return false
+}
 
 // SemanticCategory classifies latent points into semantic behavioral groups.
 type SemanticCategory string
@@ -123,6 +178,11 @@ func ProjectLatentSpace(points []LatentPoint, basisX, basisY []float64) (*Latent
 
 	// If 2D coordinates are already pre-computed and no high-dim vectors exist
 	if dim == 0 {
+		for _, p := range proj.Points {
+			if math.IsNaN(p.ProjectedX) || math.IsInf(p.ProjectedX, 0) || math.IsNaN(p.ProjectedY) || math.IsInf(p.ProjectedY, 0) {
+				return nil, fmt.Errorf("precomputed coordinates contain NaN or Inf")
+			}
+		}
 		proj.Method = "precomputed"
 		proj.Clusters = ComputeClusterSummaries(proj.Points)
 		proj.Trajectories = BuildTokenTrajectories(proj.Points)
@@ -130,10 +190,18 @@ func ProjectLatentSpace(points []LatentPoint, basisX, basisY []float64) (*Latent
 		return proj, nil
 	}
 
+	cacheKey, finite := hashActivationMatrix(points, dim)
+	if !finite {
+		return nil, fmt.Errorf("activation vectors contain NaN or Inf")
+	}
+
 	var uX, uY []float64
 	var varExpl [2]float64
 
 	if len(basisX) == dim && len(basisY) == dim {
+		if hasNonFinite(basisX) || hasNonFinite(basisY) {
+			return nil, fmt.Errorf("basis vectors contain NaN or Inf")
+		}
 		uX = make([]float64, dim)
 		uY = make([]float64, dim)
 		copy(uX, basisX)
@@ -149,62 +217,93 @@ func ProjectLatentSpace(points []LatentPoint, basisX, basisY []float64) (*Latent
 		proj.Method = "basis_projection"
 		varExpl = [2]float64{0.60, 0.40}
 	} else {
-		// Perform SVD on mean-centered activations
-		rows := len(points)
-		data := mat.NewDense(rows, dim, nil)
-		mean := make([]float64, dim)
-		for _, p := range points {
-			if len(p.Vector) == dim {
-				floats.Add(mean, p.Vector)
-			}
-		}
-		floats.Scale(1.0/float64(rows), mean)
+		svdCacheMu.RLock()
+		cached, hit := svdCache[cacheKey]
+		svdCacheMu.RUnlock()
 
-		for i, p := range points {
-			for j := 0; j < dim; j++ {
-				val := 0.0
-				if j < len(p.Vector) {
-					val = p.Vector[j] - mean[j]
-				}
-				data.Set(i, j, val)
-			}
-		}
-
-		var svd mat.SVD
-		if ok := svd.Factorize(data, mat.SVDThin); !ok {
-			return nil, fmt.Errorf("svd factorization failed on activation matrix")
-		}
-
-		svals := svd.Values(nil)
-		totalVar := 0.0
-		for _, s := range svals {
-			totalVar += s * s
-		}
-		if totalVar > 1e-12 {
-			if len(svals) > 0 {
-				varExpl[0] = (svals[0] * svals[0]) / totalVar
-			}
-			if len(svals) > 1 {
-				varExpl[1] = (svals[1] * svals[1]) / totalVar
-			}
+		if hit && len(cached.uX) == dim && len(cached.uY) == dim {
+			uX = cached.uX
+			uY = cached.uY
+			varExpl = cached.varExpl
 		} else {
-			varExpl = [2]float64{0.5, 0.5}
-		}
-
-		minDim := rows
-		if dim < minDim {
-			minDim = dim
-		}
-		v := mat.NewDense(dim, minDim, nil)
-		svd.VTo(v)
-
-		uX = make([]float64, dim)
-		uY = make([]float64, dim)
-		for j := 0; j < dim; j++ {
-			uX[j] = v.At(j, 0)
-			if minDim > 1 {
-				uY[j] = v.At(j, 1)
+			// Perform Thin SVD on mean-centered activations using a flat backing slice
+			rows := len(points)
+			mean := make([]float64, dim)
+			for _, p := range points {
+				if len(p.Vector) == dim {
+					floats.Add(mean, p.Vector)
+				}
 			}
+			floats.Scale(1.0/float64(rows), mean)
+
+			raw := make([]float64, rows*dim)
+			for i, p := range points {
+				rowOff := i * dim
+				if len(p.Vector) == dim {
+					for j := 0; j < dim; j++ {
+						raw[rowOff+j] = p.Vector[j] - mean[j]
+					}
+				} else {
+					for j := 0; j < dim; j++ {
+						val := -mean[j]
+						if j < len(p.Vector) {
+							val = p.Vector[j] - mean[j]
+						}
+						raw[rowOff+j] = val
+					}
+				}
+			}
+			data := mat.NewDense(rows, dim, raw)
+
+			var svd mat.SVD
+			if ok := svd.Factorize(data, mat.SVDThin); !ok {
+				return nil, fmt.Errorf("svd factorization failed on activation matrix")
+			}
+
+			svals := svd.Values(nil)
+			totalVar := 0.0
+			for _, s := range svals {
+				totalVar += s * s
+			}
+			if totalVar > 1e-12 {
+				if len(svals) > 0 {
+					varExpl[0] = (svals[0] * svals[0]) / totalVar
+				}
+				if len(svals) > 1 {
+					varExpl[1] = (svals[1] * svals[1]) / totalVar
+				}
+			} else {
+				varExpl = [2]float64{0.5, 0.5}
+			}
+
+			minDim := rows
+			if dim < minDim {
+				minDim = dim
+			}
+			var v mat.Dense
+			svd.VTo(&v)
+			rawV := v.RawMatrix()
+
+			uX = make([]float64, dim)
+			uY = make([]float64, dim)
+			for j := 0; j < dim; j++ {
+				rowIdx := j * rawV.Stride
+				uX[j] = rawV.Data[rowIdx]
+				if minDim > 1 {
+					uY[j] = rawV.Data[rowIdx+1]
+				}
+			}
+
+			svdCacheMu.Lock()
+			if len(svdCache) >= maxSVDCacheEntries {
+				svdCache = make(map[uint64]svdCacheEntry, maxSVDCacheEntries)
+			}
+			svdCache[cacheKey] = svdCacheEntry{
+				uX:      uX,
+				uY:      uY,
+				varExpl: varExpl,
+			}
+			svdCacheMu.Unlock()
 		}
 		proj.Method = "pca"
 	}
@@ -457,7 +556,7 @@ func GenerateSVG(proj *LatentSpaceProjection, cfg LatentVisualizerConfig) (strin
 		axisColor = "#cbd5e1"
 	}
 
-	buf.WriteString(fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" width="100%%" height="100%%" class="latent-space-viz">`+"\n", width, height))
+	_, _ = fmt.Fprintf(&buf, `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" width="100%%" height="100%%" class="latent-space-viz">`+"\n", width, height)
 	buf.WriteString("<defs>\n")
 	buf.WriteString(`  <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
     <feGaussianBlur stdDeviation="3" result="blur" />
@@ -470,7 +569,7 @@ func GenerateSVG(proj *LatentSpaceProjection, cfg LatentVisualizerConfig) (strin
 	buf.WriteString("</defs>\n")
 
 	// Styling
-	buf.WriteString(fmt.Sprintf(`<style>
+	_, _ = fmt.Fprintf(&buf, `<style>
   .latent-space-viz { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
   .grid-line { stroke: %s; stroke-width: 1; stroke-dasharray: 3 3; }
   .axis-line { stroke: %s; stroke-width: 1.5; }
@@ -482,12 +581,12 @@ func GenerateSVG(proj *LatentSpaceProjection, cfg LatentVisualizerConfig) (strin
   .trajectory-path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
   .legend-text { fill: %s; font-size: 11px; font-weight: 500; }
 </style>
-`, gridColor, axisColor, subTextColor, textColor, subTextColor, textColor))
+`, gridColor, axisColor, subTextColor, textColor, subTextColor, textColor)
 
 	// Background
-	buf.WriteString(fmt.Sprintf(`<rect width="%d" height="%d" fill="%s" rx="10" />`+"\n", width, height, bgColor))
-	buf.WriteString(fmt.Sprintf(`<rect x="%f" y="%f" width="%f" height="%f" fill="%s" rx="6" />`+"\n",
-		marginL, marginT, plotW, plotH, cardBg))
+	_, _ = fmt.Fprintf(&buf, `<rect width="%d" height="%d" fill="%s" rx="10" />`+"\n", width, height, bgColor)
+	_, _ = fmt.Fprintf(&buf, `<rect x="%f" y="%f" width="%f" height="%f" fill="%s" rx="6" />`+"\n",
+		marginL, marginT, plotW, plotH, cardBg)
 
 	// Gridlines
 	if cfg.ShowGrid {
@@ -496,23 +595,23 @@ func GenerateSVG(proj *LatentSpaceProjection, cfg LatentVisualizerConfig) (strin
 			frac := float64(i) / float64(gridSteps)
 			gx := marginL + frac*plotW
 			gy := marginT + frac*plotH
-			buf.WriteString(fmt.Sprintf(`<line x1="%f" y1="%f" x2="%f" y2="%f" class="grid-line" />`+"\n",
-				gx, marginT, gx, marginT+plotH))
-			buf.WriteString(fmt.Sprintf(`<line x1="%f" y1="%f" x2="%f" y2="%f" class="grid-line" />`+"\n",
-				marginL, gy, marginL+plotW, gy))
+			_, _ = fmt.Fprintf(&buf, `<line x1="%f" y1="%f" x2="%f" y2="%f" class="grid-line" />`+"\n",
+				gx, marginT, gx, marginT+plotH)
+			_, _ = fmt.Fprintf(&buf, `<line x1="%f" y1="%f" x2="%f" y2="%f" class="grid-line" />`+"\n",
+				marginL, gy, marginL+plotW, gy)
 		}
 	}
 
 	// Axes & Zero Lines (if in range)
 	if minX <= 0 && maxX >= 0 {
 		zx := toScreenX(0)
-		buf.WriteString(fmt.Sprintf(`<line x1="%f" y1="%f" x2="%f" y2="%f" class="axis-line" stroke-opacity="0.4" />`+"\n",
-			zx, marginT, zx, marginT+plotH))
+		_, _ = fmt.Fprintf(&buf, `<line x1="%f" y1="%f" x2="%f" y2="%f" class="axis-line" stroke-opacity="0.4" />`+"\n",
+			zx, marginT, zx, marginT+plotH)
 	}
 	if minY <= 0 && maxY >= 0 {
 		zy := toScreenY(0)
-		buf.WriteString(fmt.Sprintf(`<line x1="%f" y1="%f" x2="%f" y2="%f" class="axis-line" stroke-opacity="0.4" />`+"\n",
-			marginL, zy, marginL+plotW, zy))
+		_, _ = fmt.Fprintf(&buf, `<line x1="%f" y1="%f" x2="%f" y2="%f" class="axis-line" stroke-opacity="0.4" />`+"\n",
+			marginL, zy, marginL+plotW, zy)
 	}
 
 	// Title & Metrics Header
@@ -520,9 +619,9 @@ func GenerateSVG(proj *LatentSpaceProjection, cfg LatentVisualizerConfig) (strin
 	if title == "" {
 		title = "Semantic Latent Space Manifold"
 	}
-	buf.WriteString(fmt.Sprintf(`<text x="%f" y="32" class="title-text">%s</text>`+"\n", marginL, title))
-	buf.WriteString(fmt.Sprintf(`<text x="%f" y="48" class="subtitle-text">Method: %s | PC1 (%.1f%% var) vs PC2 (%.1f%% var) | %d Points | %d Trajectories</text>`+"\n",
-		marginL, proj.Method, proj.VarianceExplained[0]*100, proj.VarianceExplained[1]*100, len(proj.Points), len(proj.Trajectories)))
+	_, _ = fmt.Fprintf(&buf, `<text x="%f" y="32" class="title-text">%s</text>`+"\n", marginL, title)
+	_, _ = fmt.Fprintf(&buf, `<text x="%f" y="48" class="subtitle-text">Method: %s | PC1 (%.1f%% var) vs PC2 (%.1f%% var) | %d Points | %d Trajectories</text>`+"\n",
+		marginL, proj.Method, proj.VarianceExplained[0]*100, proj.VarianceExplained[1]*100, len(proj.Points), len(proj.Trajectories))
 
 	// Confidence Hulls / Ellipses
 	if cfg.ShowConfidenceHulls {
@@ -536,11 +635,11 @@ func GenerateSVG(proj *LatentSpaceProjection, cfg LatentVisualizerConfig) (strin
 				color = "#9ca3af"
 			}
 
-			buf.WriteString(fmt.Sprintf(`<ellipse cx="%f" cy="%f" rx="%f" ry="%f" fill="%s" fill-opacity="0.08" stroke="%s" stroke-width="1.2" stroke-dasharray="4 3" />`+"\n",
-				cx, cy, rx, ry, color, color))
-			buf.WriteString(fmt.Sprintf(`<circle cx="%f" cy="%f" r="3" fill="%s" />`+"\n", cx, cy, color))
-			buf.WriteString(fmt.Sprintf(`<text x="%f" y="%f" fill="%s" font-size="10" font-weight="600" text-anchor="middle" opacity="0.85">%s (N=%d)</text>`+"\n",
-				cx, cy-ry-5, color, cat, c.PointCount))
+			_, _ = fmt.Fprintf(&buf, `<ellipse cx="%f" cy="%f" rx="%f" ry="%f" fill="%s" fill-opacity="0.08" stroke="%s" stroke-width="1.2" stroke-dasharray="4 3" />`+"\n",
+				cx, cy, rx, ry, color, color)
+			_, _ = fmt.Fprintf(&buf, `<circle cx="%f" cy="%f" r="3" fill="%s" />`+"\n", cx, cy, color)
+			_, _ = fmt.Fprintf(&buf, `<text x="%f" y="%f" fill="%s" font-size="10" font-weight="600" text-anchor="middle" opacity="0.85">%s (N=%d)</text>`+"\n",
+				cx, cy-ry-5, color, cat, c.PointCount)
 		}
 	}
 
@@ -555,9 +654,9 @@ func GenerateSVG(proj *LatentSpaceProjection, cfg LatentVisualizerConfig) (strin
 				sx := toScreenX(p.ProjectedX)
 				sy := toScreenY(p.ProjectedY)
 				if i == 0 {
-					pathData.WriteString(fmt.Sprintf("M %f %f ", sx, sy))
+					_, _ = fmt.Fprintf(&pathData, "M %f %f ", sx, sy)
 				} else {
-					pathData.WriteString(fmt.Sprintf("L %f %f ", sx, sy))
+					_, _ = fmt.Fprintf(&pathData, "L %f %f ", sx, sy)
 				}
 			}
 			color := CategoryColors[traj.Category]
@@ -565,8 +664,8 @@ func GenerateSVG(proj *LatentSpaceProjection, cfg LatentVisualizerConfig) (strin
 				color = "#60a5fa"
 			}
 
-			buf.WriteString(fmt.Sprintf(`<path d="%s" class="trajectory-path" stroke="%s" stroke-width="2" stroke-opacity="0.75" marker-end="url(#arrow)" />`+"\n",
-				pathData.String(), color))
+			_, _ = fmt.Fprintf(&buf, `<path d="%s" class="trajectory-path" stroke="%s" stroke-width="2" stroke-opacity="0.75" marker-end="url(#arrow)" />`+"\n",
+				pathData.String(), color)
 		}
 	}
 
@@ -579,24 +678,24 @@ func GenerateSVG(proj *LatentSpaceProjection, cfg LatentVisualizerConfig) (strin
 			color = "#9ca3af"
 		}
 
-		buf.WriteString(fmt.Sprintf(`<circle cx="%f" cy="%f" r="4.5" fill="%s" fill-opacity="0.85" stroke="#ffffff" stroke-width="0.8" class="point-node">`+"\n",
-			sx, sy, color))
-		buf.WriteString(fmt.Sprintf(`  <title>Token: "%s" | Layer: %d | Cat: %s | Coord: (%.2f, %.2f)</title>`+"\n",
-			p.Token, p.Layer, p.Category, p.ProjectedX, p.ProjectedY))
+		_, _ = fmt.Fprintf(&buf, `<circle cx="%f" cy="%f" r="4.5" fill="%s" fill-opacity="0.85" stroke="#ffffff" stroke-width="0.8" class="point-node">`+"\n",
+			sx, sy, color)
+		_, _ = fmt.Fprintf(&buf, `  <title>Token: "%s" | Layer: %d | Cat: %s | Coord: (%.2f, %.2f)</title>`+"\n",
+			p.Token, p.Layer, p.Category, p.ProjectedX, p.ProjectedY)
 		buf.WriteString("</circle>\n")
 	}
 
 	// Axis Labels
-	buf.WriteString(fmt.Sprintf(`<text x="%f" y="%f" class="axis-label" text-anchor="middle">Latent Subspace Dimension 1 (%.1f%% Variance)</text>`+"\n",
-		marginL+plotW/2, float64(height)-18, proj.VarianceExplained[0]*100))
+	_, _ = fmt.Fprintf(&buf, `<text x="%f" y="%f" class="axis-label" text-anchor="middle">Latent Subspace Dimension 1 (%.1f%% Variance)</text>`+"\n",
+		marginL+plotW/2, float64(height)-18, proj.VarianceExplained[0]*100)
 
-	buf.WriteString(fmt.Sprintf(`<text x="18" y="%f" class="axis-label" text-anchor="middle" transform="rotate(-90, 18, %f)">Latent Subspace Dimension 2 (%.1f%% Variance)</text>`+"\n",
-		marginT+plotH/2, marginT+plotH/2, proj.VarianceExplained[1]*100))
+	_, _ = fmt.Fprintf(&buf, `<text x="18" y="%f" class="axis-label" text-anchor="middle" transform="rotate(-90, 18, %f)">Latent Subspace Dimension 2 (%.1f%% Variance)</text>`+"\n",
+		marginT+plotH/2, marginT+plotH/2, proj.VarianceExplained[1]*100)
 
 	// Legend (placed at bottom right or top right)
 	legendX := marginL + plotW - 220
 	legendY := marginT + 18
-	buf.WriteString(fmt.Sprintf(`<g transform="translate(%f, %f)">`+"\n", legendX, legendY))
+	_, _ = fmt.Fprintf(&buf, `<g transform="translate(%f, %f)">`+"\n", legendX, legendY)
 	buf.WriteString(`<rect width="210" height="75" fill="#1f2937" fill-opacity="0.8" rx="5" />` + "\n")
 
 	row := 0
@@ -607,8 +706,8 @@ func GenerateSVG(proj *LatentSpaceProjection, cfg LatentVisualizerConfig) (strin
 		ly := float64(row*20) + 16
 		color := CategoryColors[cat]
 
-		buf.WriteString(fmt.Sprintf(`<circle cx="%f" cy="%f" r="4" fill="%s" />`+"\n", lx, ly, color))
-		buf.WriteString(fmt.Sprintf(`<text x="%f" y="%f" class="legend-text" font-size="10">%s</text>`+"\n", lx+10, ly+3, cat))
+		_, _ = fmt.Fprintf(&buf, `<circle cx="%f" cy="%f" r="4" fill="%s" />`+"\n", lx, ly, color)
+		_, _ = fmt.Fprintf(&buf, `<text x="%f" y="%f" class="legend-text" font-size="10">%s</text>`+"\n", lx+10, ly+3, cat)
 
 		col++
 		if col > 1 {

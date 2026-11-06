@@ -43,6 +43,9 @@ func (d *HallucinationDetector) DetectHallucination(layerIdx int, saeFeatures []
 
 // DetectSpike checks for sudden energy spikes compared to recent history.
 func (d *HallucinationDetector) DetectSpike(layerIdx int, saeFeatures []float64) bool {
+	if d.windowSize <= 0 {
+		return false
+	}
 	energy := d.ComputeEnergy(saeFeatures)
 
 	history := d.history[layerIdx]
@@ -64,6 +67,9 @@ func (d *HallucinationDetector) DetectSpike(layerIdx int, saeFeatures []float64)
 
 // UpdateHistory adds an energy value to the rolling window.
 func (d *HallucinationDetector) UpdateHistory(layerIdx int, saeFeatures []float64) {
+	if d.windowSize <= 0 {
+		return
+	}
 	energy := d.ComputeEnergy(saeFeatures)
 	history := d.history[layerIdx]
 	if len(history) >= d.windowSize {

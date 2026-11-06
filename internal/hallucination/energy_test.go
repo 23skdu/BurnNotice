@@ -182,3 +182,90 @@ func TestValidate_InvalidWindowSize(t *testing.T) {
 		t.Fatal("expected error for windowSize < 1")
 	}
 }
+
+func TestHallucinationCalibration_BaselineAndRollingWindow(t *testing.T) {
+	windowSize := 4
+	thresholds := map[int]float64{0: 25.0, 1: 50.0}
+	d := NewHallucinationDetector(thresholds, 2.5, windowSize)
+	if err := d.Validate(); err != nil {
+		t.Fatalf("unexpected validation error: %v", err)
+	}
+
+	// Feed 6 samples into layer 0 to exercise rolling window eviction in UpdateHistory
+	// Energies: 1^2=1, 2^2=4, 3^2=9, 4^2=16, 5^2=25, 6^2=36
+	for i := 1; i <= 6; i++ {
+		d.UpdateHistory(0, []float64{float64(i), 0})
+	}
+
+	// Window of size 4 should hold the last 4 energies: 9, 16, 25, 36 -> mean = 86 / 4 = 21.5
+	gotBaseline := d.BaselineEnergy(0)
+	wantBaseline := (9.0 + 16.0 + 25.0 + 36.0) / 4.0
+	if math.Abs(gotBaseline-wantBaseline) > 1e-9 {
+		t.Errorf("calibrated rolling baseline = %f, want %f", gotBaseline, wantBaseline)
+	}
+
+	// Layer 1 should remain independent with 0 baseline
+	if d.BaselineEnergy(1) != 0 {
+		t.Errorf("layer 1 baseline = %f, want 0", d.BaselineEnergy(1))
+	}
+}
+
+func TestHallucinationThreshold_BoundaryAndRiskCalibration(t *testing.T) {
+	thresholds := map[int]float64{
+		0: 16.0,
+		1: -5.0, // non-positive threshold edge case
+	}
+	d := NewHallucinationDetector(thresholds, 2.0, 3)
+
+	// Exact boundary: energy == threshold (4^2 = 16.0) should NOT trigger (> threshold required)
+	if d.DetectHallucination(0, []float64{4.0, 0.0}) {
+		t.Error("expected false when energy equals threshold exactly")
+	}
+	if score := d.RiskScore(0, []float64{4.0, 0.0}); math.Abs(score-1.0) > 1e-9 {
+		t.Errorf("RiskScore at exact threshold = %f, want 1.0", score)
+	}
+
+	// Slightly above threshold
+	if !d.DetectHallucination(0, []float64{4.0001, 0.0}) {
+		t.Error("expected true when energy exceeds threshold")
+	}
+
+	// Unconfigured layer uses default threshold 1.0 in RiskScore and DetectHallucination
+	if score := d.RiskScore(99, []float64{0.5, 0.5}); math.Abs(score-0.5) > 1e-9 {
+		t.Errorf("RiskScore with default threshold = %f, want 0.5", score)
+	}
+
+	// Negative threshold returns max risk 1.0
+	if score := d.RiskScore(1, []float64{0.1}); score != 1.0 {
+		t.Errorf("RiskScore for negative threshold = %f, want 1.0", score)
+	}
+}
+
+func TestHallucinationOracle_SpikeDetectionTrajectory(t *testing.T) {
+	d := NewHallucinationDetector(map[int]float64{0: 100.0}, 2.0, 3)
+
+	// Warmup phase (< windowSize): DetectSpike appends to history and returns false
+	for i := 0; i < 3; i++ {
+		if d.DetectSpike(0, []float64{2.0, 0.0}) { // energy = 4.0
+			t.Fatalf("unexpected spike during warmup at step %d", i)
+		}
+	}
+	// Baseline is now 4.0; spike threshold is 4.0 * 2.0 = 8.0
+	// Energy = 8.0 (exact boundary) -> not a spike
+	if d.DetectSpike(0, []float64{2.0, 2.0}) { // 4 + 4 = 8.0
+		t.Error("expected no spike at exact multiplier boundary (energy == avg * multiplier)")
+	}
+
+	// History is now [4.0, 4.0, 8.0], avg = 16/3 = 5.333..., threshold = 10.666...
+	// Feed energy = 25.0 -> spike!
+	if !d.DetectSpike(0, []float64{3.0, 4.0}) {
+		t.Error("expected oracle spike detection for energy 25.0 > 10.67")
+	}
+
+	// Zero/negative windowSize guard in DetectSpike and UpdateHistory
+	dZero := NewHallucinationDetector(nil, 2.0, 0)
+	dZero.UpdateHistory(0, []float64{10.0})
+	if dZero.DetectSpike(0, []float64{10.0}) {
+		t.Error("expected false for DetectSpike when windowSize <= 0")
+	}
+}

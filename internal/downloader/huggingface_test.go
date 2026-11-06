@@ -76,7 +76,7 @@ func TestDownload_ListAPIError(t *testing.T) {
 func TestDownload_ListAPIInvalidJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("not json"))
+		_, _ = w.Write([]byte("not json"))
 	}))
 	defer server.Close()
 
@@ -91,11 +91,11 @@ func TestDownload_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/models/test-model/tree/main" {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`[{"path":"model.safetensors"},{"path":"config.json"},{"path":"README.md"}]`))
+			_, _ = w.Write([]byte(`[{"path":"model.safetensors"},{"path":"config.json"},{"path":"README.md"}]`))
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("file content"))
+		_, _ = w.Write([]byte("file content"))
 	}))
 	defer server.Close()
 
@@ -122,7 +122,7 @@ func TestDownload_AuthToken(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader = r.Header.Get("Authorization")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`[]`))
+		_, _ = w.Write([]byte(`[]`))
 	}))
 	defer server.Close()
 
@@ -137,7 +137,7 @@ func TestDownload_AuthToken(t *testing.T) {
 func TestDownload_EmptyFileList(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`[]`))
+		_, _ = w.Write([]byte(`[]`))
 	}))
 	defer server.Close()
 
@@ -153,7 +153,7 @@ func TestDownload_FileDownloadError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/models/test-model/tree/main" {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`[{"path":"model.safetensors"}]`))
+			_, _ = w.Write([]byte(`[{"path":"model.safetensors"}]`))
 			return
 		}
 		w.WriteHeader(http.StatusInternalServerError)
@@ -171,11 +171,11 @@ func TestDownload_NestedFilePath(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/models/test-model/tree/main" {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`[{"path":"subdir/model.safetensors"}]`))
+			_, _ = w.Write([]byte(`[{"path":"subdir/model.safetensors"}]`))
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("nested content"))
+		_, _ = w.Write([]byte("nested content"))
 	}))
 	defer server.Close()
 
@@ -196,11 +196,11 @@ func TestDownload_CustomPatterns(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/models/test-model/tree/main" {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`[{"path":"model.safetensors"},{"path":"model.gguf"}]`))
+			_, _ = w.Write([]byte(`[{"path":"model.safetensors"},{"path":"model.gguf"}]`))
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("content"))
+		_, _ = w.Write([]byte("content"))
 	}))
 	defer server.Close()
 

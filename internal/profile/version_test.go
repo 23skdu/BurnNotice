@@ -168,7 +168,9 @@ func TestListVersions_MalformedJSON(t *testing.T) {
 	}
 
 	// Write invalid JSON to the version directory version.json
-	os.WriteFile(filepath.Join(tmp, "versions", "v1", "version.json"), []byte("invalid-json"), 0644)
+	if err := os.WriteFile(filepath.Join(tmp, "versions", "v1", "version.json"), []byte("invalid-json"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	versions, err := vm.ListVersions()
 	if err != nil {
@@ -177,5 +179,32 @@ func TestListVersions_MalformedJSON(t *testing.T) {
 	// Should skip the malformed version
 	if len(versions) != 0 {
 		t.Errorf("expected 0 versions listed, got %d", len(versions))
+	}
+}
+
+func TestVersionManager_EdgeCases(t *testing.T) {
+	tmp := t.TempDir()
+	vm := NewVersionManager(tmp)
+
+	// ListVersions when versions dir does not exist
+	versions, err := vm.ListVersions()
+	if err != nil || versions != nil {
+		t.Errorf("expected nil versions on nonexistent dir, got %v, %v", versions, err)
+	}
+
+	// Create a file named "versions" so ReadDir fails with not-a-directory error
+	badTmp := t.TempDir()
+	if err := os.WriteFile(filepath.Join(badTmp, "versions"), []byte("file"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	badVM := NewVersionManager(badTmp)
+	if _, err := badVM.NextVersion(); err == nil {
+		t.Error("expected error from NextVersion when versions is a file")
+	}
+	if _, err := badVM.SaveVersion(&ModelProfile{ModelID: "m"}, ""); err == nil {
+		t.Error("expected error from SaveVersion when versions is a file")
+	}
+	if _, err := badVM.ListVersions(); err == nil {
+		t.Error("expected error from ListVersions when versions is a file")
 	}
 }

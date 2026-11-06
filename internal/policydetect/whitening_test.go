@@ -106,7 +106,7 @@ func TestWhiteningDetector_Detect_WrongDim(t *testing.T) {
 		{1, 0},
 		{0, 1},
 	}
-	d.Train(compliant, nil)
+	_ = d.Train(compliant, nil)
 
 	_, err := d.Detect([]float64{1, 0, 0})
 	if err == nil {
@@ -123,7 +123,7 @@ func TestWhiteningDetector_ComplianceScoreRange(t *testing.T) {
 		{1, 1},
 		{0.5, 0.5},
 	}
-	d.Train(compliant, nil)
+	_ = d.Train(compliant, nil)
 
 	// Test multiple activations
 	testCases := []struct {

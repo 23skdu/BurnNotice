@@ -131,9 +131,9 @@ func TestParseSafetensors_EmptyTensors(t *testing.T) {
 func TestFindSafetensorsFiles(t *testing.T) {
 	dir := t.TempDir()
 
-	os.WriteFile(filepath.Join(dir, "model.safetensors"), []byte{}, 0644)
-	os.WriteFile(filepath.Join(dir, "config.json"), []byte{}, 0644)
-	os.WriteFile(filepath.Join(dir, "tokenizer.model"), []byte{}, 0644)
+	_ = os.WriteFile(filepath.Join(dir, "model.safetensors"), []byte{}, 0644)
+	_ = os.WriteFile(filepath.Join(dir, "config.json"), []byte{}, 0644)
+	_ = os.WriteFile(filepath.Join(dir, "tokenizer.model"), []byte{}, 0644)
 
 	files, err := FindSafetensorsFiles(dir)
 	if err != nil {
@@ -311,7 +311,7 @@ func TestValidateONNX_Exists(t *testing.T) {
 		t.Fatalf("Failed to marshal dummy onnxpb.ModelProto: %v", err)
 	}
 
-	os.WriteFile(path, data, 0644)
+	_ = os.WriteFile(path, data, 0644)
 
 	err = ValidateONNX(path)
 	if err != nil {

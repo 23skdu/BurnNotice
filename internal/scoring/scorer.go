@@ -12,12 +12,20 @@ type AsyncLedger interface {
 	PollActivation(layerIdx int) ([]float64, error)
 }
 
+type registeredDirection struct {
+	name string
+	vec  []float64
+	norm float64
+}
+
 // Scorer computes activation scores against registered direction vectors asynchronously.
 type Scorer struct {
 	mu         sync.RWMutex
 	directions map[string][]float64
+	dirList    []registeredDirection
 	scores     map[string]float64
 	ledger     AsyncLedger
+	workPool   sync.Pool
 
 	// Robustness parameters
 	NoiseScale float64 // Sigma for Gaussian noise injection S(a + eta)
@@ -38,27 +46,49 @@ func (s *Scorer) RegisterDirection(name string, vec []float64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.directions[name] = vec
+	s.dirList = make([]registeredDirection, 0, len(s.directions))
+	for k, v := range s.directions {
+		s.dirList = append(s.dirList, registeredDirection{
+			name: k,
+			vec:  v,
+			norm: vecNorm(v),
+		})
+	}
 }
 
 // Score computes cosine similarity scores for all registered directions.
 func (s *Scorer) Score(activation []float64) map[string]float64 {
 	s.mu.RLock()
-	dirs := make(map[string][]float64, len(s.directions))
-	for k, v := range s.directions {
-		dirs[k] = v
-	}
+	dirList := s.dirList
 	noiseScale := s.NoiseScale
 	skipRatio := s.SkipRatio
 	s.mu.RUnlock()
 
 	var workingAct []float64
+	var pooledPtr *[]float64
 	if noiseScale > 0 {
-		workingAct = make([]float64, len(activation))
+		if raw := s.workPool.Get(); raw != nil {
+			ptr := raw.(*[]float64)
+			if cap(*ptr) >= len(activation) {
+				workingAct = (*ptr)[:len(activation)]
+				pooledPtr = ptr
+			}
+		}
+		if workingAct == nil {
+			buf := make([]float64, len(activation))
+			workingAct = buf
+			pooledPtr = &buf
+		}
 		for i, val := range activation {
 			/* #nosec G404 */
 			noise := rand.NormFloat64() * noiseScale
 			workingAct[i] = val + noise
 		}
+		defer func() {
+			if pooledPtr != nil {
+				s.workPool.Put(pooledPtr)
+			}
+		}()
 	} else {
 		workingAct = activation
 	}
@@ -68,22 +98,21 @@ func (s *Scorer) Score(activation []float64) map[string]float64 {
 		return nil
 	}
 
-	scores := make(map[string]float64, len(dirs))
-	for name, dir := range dirs {
+	scores := make(map[string]float64, len(dirList))
+	for _, d := range dirList {
 		/* #nosec G404 */
 		if skipRatio > 0 && rand.Float64() < skipRatio {
-			scores[name] = 0.5 // Masked baseline score
+			scores[d.name] = 0.5 // Masked baseline score
 			continue
 		}
 
-		dot := vecDot(workingAct, dir)
-		dirNorm := vecNorm(dir)
-		if dirNorm < 1e-10 {
-			scores[name] = 0.0
+		if d.norm < 1e-10 {
+			scores[d.name] = 0.0
 			continue
 		}
-		cosine := dot / (actNorm * dirNorm)
-		scores[name] = 1.0 / (1.0 + math.Exp(-cosine*10)) // Sigmoid scaled
+		dot := vecDot(workingAct, d.vec)
+		cosine := dot / (actNorm * d.norm)
+		scores[d.name] = 1.0 / (1.0 + math.Exp(-cosine*10)) // Sigmoid scaled
 	}
 
 	s.mu.Lock()

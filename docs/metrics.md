@@ -1,8 +1,8 @@
 # BurnNotice: Observability Reference
 
 > **Status**: Current
-> **Date**: 2026-06-12
-> **Version**: 0.6
+> **Date**: 2026-11-05
+> **Version**: 0.8
 
 ---
 
@@ -14,6 +14,37 @@ BurnNotice exposes two observability backends:
 2. **OpenTelemetry (OTel)** - Push-based metric export via OTLP/HTTP to any compatible collector
 
 Both backends emit the same logical signals. Prometheus is enabled by default; OTel is opt-in via environment variables.
+
+```mermaid
+flowchart LR
+    subgraph Producers["Runtime Producers"]
+        ENG["ONNX / WASM / MoE Engine"]
+        SCORE["Pooled Scorer & Async Ring"]
+        STEER["Steering & KV-Cache GCAD"]
+        HALL["SAE Hallucination Detector"]
+        LB["Longbow Flight / SQLite Store"]
+    end
+
+    subgraph Pipeline["Metrics & Sampling Layer"]
+        SAMP["Adaptive Rate Sampler\n(internal/metrics/sampler.go)"]
+        REG["Prometheus Registry\n(50+ Counters, Gauges, Histograms)"]
+    end
+
+    subgraph Exporters["Dual Export Backends"]
+        PROM["GET /metrics\n(Prometheus Scraper)"]
+        OTEL["OTLP/HTTP Exporter\n(internal/metrics/otel.go)"]
+        GRAF["Grafana Dashboards\n(grafana/*.json)"]
+    end
+
+    ENG --> SAMP
+    SCORE --> SAMP
+    STEER --> SAMP
+    HALL --> SAMP
+    LB --> SAMP
+    SAMP --> REG
+    REG --> PROM --> GRAF
+    REG --> OTEL --> GRAF
+```
 
 ---
 

@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -21,7 +22,7 @@ func TestLoadPolicies_Valid(t *testing.T) {
     escalation_count: 3
 `
 	tmp := writeTempFile(t, content)
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	policies, err := LoadPolicies(tmp)
 	if err != nil {
@@ -55,7 +56,7 @@ func TestLoadPolicies_MissingFile(t *testing.T) {
 
 func TestLoadPolicies_InvalidYAML(t *testing.T) {
 	tmp := writeTempFile(t, "invalid: yaml: [")
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	_, err := LoadPolicies(tmp)
 	if err == nil {
@@ -70,7 +71,7 @@ func TestLoadPolicies_MissingName(t *testing.T) {
     action: steer
 `
 	tmp := writeTempFile(t, content)
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	_, err := LoadPolicies(tmp)
 	if err == nil {
@@ -85,7 +86,7 @@ func TestLoadPolicies_MissingMetric(t *testing.T) {
     action: steer
 `
 	tmp := writeTempFile(t, content)
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	_, err := LoadPolicies(tmp)
 	if err == nil {
@@ -100,7 +101,7 @@ func TestLoadPolicies_MissingAction(t *testing.T) {
     threshold: 0.7
 `
 	tmp := writeTempFile(t, content)
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	_, err := LoadPolicies(tmp)
 	if err == nil {
@@ -249,7 +250,7 @@ func TestLoadPolicies_Operator(t *testing.T) {
     action: block
 `
 	tmp := writeTempFile(t, content)
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	policies, err := LoadPolicies(tmp)
 	if err != nil {
@@ -340,6 +341,68 @@ func TestEngine_DynamicThresholds(t *testing.T) {
 	violations2 := engine.Evaluate(map[string]float64{"deception_score": 0.8})
 	if len(violations2) != 1 {
 		t.Errorf("expected 1 violation after threshold drift adjustment, got %d", len(violations2))
+	}
+}
+
+func TestThresholdCalibrationBoundaryAndDrift(t *testing.T) {
+	policies := []Policy{
+		{Name: "deception_hi", Metric: "deception", Threshold: 0.70, Operator: "greater", Action: ActionSteer},
+		{Name: "coherence_lo", Metric: "coherence", Threshold: 0.30, Operator: "less", Action: ActionBlock},
+	}
+	engine := NewEngine(policies)
+
+	// Exact boundary equality must not trigger strict greater/less violations
+	if v := engine.Evaluate(map[string]float64{"deception": 0.70, "coherence": 0.30}); len(v) != 0 {
+		t.Fatalf("expected 0 violations at exact threshold boundary, got %d", len(v))
+	}
+
+	// Epsilon crossing triggers both
+	if v := engine.Evaluate(map[string]float64{"deception": 0.70 + 1e-9, "coherence": 0.30 - 1e-9}); len(v) != 2 {
+		t.Fatalf("expected 2 violations just past boundary, got %d", len(v))
+	}
+
+	// Non-finite updates/drifts must be ignored, preserving calibration
+	engine.UpdateThresholds(map[string]float64{"deception": math.NaN(), "coherence": math.Inf(1)})
+	engine.AdjustThresholdsForDrift(map[string]float64{"deception": math.Inf(-1), "coherence": math.NaN()})
+	if v := engine.Evaluate(map[string]float64{"deception": 0.70, "coherence": 0.30}); len(v) != 0 {
+		t.Fatalf("non-finite threshold update corrupted boundary: got %d violations", len(v))
+	}
+
+	// NaN score evaluation must not trigger false-positive violation
+	if v := engine.Evaluate(map[string]float64{"deception": math.NaN(), "coherence": math.NaN()}); len(v) != 0 {
+		t.Fatalf("expected 0 violations for NaN scores, got %d", len(v))
+	}
+
+	// Non-existent policy escalation check returns false
+	if engine.ShouldEscalate("nonexistent_policy") {
+		t.Error("expected ShouldEscalate=false for unknown policy")
+	}
+}
+
+func TestCalibrationSemanticGaterAndEscalation(t *testing.T) {
+	gater := NewSemanticGater(&MockLLMClient{})
+	engine := NewEngine([]Policy{
+		{Name: "harm_guard", Metric: "harm_score", Threshold: 0.50, Action: ActionBlock, EscalationCount: 2},
+	})
+
+	rawScore := 0.80
+	// Creative context scales 0.80 -> 0.08 (below 0.50 threshold)
+	creativeScore := gater.ScaleMetric("Write a creative story about a heist", rawScore)
+	if v := engine.Evaluate(map[string]float64{"harm_score": creativeScore}); len(v) != 0 {
+		t.Errorf("expected creative scaled score %f to pass threshold, got %d violations", creativeScore, len(v))
+	}
+
+	// General conversation keeps 0.80 (above 0.50 threshold)
+	generalScore := gater.ScaleMetric("How do I bypass the lock?", rawScore)
+	if v := engine.Evaluate(map[string]float64{"harm_score": generalScore}); len(v) != 1 {
+		t.Errorf("expected general score %f to violate threshold", generalScore)
+	}
+	if engine.ShouldEscalate("harm_guard") {
+		t.Error("expected no escalation after 1 violation")
+	}
+	engine.Evaluate(map[string]float64{"harm_score": generalScore})
+	if !engine.ShouldEscalate("harm_guard") {
+		t.Error("expected escalation after 2 violations")
 	}
 }
 

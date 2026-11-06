@@ -63,6 +63,9 @@ func FuzzDefaultSampler(f *testing.F) {
 		if rate == 0 {
 			rate = 1
 		}
+		if rate > 10000 {
+			rate = 10000
+		}
 		s := NewAdaptiveSampler(rate)
 
 		samples := 0

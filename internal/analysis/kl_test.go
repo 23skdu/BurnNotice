@@ -167,3 +167,73 @@ func TestProjectionKLDivergence_RegularizedVsExact(t *testing.T) {
 		t.Errorf("regularized projection should have lower KL divergence than exact projection: reg=%f vs exact=%f", klReg, klExact)
 	}
 }
+
+func TestAccuracyKLBoundsAndShiftInvariance(t *testing.T) {
+	p := []float64{2.5, -1.0, 0.3, 4.2, -3.1}
+	q := []float64{1.0, 0.5, -0.8, 3.9, -2.0}
+
+	klPQ, err := ComputeKLDivergence(p, q)
+	if err != nil {
+		t.Fatalf("ComputeKLDivergence failed: %v", err)
+	}
+	if klPQ < 0 || math.IsNaN(klPQ) || math.IsInf(klPQ, 0) {
+		t.Errorf("Gibbs inequality violated: KL(P||Q) = %v", klPQ)
+	}
+
+	// Shift invariance: adding constant c to logits does not change softmax or KL
+	pShifted := make([]float64, len(p))
+	qShifted := make([]float64, len(q))
+	for i := range p {
+		pShifted[i] = p[i] + 500.0
+		qShifted[i] = q[i] - 250.0
+	}
+	klShifted, err := ComputeKLDivergence(pShifted, qShifted)
+	if err != nil {
+		t.Fatalf("ComputeKLDivergence shifted failed: %v", err)
+	}
+	if math.Abs(klPQ-klShifted) > 1e-12 {
+		t.Errorf("shift invariance violated: %v vs %v", klPQ, klShifted)
+	}
+}
+
+func TestAccuracyNumericalStabilityKLAndLogSoftmax(t *testing.T) {
+	// NaN and Inf inputs must return an error rather than propagating NaN
+	nonFiniteCases := [][]float64{
+		{math.NaN(), 1.0},
+		{1.0, math.Inf(1)},
+		{math.Inf(-1), 0.0},
+	}
+	for _, tc := range nonFiniteCases {
+		if _, err := LogSoftmax(tc); err == nil {
+			t.Errorf("expected error from LogSoftmax for non-finite input %v", tc)
+		}
+		if _, err := ComputeKLDivergence(tc, []float64{1.0, 2.0}); err == nil {
+			t.Errorf("expected error from ComputeKLDivergence for non-finite P %v", tc)
+		}
+		if _, err := ComputeKLDivergence([]float64{1.0, 2.0}, tc); err == nil {
+			t.Errorf("expected error from ComputeKLDivergence for non-finite Q %v", tc)
+		}
+		if _, err := ComputeSymmetricKLDivergence(tc, []float64{1.0, 2.0}); err == nil {
+			t.Errorf("expected error from ComputeSymmetricKLDivergence for non-finite input %v", tc)
+		}
+	}
+
+	// Extreme dynamic range (finite) must remain finite and non-negative
+	extremeP := []float64{-700.0, 0.0, 700.0}
+	extremeQ := []float64{700.0, 0.0, -700.0}
+	kl, err := ComputeKLDivergence(extremeP, extremeQ)
+	if err != nil {
+		t.Fatalf("unexpected error on extreme finite logits: %v", err)
+	}
+	if kl < 0 || math.IsNaN(kl) || math.IsInf(kl, 0) {
+		t.Errorf("expected finite non-negative KL on extreme finite logits, got %v", kl)
+	}
+
+	// Empty batch and token error propagation
+	if _, _, err := ComputeBatchKLDivergence(nil, nil); err == nil {
+		t.Error("expected error for empty batch")
+	}
+	if _, _, err := ComputeBatchKLDivergence([][]float64{{1.0}}, [][]float64{{1.0, 2.0}}); err == nil {
+		t.Error("expected error for mismatched token logits in batch")
+	}
+}

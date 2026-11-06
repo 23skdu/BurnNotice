@@ -45,11 +45,13 @@ func ExtractWhitenedSVD(positive, negative [][]float64, k int, shrinkage, eigFlo
 		}
 	}
 
-	burnmath.WinsorizeMatrixInPlace(copyMatrix(positive), 0.005, 0.995)
-	burnmath.WinsorizeMatrixInPlace(copyMatrix(negative), 0.005, 0.995)
+	posClean := copyMatrix(positive)
+	negClean := copyMatrix(negative)
+	burnmath.WinsorizeMatrixInPlace(posClean, 0.005, 0.995)
+	burnmath.WinsorizeMatrixInPlace(negClean, 0.005, 0.995)
 
-	negMean := columnMean(negative)
-	rows := len(positive)
+	negMean := columnMean(negClean)
+	rows := len(posClean)
 	maxK := d
 	if rows < maxK {
 		maxK = rows
@@ -64,7 +66,7 @@ func ExtractWhitenedSVD(positive, negative [][]float64, k int, shrinkage, eigFlo
 	diff := make([]float64, rows*d)
 	for i := 0; i < rows; i++ {
 		for j := 0; j < d; j++ {
-			v := positive[i][j] - negMean[j]
+			v := posClean[i][j] - negMean[j]
 			if v > 1e10 {
 				v = 1e10
 			}
@@ -75,9 +77,9 @@ func ExtractWhitenedSVD(positive, negative [][]float64, k int, shrinkage, eigFlo
 		}
 	}
 
-	combined := make([][]float64, 0, len(positive)+len(negative))
-	combined = append(combined, positive...)
-	combined = append(combined, negative...)
+	combined := make([][]float64, 0, len(posClean)+len(negClean))
+	combined = append(combined, posClean...)
+	combined = append(combined, negClean...)
 	cov := burnmath.ShrinkageCovariance(combined, shrinkage)
 	if cov == nil {
 		return nil, nil, false

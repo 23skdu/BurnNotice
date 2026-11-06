@@ -57,7 +57,9 @@ func TestKVCacheAccumulationTracker_DriftDetection(t *testing.T) {
 func TestKVCacheAccumulationTracker_Concurrent(t *testing.T) {
 	tracker := NewKVCacheAccumulationTracker(15.0)
 	v0 := []float64{1.0, 0.0}
-	tracker.RecordTurn(0, v0)
+	if _, _, err := tracker.RecordTurn(0, v0); err != nil {
+		t.Fatalf("unexpected error on turn 0: %v", err)
+	}
 
 	var wg sync.WaitGroup
 	for i := 1; i <= 20; i++ {
@@ -66,7 +68,7 @@ func TestKVCacheAccumulationTracker_Concurrent(t *testing.T) {
 			defer wg.Done()
 			ang := float64(idx) * math.Pi / 180.0
 			vec := []float64{math.Cos(ang), math.Sin(ang)}
-			tracker.RecordTurn(idx, vec)
+			_, _, _ = tracker.RecordTurn(idx, vec)
 		}(i)
 	}
 	wg.Wait()
@@ -114,7 +116,7 @@ func TestGCADApply(t *testing.T) {
 	}
 	// Delta should be scaled by 0.9^3 = 0.729
 	decayedDelta := resDecayed[0] - unsteered[0]
-	expectedDelta := 1.0 * math.Pow(0.9, 3)
+	expectedDelta := 1.0 * 0.9 * 0.9 * 0.9
 	if math.Abs(decayedDelta-expectedDelta) > 1e-6 {
 		t.Errorf("expected decayed delta %f, got %f", expectedDelta, decayedDelta)
 	}

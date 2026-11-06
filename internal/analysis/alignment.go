@@ -102,6 +102,9 @@ func (d *AlignmentImprintDetector) computeEffectiveRank() float64 {
 }
 
 func (d *AlignmentImprintDetector) computeSVDDecayRate() float64 {
+	if len(d.layerDirections) < 2 {
+		return 0
+	}
 	sv := d.computeSingularValues()
 	if len(sv) < 3 {
 		return 0
@@ -158,25 +161,35 @@ func (d *AlignmentImprintDetector) computeDirectionStability() float64 {
 }
 
 func (d *AlignmentImprintDetector) computeSingularValues() []float64 {
-	n := len(d.layerDirections)
-	if n == 0 {
+	if len(d.layerDirections) < 2 {
 		return nil
 	}
 
-	dirs := make([][]float64, 0, n)
+	dirs := make([][]float64, 0, len(d.layerDirections))
 	layers := sortedLayers(d.layerDirections)
+	dim := 0
 	for _, l := range layers {
-		dirs = append(dirs, d.layerDirections[l])
+		dir := d.layerDirections[l]
+		if len(dir) == 0 || hasNonFinite(dir) {
+			continue
+		}
+		if dim == 0 || len(dir) < dim {
+			dim = len(dir)
+		}
+		dirs = append(dirs, dir)
+	}
+	n := len(dirs)
+	if n < 2 || dim == 0 {
+		return nil
 	}
 
-	dim := len(dirs[0])
 	mean := make([]float64, dim)
 	for _, dir := range dirs {
 		for j := 0; j < dim; j++ {
 			mean[j] += dir[j]
 		}
 	}
-	invN := 1.0 / float64(len(dirs))
+	invN := 1.0 / float64(n)
 	for j := 0; j < dim; j++ {
 		mean[j] *= invN
 	}

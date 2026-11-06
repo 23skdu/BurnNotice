@@ -1,8 +1,8 @@
 # BurnNotice: Activation Analysis Packages
 
 > **Status**: Current
-> **Date**: 2026-06-12
-> **Version**: 0.6
+> **Date**: 2026-11-05
+> **Version**: 0.8
 
 ---
 
@@ -10,7 +10,33 @@
 
 The `internal/analysis` package provides post-profiling inspection tools that operate on collections of extracted behavioral direction vectors. These tools answer higher-order questions about a model's alignment geometry, how safety representations are structured across layers, and how robust interventions are against layer-level compensation.
 
-All types in this package are pure Go with no external dependencies and are designed to compose with the outputs of `internal/extract`.
+All types in this package are pure Go with bounded worker-pool concurrency (`ConceptConeAnalyzer`), FNV-1a cached Thin-SVD latent projection (`ProjectLatentSpace`), and numerical-stability safeguards (`NaN`/`Inf` and zero-norm protection).
+
+```mermaid
+flowchart TD
+    subgraph Inputs["Extracted Activation & Direction Inputs"]
+        DIRS["Per-Layer Directions\nmap[int][]float64"]
+        CATS["Multi-Category Harm Activations\n[]HarmCategory"]
+        ACTS["Layer Activation Matrices\nX, Y in R^(N x d)"]
+    end
+
+    subgraph Analyzers["internal/analysis Modules"]
+        ALIGN["AlignmentImprintDetector\n(DPO / RLHF / CAI / SFT)"]
+        CONE["ConceptConeAnalyzer\n(Parallel Worker-Pool Cosines & SVD)"]
+        CROSS["CrossLayerAlignmentAnalyzer + CKA\n(Decision Layer & Rotation-Invariant Similarity)"]
+        LATENT["ProjectLatentSpace\n(FNV-1a Cached Thin-SVD & Trajectories)"]
+        OURO["OuroborosDetector\n(Compensating Layer Refinement)"]
+        KL["LogSoftmax & KL Divergence\n(Forward, Symmetric, Batch)"]
+    end
+
+    DIRS --> ALIGN
+    CATS --> CONE
+    DIRS --> CROSS
+    ACTS --> CROSS
+    ACTS --> LATENT
+    DIRS --> OURO
+    ACTS --> KL
+```
 
 ---
 

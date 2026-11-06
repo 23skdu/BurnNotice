@@ -57,7 +57,9 @@ func (a *JailbreakRiskAssessor) Assess(results []JailbreakEvalResult) (Externali
 		if r.SteeredSuccess {
 			steeredSuccessCount++
 		}
-		totalShift += r.EarlyTokenShift
+		if !math.IsNaN(r.EarlyTokenShift) && !math.IsInf(r.EarlyTokenShift, 0) {
+			totalShift += r.EarlyTokenShift
+		}
 	}
 
 	n := float64(len(results))
@@ -134,13 +136,16 @@ func DetectEarlyTokenDrift(baselineVecs, steeredVecs [][]float64) float64 {
 	for i := 0; i < k; i++ {
 		b := baselineVecs[i]
 		s := steeredVecs[i]
-		if len(b) != len(s) || len(b) == 0 {
+		if len(b) != len(s) || len(b) == 0 || hasNonFinite(b) || hasNonFinite(s) {
 			continue
 		}
 		normB := floats.Norm(b, 2)
 		normS := floats.Norm(s, 2)
-		if normB > 1e-9 && normS > 1e-9 {
+		if normB > 1e-9 && normS > 1e-9 && !math.IsInf(normB, 0) && !math.IsInf(normS, 0) {
 			cos := floats.Dot(b, s) / (normB * normS)
+			if math.IsNaN(cos) || math.IsInf(cos, 0) {
+				continue
+			}
 			if cos > 1.0 {
 				cos = 1.0
 			} else if cos < -1.0 {

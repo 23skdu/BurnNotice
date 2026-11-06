@@ -244,3 +244,113 @@ func TestExtractWhitenedSVD_MultipleDirections(t *testing.T) {
 		t.Errorf("singular values not strictly descending: %v", sv)
 	}
 }
+
+func TestAccuracy_ExtractDIM_And_PCA_NaNInfResilience(t *testing.T) {
+	// Inject extreme NaN/+Inf/-Inf outliers into otherwise well-separated activations
+	pos := [][]float64{
+		{2.0, 0.0, 0.0},
+		{2.1, 0.1, 0.0},
+		{1.9, -0.1, 0.0},
+		{math.Inf(1), math.NaN(), 0.0},
+	}
+	neg := [][]float64{
+		{-2.0, 0.0, 0.0},
+		{-2.1, 0.1, 0.0},
+		{-1.9, -0.1, 0.0},
+		{math.Inf(-1), 0.0, math.NaN()},
+	}
+
+	dimDir := ExtractDIM(copyMatrix(pos), copyMatrix(neg))
+	if len(dimDir) != 3 {
+		t.Fatalf("ExtractDIM len = %d, want 3", len(dimDir))
+	}
+	for i, v := range dimDir {
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			t.Errorf("ExtractDIM[%d] is non-finite: %f", i, v)
+		}
+	}
+	if math.Abs(Norm(dimDir)-1.0) > 1e-6 {
+		t.Errorf("ExtractDIM norm = %f, want 1.0", Norm(dimDir))
+	}
+
+	pcaDirs, sv := ExtractPCA(copyMatrix(pos), copyMatrix(neg), 2)
+	if len(pcaDirs) == 0 {
+		t.Fatal("ExtractPCA returned empty directions on Winsorized NaN/Inf inputs")
+	}
+	for i, d := range pcaDirs {
+		for j, v := range d {
+			if math.IsNaN(v) || math.IsInf(v, 0) {
+				t.Errorf("ExtractPCA[%d][%d] is non-finite: %f", i, j, v)
+			}
+		}
+		if math.Abs(Norm(d)-1.0) > 1e-6 {
+			t.Errorf("ExtractPCA[%d] norm = %f, want 1.0", i, Norm(d))
+		}
+	}
+	for i, s := range sv {
+		if math.IsNaN(s) || math.IsInf(s, 0) || s < 0 {
+			t.Errorf("ExtractPCA singularValue[%d] invalid: %f", i, s)
+		}
+	}
+}
+
+func TestInvariant_DegenerateZeroNormAndIdenticalDistributions(t *testing.T) {
+	// Zero-norm vectors in Normalize, Norm, Dot
+	zero := []float64{0.0, 0.0, 0.0, 0.0}
+	normZero := Normalize(zero)
+	if Norm(normZero) != 0.0 {
+		t.Errorf("Normalize(zero) norm = %f, want 0.0", Norm(normZero))
+	}
+
+	// Identical positive and negative matrices (zero difference matrix -> degenerate covariance)
+	identical := [][]float64{
+		{1.0, 2.0, 3.0},
+		{1.0, 2.0, 3.0},
+		{1.0, 2.0, 3.0},
+	}
+
+	// ExtractDIM on identical sets returns a finite zero-norm vector without NaN
+	dimZero := ExtractDIM(copyMatrix(identical), copyMatrix(identical))
+	for i, v := range dimZero {
+		if math.IsNaN(v) || math.IsInf(v, 0) || v != 0.0 {
+			t.Errorf("ExtractDIM(identical)[%d] = %f, want 0.0", i, v)
+		}
+	}
+
+	// ExtractINLP on identical sets terminates cleanly without NaN or Inf
+	inlpDirs := ExtractINLP(copyMatrix(identical), copyMatrix(identical), 2)
+	for i, d := range inlpDirs {
+		for j, v := range d {
+			if math.IsNaN(v) || math.IsInf(v, 0) {
+				t.Errorf("ExtractINLP(identical)[%d][%d] is non-finite: %f", i, j, v)
+			}
+		}
+	}
+
+	// ExtractWhitenedSVD on zero-variance identical sets with eigFloor=0 returns ok=false cleanly
+	_, _, ok := ExtractWhitenedSVD(copyMatrix(identical), copyMatrix(identical), 1, 0.0, 0.0)
+	if ok {
+		t.Error("expected ExtractWhitenedSVD to return ok=false on zero-variance data with eigFloor=0")
+	}
+}
+
+func TestOracle_ExtractDIM_ExactAnalyticalDirection(t *testing.T) {
+	pos := [][]float64{
+		{4.0, 2.0, -1.0},
+		{6.0, 4.0, -1.0},
+	}
+	neg := [][]float64{
+		{2.0, -1.0, -1.0},
+		{0.0, -3.0, -1.0},
+	}
+	// posMean = [5, 3, -1], negMean = [1, -2, -1]
+	// diff = [4, 5, 0], norm = sqrt(41)
+	got := ExtractDIM(pos, neg)
+	norm41 := math.Sqrt(41.0)
+	want := []float64{4.0 / norm41, 5.0 / norm41, 0.0}
+	for i := range want {
+		if math.Abs(got[i]-want[i]) > 1e-12 {
+			t.Errorf("Oracle ExtractDIM[%d] = %.15f, want %.15f", i, got[i], want[i])
+		}
+	}
+}

@@ -11,13 +11,13 @@ import (
 
 func TestOTelConfigFromEnv(t *testing.T) {
 	// Set test environment variables
-	os.Setenv(EnvOTelEndpoint, "http://localhost:4318")
-	os.Setenv(EnvOTelInsecure, "true")
-	os.Setenv(EnvServiceName, "test-service")
+	_ = os.Setenv(EnvOTelEndpoint, "http://localhost:4318")
+	_ = os.Setenv(EnvOTelInsecure, "true")
+	_ = os.Setenv(EnvServiceName, "test-service")
 	defer func() {
-		os.Unsetenv(EnvOTelEndpoint)
-		os.Unsetenv(EnvOTelInsecure)
-		os.Unsetenv(EnvServiceName)
+		_ = os.Unsetenv(EnvOTelEndpoint)
+		_ = os.Unsetenv(EnvOTelInsecure)
+		_ = os.Unsetenv(EnvServiceName)
 	}()
 
 	cfg := OTelConfigFromEnv()

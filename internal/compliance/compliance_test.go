@@ -10,14 +10,14 @@ import (
 
 func TestGenerateReport(t *testing.T) {
 	tmp := t.TempDir() + "/report_test.db"
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	backend, _ := ledger.NewBackend("sqlite", tmp)
-	defer backend.Close()
-	backend.Init()
+	defer func() { _ = backend.Close() }()
+	_ = backend.Init()
 
 	now := time.Now()
-	backend.RecordAlert(ledger.Alert{
+	_ = backend.RecordAlert(ledger.Alert{
 		Timestamp: now,
 		SessionID: "sess-001",
 		Metric:    "deception_score",
@@ -25,7 +25,7 @@ func TestGenerateReport(t *testing.T) {
 		Threshold: 0.7,
 		Action:    "steer",
 	})
-	backend.RecordAlert(ledger.Alert{
+	_ = backend.RecordAlert(ledger.Alert{
 		Timestamp: now,
 		SessionID: "sess-002",
 		Metric:    "deception_score",
@@ -50,14 +50,14 @@ func TestGenerateReport(t *testing.T) {
 
 func TestEUAIActReport(t *testing.T) {
 	tmp := t.TempDir() + "/eu_test.db"
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	backend, _ := ledger.NewBackend("sqlite", tmp)
-	defer backend.Close()
-	backend.Init()
+	defer func() { _ = backend.Close() }()
+	_ = backend.Init()
 
 	now := time.Now()
-	backend.RecordAlert(ledger.Alert{
+	_ = backend.RecordAlert(ledger.Alert{
 		Timestamp: now,
 		SessionID: "sess-001",
 		Metric:    "deception_score",
@@ -65,7 +65,7 @@ func TestEUAIActReport(t *testing.T) {
 		Threshold: 0.7,
 		Action:    "block",
 	})
-	backend.RecordAlert(ledger.Alert{
+	_ = backend.RecordAlert(ledger.Alert{
 		Timestamp: now,
 		SessionID: "sess-002",
 		Metric:    "deception_score",
@@ -87,14 +87,14 @@ func TestEUAIActReport(t *testing.T) {
 
 func TestNISTAIRMFReport(t *testing.T) {
 	tmp := t.TempDir() + "/nist_test.db"
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	backend, _ := ledger.NewBackend("sqlite", tmp)
-	defer backend.Close()
-	backend.Init()
+	defer func() { _ = backend.Close() }()
+	_ = backend.Init()
 
 	now := time.Now()
-	backend.RecordAlert(ledger.Alert{
+	_ = backend.RecordAlert(ledger.Alert{
 		Timestamp: now,
 		SessionID: "sess-001",
 		Metric:    "deception_score",
@@ -102,7 +102,7 @@ func TestNISTAIRMFReport(t *testing.T) {
 		Threshold: 0.7,
 		Action:    "block",
 	})
-	backend.RecordAlert(ledger.Alert{
+	_ = backend.RecordAlert(ledger.Alert{
 		Timestamp: now,
 		SessionID: "sess-002",
 		Metric:    "deception_score",
@@ -127,11 +127,11 @@ func TestNISTAIRMFReport(t *testing.T) {
 
 func TestExportReport(t *testing.T) {
 	tmp := t.TempDir() + "/export_test.db"
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	backend, _ := ledger.NewBackend("sqlite", tmp)
-	defer backend.Close()
-	backend.Init()
+	defer func() { _ = backend.Close() }()
+	_ = backend.Init()
 
 	reporter := NewReporter(backend)
 	report := &Report{
@@ -273,11 +273,11 @@ func TestDefaultTimeout(t *testing.T) {
 
 func TestExportPDF(t *testing.T) {
 	tmp := t.TempDir() + "/pdf_test.db"
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	backend, _ := ledger.NewBackend("sqlite", tmp)
-	defer backend.Close()
-	backend.Init()
+	defer func() { _ = backend.Close() }()
+	_ = backend.Init()
 
 	reporter := NewReporter(backend)
 	report := &Report{

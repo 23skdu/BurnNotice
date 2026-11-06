@@ -55,7 +55,7 @@ func TestSAELoader_Load(t *testing.T) {
 	loader := &SAELoader{}
 	content := `{"encoder_weights":[[1,0],[0,1]],"decoder_weights":[[1,0],[0,1]],"encoder_bias":[0,0],"decoder_bias":[0,0],"feature_count":2,"input_dim":2,"layer_index":0}`
 	tmp := writeTempSAEFile(t, content)
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	if err := loader.Load(tmp); err != nil {
 		t.Fatalf("Load error: %v", err)
@@ -72,7 +72,7 @@ func TestSAELoader_Load_MissingFile(t *testing.T) {
 func TestSAELoader_Load_InvalidJSON(t *testing.T) {
 	loader := &SAELoader{}
 	tmp := writeTempSAEFile(t, "invalid json")
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 
 	if err := loader.Load(tmp); err == nil {
 		t.Fatal("expected error for invalid JSON")
@@ -89,7 +89,7 @@ func TestSAELoader_Encode(t *testing.T) {
 		FeatureCount:   2,
 		InputDim:       2,
 	}
-	loader.LoadFromMemory(weights)
+	_ = loader.LoadFromMemory(weights)
 
 	features, err := loader.Encode([]float64{3, 4})
 	if err != nil {
@@ -117,7 +117,7 @@ func TestSAELoader_Encode_ReLU(t *testing.T) {
 		FeatureCount:   2,
 		InputDim:       2,
 	}
-	loader.LoadFromMemory(weights)
+	_ = loader.LoadFromMemory(weights)
 
 	features, err := loader.Encode([]float64{-3, 4})
 	if err != nil {
@@ -150,7 +150,7 @@ func TestSAELoader_Encode_WrongDim(t *testing.T) {
 		FeatureCount:   1,
 		InputDim:       2,
 	}
-	loader.LoadFromMemory(weights)
+	_ = loader.LoadFromMemory(weights)
 
 	_, err := loader.Encode([]float64{1})
 	if err == nil {
@@ -168,7 +168,7 @@ func TestSAELoader_Decode(t *testing.T) {
 		FeatureCount:   2,
 		InputDim:       2,
 	}
-	loader.LoadFromMemory(weights)
+	_ = loader.LoadFromMemory(weights)
 
 	reconstructed, err := loader.Decode([]float64{3, 4})
 	if err != nil {
@@ -239,7 +239,7 @@ func TestSAELoader_ReconstructionError(t *testing.T) {
 		FeatureCount:   2,
 		InputDim:       2,
 	}
-	loader.LoadFromMemory(weights)
+	_ = loader.LoadFromMemory(weights)
 
 	error, err := loader.ReconstructionError([]float64{3, 4})
 	if err != nil {
@@ -261,7 +261,7 @@ func TestSAELoader_ReconstructionError_IdentitySAE(t *testing.T) {
 		FeatureCount:   3,
 		InputDim:       3,
 	}
-	loader.LoadFromMemory(weights)
+	_ = loader.LoadFromMemory(weights)
 
 	activation := []float64{1, 2, 3}
 	error, err := loader.ReconstructionError(activation)
@@ -368,11 +368,11 @@ func createMockNpy(data []float32, pythonHeader string) []byte {
 
 	headerBytes := []byte(pythonHeader)
 	headerLen := uint16(len(headerBytes))
-	binary.Write(&buf, binary.LittleEndian, headerLen)
+	_ = binary.Write(&buf, binary.LittleEndian, headerLen)
 	buf.Write(headerBytes)
 
 	for _, val := range data {
-		binary.Write(&buf, binary.LittleEndian, val)
+		_ = binary.Write(&buf, binary.LittleEndian, val)
 	}
 
 	return buf.Bytes()
@@ -391,7 +391,7 @@ func createMockNpz(files map[string][]byte) []byte {
 			panic(err)
 		}
 	}
-	zw.Close()
+	_ = zw.Close()
 	return buf.Bytes()
 }
 
@@ -403,11 +403,11 @@ func createMockNpyV2(data []float32, pythonHeader string) []byte {
 
 	headerBytes := []byte(pythonHeader)
 	headerLen := uint32(len(headerBytes))
-	binary.Write(&buf, binary.LittleEndian, headerLen)
+	_ = binary.Write(&buf, binary.LittleEndian, headerLen)
 	buf.Write(headerBytes)
 
 	for _, val := range data {
-		binary.Write(&buf, binary.LittleEndian, val)
+		_ = binary.Write(&buf, binary.LittleEndian, val)
 	}
 
 	return buf.Bytes()
@@ -437,7 +437,7 @@ func TestSAELoader_AdditionalEdgeCases(t *testing.T) {
 		FeatureCount:   2,
 		InputDim:       2,
 	}
-	loader.LoadFromMemory(weights)
+	_ = loader.LoadFromMemory(weights)
 	if _, err := loader.Decode([]float64{1}); err == nil {
 		t.Error("expected error for Decode with wrong feature dimension")
 	}
@@ -455,7 +455,7 @@ func TestSAELoader_AdditionalEdgeCases(t *testing.T) {
 		t.Error("expected error for nonexistent config path in LoadGemmaScope")
 	}
 	badConfigPath := filepath.Join(t.TempDir(), "bad_config.json")
-	os.WriteFile(badConfigPath, []byte("{invalid"), 0600)
+	_ = os.WriteFile(badConfigPath, []byte("{invalid"), 0600)
 	if err := loader.LoadGemmaScope("sae.npz", badConfigPath); err == nil {
 		t.Error("expected error for invalid config JSON in LoadGemmaScope")
 	}
@@ -465,7 +465,7 @@ func TestSAELoader_AdditionalEdgeCases(t *testing.T) {
 	}
 
 	badNpzPath := filepath.Join(t.TempDir(), "bad.npz")
-	os.WriteFile(badNpzPath, []byte("not a zip"), 0600)
+	_ = os.WriteFile(badNpzPath, []byte("not a zip"), 0600)
 	if err := loader.LoadGemmaScope(badNpzPath, ""); err == nil {
 		t.Error("expected error for invalid zip in LoadGemmaScope")
 	}
@@ -476,7 +476,7 @@ func TestSAELoader_AdditionalEdgeCases(t *testing.T) {
 	// Missing encoder weights
 	zipBytes1 := createMockNpz(map[string][]byte{"encoder_bias.npy": validNpy})
 	npz1 := filepath.Join(t.TempDir(), "sae1.npz")
-	os.WriteFile(npz1, zipBytes1, 0600)
+	_ = os.WriteFile(npz1, zipBytes1, 0600)
 	if err := loader.LoadGemmaScope(npz1, ""); err == nil {
 		t.Error("expected error for NPZ missing encoder weights")
 	}
@@ -484,7 +484,7 @@ func TestSAELoader_AdditionalEdgeCases(t *testing.T) {
 	// Missing decoder weights
 	zipBytes2 := createMockNpz(map[string][]byte{"encoder_weights.npy": validNpy})
 	npz2 := filepath.Join(t.TempDir(), "sae2.npz")
-	os.WriteFile(npz2, zipBytes2, 0600)
+	_ = os.WriteFile(npz2, zipBytes2, 0600)
 	if err := loader.LoadGemmaScope(npz2, ""); err == nil {
 		t.Error("expected error for NPZ missing decoder weights")
 	}
@@ -492,7 +492,7 @@ func TestSAELoader_AdditionalEdgeCases(t *testing.T) {
 	// Missing encoder bias
 	zipBytes3 := createMockNpz(map[string][]byte{"encoder_weights.npy": validNpy, "decoder_weights.npy": validNpy})
 	npz3 := filepath.Join(t.TempDir(), "sae3.npz")
-	os.WriteFile(npz3, zipBytes3, 0600)
+	_ = os.WriteFile(npz3, zipBytes3, 0600)
 	if err := loader.LoadGemmaScope(npz3, ""); err == nil {
 		t.Error("expected error for NPZ missing encoder bias")
 	}
@@ -500,7 +500,7 @@ func TestSAELoader_AdditionalEdgeCases(t *testing.T) {
 	// Missing decoder bias
 	zipBytes4 := createMockNpz(map[string][]byte{"encoder_weights.npy": validNpy, "decoder_weights.npy": validNpy, "encoder_bias.npy": validNpy})
 	npz4 := filepath.Join(t.TempDir(), "sae4.npz")
-	os.WriteFile(npz4, zipBytes4, 0600)
+	_ = os.WriteFile(npz4, zipBytes4, 0600)
 	if err := loader.LoadGemmaScope(npz4, ""); err == nil {
 		t.Error("expected error for NPZ missing decoder bias")
 	}

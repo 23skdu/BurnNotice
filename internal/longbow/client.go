@@ -191,7 +191,7 @@ func (c *Client) Ingest(ctx context.Context, activations [][]float32, ids []uint
 		floatB.AppendValues(act, nil)
 	}
 
-	rec := b.NewRecord()
+	rec := b.NewRecordBatch()
 	defer rec.Release()
 
 	desc := &flight.FlightDescriptor{
@@ -206,7 +206,7 @@ func (c *Client) Ingest(ctx context.Context, activations [][]float32, ids []uint
 	}
 
 	w := flight.NewRecordWriter(stream, ipc.WithSchema(schema))
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 
 	if err := w.Write(rec); err != nil {
 		return err
@@ -220,13 +220,13 @@ func (c *Client) ingestSQLite(ctx context.Context, activations [][]float32, ids 
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	stmt, err := tx.PrepareContext(ctx, `INSERT OR REPLACE INTO vectors (id, vector, dim) VALUES (?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("prepare: %w", err)
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 
 	for i, act := range activations {
 		if _, err := stmt.ExecContext(ctx, ids[i], serializeFloats(act), len(act)); err != nil {
@@ -285,7 +285,7 @@ func (c *Client) querySQLite(ctx context.Context, ids []uint64) ([][]float32, er
 	if err != nil {
 		return nil, fmt.Errorf("query: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	idMap := make(map[uint64][]float32, len(ids))
 	for rows.Next() {
@@ -393,7 +393,7 @@ func (c *Client) searchSQLite(ctx context.Context, query []float32, k int) ([]ui
 	if err != nil {
 		return nil, nil, fmt.Errorf("query: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	type neighbor struct {
 		id   uint64

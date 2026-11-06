@@ -169,7 +169,7 @@ func (h *Handlers) SavePolicy() http.HandlerFunc {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, "<div class='text-green-400'>Policy saved successfully</div>")
+		_, _ = fmt.Fprint(w, "<div class='text-green-400'>Policy saved successfully</div>")
 	}
 }
 
@@ -186,7 +186,7 @@ func (h *Handlers) CancelJob() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		jobID := r.PathValue("id")
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprintf(w, "<div class='text-yellow-400'>Job %s cancelled</div>", jobID) // #nosec G705 -- jobID from path parameter, safe for HTML context
+		_, _ = fmt.Fprintf(w, "<div class='text-yellow-400'>Job %s cancelled</div>", jobID) // #nosec G705 -- jobID from path parameter, safe for HTML context
 	}
 }
 

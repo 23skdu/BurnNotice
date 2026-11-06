@@ -1,8 +1,8 @@
 # BurnNotice: Architecture Overview
 
 > **Status**: Current
-> **Date**: 2026-06-12
-> **Version**: 0.6
+> **Date**: 2026-11-05
+> **Version**: 0.8
 
 ---
 
@@ -656,5 +656,19 @@ graph TD
    - Prefill-dominant behavioral commitment: decisions solidify almost entirely within the prompt prefill phase (`internal/steer/commitment.go`), allowing decoding tokens to receive attenuated steering without losing control efficacy.
    - Native Gemma Scope SAE integration (`internal/sae/loader.go`).
    - Chat format: `<start_of_turn>user...<end_of_turn><start_of_turn>model`.
+
+### Mixture-of-Experts (MoE) Offset Partitioning & Softmax Top-K Routing
+
+For MoE architectures (`internal/engine/moe.go`), BurnNotice partitions concatenated expert activation vectors by summing prior expert dimensions (`expertDims[0..i-1]`) and computes top-k routing weights either from energy norms or router logits via numerically stabilized softmax:
+
+```mermaid
+flowchart LR
+    ACT["Concatenated Layer Activation\n[E_0 | E_1 | ... | E_{M-1}]"] --> OFFSET["Cumulative Offset Slicing\nstart = Σ_{j < i} dim(E_j)\nend = start + dim(E_i)"]
+    OFFSET --> SLICE["ExpertActivation(act, i)\nClamped Slice [start:end]"]
+    LOGITS["Router Logits\n[z_0, z_1, ..., z_{M-1}]"] --> TOPK["Sort Top-K Experts\nStabilized Softmax: exp(z_i - z_max) / Σ exp"]
+    SLICE --> ROUTE["Active Expert Subspace Scoring & Steering"]
+    TOPK --> ROUTE
+```
+
 
 
