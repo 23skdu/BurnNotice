@@ -7,7 +7,7 @@ import (
 
 // ProgressiveProfiler profiles models layer-by-layer to manage memory.
 type ProgressiveProfiler struct {
-	layerGroups   [][]int
+	layerGroups     [][]int
 	earlyExitThresh float64
 }
 

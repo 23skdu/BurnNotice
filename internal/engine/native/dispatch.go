@@ -18,7 +18,6 @@ func NewGPUEngine(dim int) *GPUEngine {
 	return &GPUEngine{Dimension: dim}
 }
 
-
 // CosineSimilarity parallelizes activation metric evaluations directly within GPU kernels.
 func (ge *GPUEngine) CosineSimilarity(activation []float32, directions []float32, numDirections int) []float32 {
 	if len(activation) != ge.Dimension || len(directions) != ge.Dimension*numDirections || numDirections <= 0 {

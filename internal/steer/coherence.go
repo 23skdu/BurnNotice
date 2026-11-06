@@ -7,10 +7,10 @@ import (
 
 // CoherenceTracker monitors token perplexities to prevent activation-space lobotomy or output collapse.
 type CoherenceTracker struct {
-	mu                sync.RWMutex
-	logProbs          []float64
-	perplexityLimit   float64
-	windowSize        int
+	mu              sync.RWMutex
+	logProbs        []float64
+	perplexityLimit float64
+	windowSize      int
 }
 
 // NewCoherenceTracker creates a tracker with target parameters.

@@ -8,19 +8,19 @@ import (
 type AlignmentMethod string
 
 const (
-	AlignmentDPO  AlignmentMethod = "DPO"
-	AlignmentRLHF AlignmentMethod = "RLHF"
-	AlignmentCAI  AlignmentMethod = "CAI"
-	AlignmentSFT  AlignmentMethod = "SFT"
+	AlignmentDPO     AlignmentMethod = "DPO"
+	AlignmentRLHF    AlignmentMethod = "RLHF"
+	AlignmentCAI     AlignmentMethod = "CAI"
+	AlignmentSFT     AlignmentMethod = "SFT"
 	AlignmentUnknown AlignmentMethod = "unknown"
 )
 
 // AlignmentMetrics holds geometric features used to classify alignment method.
 type AlignmentMetrics struct {
-	EffectiveRank      float64
-	SVDDecayRate       float64
+	EffectiveRank       float64
+	SVDDecayRate        float64
 	CrossLayerCoherence float64
-	DirectionStability float64
+	DirectionStability  float64
 }
 
 // AlignmentImprintDetector extracts directions from model activations, computes

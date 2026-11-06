@@ -127,7 +127,7 @@ func TestWhiteningDetector_ComplianceScoreRange(t *testing.T) {
 
 	// Test multiple activations
 	testCases := []struct {
-		name      string
+		name       string
 		activation []float64
 	}{
 		{"near_mean", []float64{0.625, 0.625}},
@@ -176,8 +176,8 @@ func TestWhiteningDetector_LargeDataset(t *testing.T) {
 	compliant := make([][]float64, 100)
 	for i := 0; i < 100; i++ {
 		compliant[i] = []float64{
-			math.Sin(float64(i)*0.1),
-			math.Cos(float64(i)*0.1),
+			math.Sin(float64(i) * 0.1),
+			math.Cos(float64(i) * 0.1),
 		}
 	}
 

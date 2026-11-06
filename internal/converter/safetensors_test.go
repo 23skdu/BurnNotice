@@ -1,10 +1,10 @@
 package converter
 
 import (
+	"burnnotice/internal/onnxpb"
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
-	"burnnotice/internal/onnxpb"
 	"google.golang.org/protobuf/proto"
 	"os"
 	"path/filepath"
@@ -56,13 +56,13 @@ func TestParseSafetensors(t *testing.T) {
 
 	tensors := map[string]TensorInfo{
 		"model.embed_tokens.weight": {
-			DType:    "F32",
-			Shape:    []uint64{32000, 4096},
+			DType:       "F32",
+			Shape:       []uint64{32000, 4096},
 			DataOffsets: []uint64{0, 32000 * 4096 * 4},
 		},
 		"model.norm.weight": {
-			DType:    "F32",
-			Shape:    []uint64{4096},
+			DType:       "F32",
+			Shape:       []uint64{4096},
 			DataOffsets: []uint64{32000 * 4096 * 4, 32000*4096*4 + 4096*4},
 		},
 	}
@@ -302,7 +302,7 @@ func TestValidateONNX_FileNotFound(t *testing.T) {
 func TestValidateONNX_Exists(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "model.onnx")
-	
+
 	model := &onnxpb.ModelProto{
 		Graph: &onnxpb.GraphProto{},
 	}

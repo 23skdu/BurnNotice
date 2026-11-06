@@ -201,5 +201,3 @@ func TestBroadcast_WithSampling(t *testing.T) {
 	h.Broadcast("test", "data")
 	<-ch
 }
-
-

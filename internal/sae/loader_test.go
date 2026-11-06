@@ -472,7 +472,7 @@ func TestSAELoader_AdditionalEdgeCases(t *testing.T) {
 
 	// 5. LoadGemmaScope NPZ missing elements
 	validNpy := createMockNpy([]float32{0, 0}, `{'descr': '<f4', 'fortran_order': False, 'shape': (2,), }`)
-	
+
 	// Missing encoder weights
 	zipBytes1 := createMockNpz(map[string][]byte{"encoder_bias.npy": validNpy})
 	npz1 := filepath.Join(t.TempDir(), "sae1.npz")
@@ -637,5 +637,3 @@ func TestSAELoader_LoadGemmaScope_AlternativeNamesAndNoConfig(t *testing.T) {
 		t.Errorf("expected InputDim = 3, got %d", loader.weights.InputDim)
 	}
 }
-
-

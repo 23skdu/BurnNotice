@@ -12,13 +12,13 @@ type JobStatus string
 
 const (
 	// StatusQueued means the job is waiting to be processed.
-	StatusQueued       JobStatus = "queued"
+	StatusQueued JobStatus = "queued"
 	// StatusRunning means the job is currently executing.
-	StatusRunning      JobStatus = "running"
+	StatusRunning JobStatus = "running"
 	// StatusComplete means the job has finished successfully.
-	StatusComplete     JobStatus = "complete"
+	StatusComplete JobStatus = "complete"
 	// StatusFailed means the job encountered an error.
-	StatusFailed       JobStatus = "failed"
+	StatusFailed JobStatus = "failed"
 	// StatusCheckpointed means the job progress has been saved.
 	StatusCheckpointed JobStatus = "checkpointed"
 )

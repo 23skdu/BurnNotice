@@ -1269,11 +1269,11 @@ func TestUnsafeDecode(t *testing.T) {
 
 func TestRoundTrip(t *testing.T) {
 	type TestStruct struct {
-		Name    string   `json:"name"`
-		Age     int      `json:"age"`
-		Scores  []float64 `json:"scores"`
-		Active  bool     `json:"active"`
-		Meta    map[string]string `json:"meta"`
+		Name   string            `json:"name"`
+		Age    int               `json:"age"`
+		Scores []float64         `json:"scores"`
+		Active bool              `json:"active"`
+		Meta   map[string]string `json:"meta"`
 	}
 
 	original := TestStruct{

@@ -278,4 +278,3 @@ func TestExtractOversightDirection_MismatchedLayers(t *testing.T) {
 		t.Errorf("expected 2 layers, got %d", len(dirs))
 	}
 }
-

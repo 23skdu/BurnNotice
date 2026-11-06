@@ -56,11 +56,11 @@ func TestProfileCmd_FlagDefaults(t *testing.T) {
 
 func TestProfileCmd_FlagWiringHonorsModelSizeDefault(t *testing.T) {
 	cases := []struct {
-		name           string
-		args           []string
-		wantChanged    bool
-		wantFlagValue  bool
-		wantModelSize  string
+		name            string
+		args            []string
+		wantChanged     bool
+		wantFlagValue   bool
+		wantModelSize   string
 		wantUseWhitened bool
 	}{
 		{

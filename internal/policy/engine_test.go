@@ -343,7 +343,6 @@ func TestEngine_DynamicThresholds(t *testing.T) {
 	}
 }
 
-
 func writeTempFile(t *testing.T, content string) string {
 	t.Helper()
 	tmp := filepath.Join(t.TempDir(), "policies.yaml")

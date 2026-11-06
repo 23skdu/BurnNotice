@@ -102,7 +102,7 @@ func TestPreempt_EnoughMemory(t *testing.T) {
 	s := NewScheduler(1000)
 	high := &Job{ID: "high", ModelSize: 50, Priority: 5}
 	high.MemoryReq = 200
-	
+
 	preempted, err := s.Preempt(high)
 	if err != nil {
 		t.Fatalf("Preempt failed: %v", err)
@@ -116,7 +116,7 @@ func TestPreempt_NoRunningJobs(t *testing.T) {
 	s := NewScheduler(100) // 100MB GPU Memory
 	high := &Job{ID: "high", ModelSize: 150 * 1024 * 1024, Priority: 5}
 	high.MemoryReq = high.ModelSize * 4
-	
+
 	_, err := s.Preempt(high)
 	if err == nil {
 		t.Fatal("expected error preempting with no running jobs")
@@ -125,15 +125,15 @@ func TestPreempt_NoRunningJobs(t *testing.T) {
 
 func TestPreempt_NoLowerPriorityJobs(t *testing.T) {
 	s := NewScheduler(100) // 100MB GPU Memory
-	
+
 	// Submit a high priority job and run it
 	s.Submit(&Job{ID: "high-1", ModelSize: 20 * 1024 * 1024, Priority: 10}) // 80MB
 	s.Schedule()
-	
+
 	// Attempt to preempt with a lower priority job
 	lower := &Job{ID: "lower", ModelSize: 20 * 1024 * 1024, Priority: 5} // 80MB
 	lower.MemoryReq = lower.ModelSize * 4
-	
+
 	_, err := s.Preempt(lower)
 	if err == nil {
 		t.Fatal("expected error preempting with no lower priority jobs")
@@ -142,15 +142,15 @@ func TestPreempt_NoLowerPriorityJobs(t *testing.T) {
 
 func TestGetRunningJobsAndQueue(t *testing.T) {
 	s := NewScheduler(100) // 100MB GPU Memory
-	
+
 	s.Submit(&Job{ID: "q1", ModelSize: 20 * 1024 * 1024, Priority: 1}) // 80MB
 	s.Submit(&Job{ID: "q2", ModelSize: 15 * 1024 * 1024, Priority: 2}) // 60MB (higher priority)
-	
+
 	running := s.Schedule()
 	if len(running) != 1 {
 		t.Fatalf("len(running) = %d, want 1", len(running))
 	}
-	
+
 	rJobs := s.GetRunningJobs()
 	if len(rJobs) != 1 {
 		t.Errorf("GetRunningJobs len = %d, want 1", len(rJobs))
@@ -158,7 +158,7 @@ func TestGetRunningJobsAndQueue(t *testing.T) {
 	if rJobs[0].ID != "q2" { // q2 has higher priority, so scheduled first
 		t.Errorf("running job ID = %s, want q2", rJobs[0].ID)
 	}
-	
+
 	queue := s.GetQueue()
 	if len(queue) != 1 {
 		t.Errorf("GetQueue len = %d, want 1", len(queue))

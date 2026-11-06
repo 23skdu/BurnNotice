@@ -11,18 +11,18 @@ import (
 type JailbreakEvalResult struct {
 	PromptID        string  `json:"prompt_id"`
 	Category        string  `json:"category"`
-	BaselineSuccess bool    `json:"baseline_success"` // true if prompt succeeded (bypassed refusal) under baseline
-	SteeredSuccess  bool    `json:"steered_success"`  // true if prompt succeeded under steered intervention
+	BaselineSuccess bool    `json:"baseline_success"`  // true if prompt succeeded (bypassed refusal) under baseline
+	SteeredSuccess  bool    `json:"steered_success"`   // true if prompt succeeded under steered intervention
 	EarlyTokenShift float64 `json:"early_token_shift"` // divergence on first k tokens
 }
 
 // ExternalitiesReport encapsulates the steering externalities risk assessment (arXiv:2602.04896).
 type ExternalitiesReport struct {
 	TotalEvaluated      int                   `json:"total_evaluated"`
-	BaselineASR         float64               `json:"baseline_asr"`          // baseline Attack Success Rate [0, 1]
-	SteeredASR          float64               `json:"steered_asr"`           // steered Attack Success Rate [0, 1]
-	ExternalitiesScore  float64               `json:"externalities_score"`   // SteeredASR / BaselineASR ratio
-	ElevatedRisk        bool                  `json:"elevated_risk"`         // true if score > 1.2
+	BaselineASR         float64               `json:"baseline_asr"`        // baseline Attack Success Rate [0, 1]
+	SteeredASR          float64               `json:"steered_asr"`         // steered Attack Success Rate [0, 1]
+	ExternalitiesScore  float64               `json:"externalities_score"` // SteeredASR / BaselineASR ratio
+	ElevatedRisk        bool                  `json:"elevated_risk"`       // true if score > 1.2
 	MeanEarlyTokenShift float64               `json:"mean_early_token_shift"`
 	DetailedResults     []JailbreakEvalResult `json:"detailed_results,omitempty"`
 }

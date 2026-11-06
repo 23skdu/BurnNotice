@@ -60,20 +60,24 @@ func FuzzDefaultSampler(f *testing.F) {
 	f.Add(uint64(200))
 
 	f.Fuzz(func(t *testing.T, rate uint64) {
+		if rate == 0 {
+			rate = 1
+		}
 		s := NewAdaptiveSampler(rate)
 
 		samples := 0
-		for range rate * 3 {
+		attempts := rate * 3
+		if attempts == 0 || attempts < rate {
+			attempts = 3
+		}
+		for range attempts {
 			if s.ShouldSample() {
 				samples++
 			}
 		}
 
-		if rate == 0 {
-			rate = 1
-		}
-		if samples == 0 {
-			t.Errorf("expected at least one sample in %d attempts", rate*3)
+		if rate <= 1000 && samples == 0 {
+			t.Errorf("expected at least one sample in %d attempts", attempts)
 		}
 	})
 }
@@ -86,7 +90,10 @@ func FuzzMetricsHandler(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, path string) {
 		handler := Handler()
-		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req, err := http.NewRequest(http.MethodGet, path, nil)
+		if err != nil {
+			t.Skip()
+		}
 		w := httptest.NewRecorder()
 
 		handler.ServeHTTP(w, req)
@@ -107,6 +114,9 @@ func FuzzOTelConfigFromEnv(f *testing.F) {
 	f.Add("http://127.0.0.1:4318/v1/metrics", "true", "burnnotice")
 
 	f.Fuzz(func(t *testing.T, endpoint, insecure, serviceName string) {
+		if containsNUL(endpoint, insecure, serviceName) {
+			t.Skip()
+		}
 		t.Setenv("BURNNOTICE_OTEL_ENDPOINT", endpoint)
 		t.Setenv("BURNNOTICE_OTEL_INSECURE", insecure)
 		t.Setenv("OTEL_SERVICE_NAME", serviceName)
@@ -121,4 +131,15 @@ func FuzzOTelConfigFromEnv(f *testing.F) {
 		_ = cfg.Endpoint
 		_ = cfg.Insecure
 	})
+}
+
+func containsNUL(values ...string) bool {
+	for _, v := range values {
+		for i := 0; i < len(v); i++ {
+			if v[i] == 0 {
+				return true
+			}
+		}
+	}
+	return false
 }

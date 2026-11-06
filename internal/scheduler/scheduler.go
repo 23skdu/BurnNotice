@@ -9,23 +9,23 @@ import (
 
 // Job represents a profiling job.
 type Job struct {
-	ID         string
-	ModelSize  int64
-	Priority   int
-	Status     string
-	MemoryReq  int64
-	StartTime  time.Time
-	cancelCh   chan struct{}
+	ID        string
+	ModelSize int64
+	Priority  int
+	Status    string
+	MemoryReq int64
+	StartTime time.Time
+	cancelCh  chan struct{}
 }
 
 // Scheduler manages GPU-aware job scheduling.
 type Scheduler struct {
-	mu            sync.RWMutex
-	gpuMemory     int64
-	usedMemory    int64
-	queue         []*Job
-	running       map[string]*Job
-	preemptCh     chan string
+	mu         sync.RWMutex
+	gpuMemory  int64
+	usedMemory int64
+	queue      []*Job
+	running    map[string]*Job
+	preemptCh  chan string
 }
 
 // NewScheduler creates a scheduler with the given GPU memory.

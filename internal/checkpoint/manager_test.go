@@ -186,4 +186,3 @@ func TestSave_RenameError(t *testing.T) {
 		t.Error("expected rename error, got nil")
 	}
 }
-

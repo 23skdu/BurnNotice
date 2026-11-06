@@ -76,4 +76,3 @@ func TestGPUEngine_DynamicRotation_EdgeCases(t *testing.T) {
 		t.Errorf("expected nil for mismatched direction dimension, got %v", res)
 	}
 }
-

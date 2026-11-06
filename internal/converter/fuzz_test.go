@@ -27,6 +27,9 @@ func FuzzParseSafetensors(f *testing.F) {
 		if start > end || end-start > 10000 {
 			t.Skip()
 		}
+		if dtype == "" {
+			t.Skip()
+		}
 
 		dir := t.TempDir()
 		tensors := map[string]TensorInfo{
@@ -203,6 +206,9 @@ func FuzzONNXConverter(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, dtype string, start, end uint64) {
 		if start > end || end-start > 10000 {
+			t.Skip()
+		}
+		if dtype == "" {
 			t.Skip()
 		}
 		if math.IsNaN(float64(start)) || math.IsInf(float64(start), 0) {

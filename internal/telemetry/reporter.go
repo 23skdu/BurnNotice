@@ -20,23 +20,23 @@ const (
 
 // Report holds anonymized telemetry data. No prompts, outputs, IPs, or identity.
 type Report struct {
-	ModelArchitecture string  `json:"model_architecture"`
-	ModelSize         string  `json:"model_size"`
-	SteeringMethod    string  `json:"steering_method"`
-	RefusalRate       float64 `json:"refusal_rate"`
-	KLDivergence      float64 `json:"kl_divergence"`
+	ModelArchitecture   string  `json:"model_architecture"`
+	ModelSize           string  `json:"model_size"`
+	SteeringMethod      string  `json:"steering_method"`
+	RefusalRate         float64 `json:"refusal_rate"`
+	KLDivergence        float64 `json:"kl_divergence"`
 	CapabilityRetention float64 `json:"capability_retention"`
-	Hardware          string  `json:"hardware"`
-	Timestamp         int64   `json:"timestamp"`
-	Version           int     `json:"version"`
+	Hardware            string  `json:"hardware"`
+	Timestamp           int64   `json:"timestamp"`
+	Version             int     `json:"version"`
 }
 
 // Reporter handles anonymous telemetry submission.
 type Reporter struct {
-	Endpoint string
-	Method   SubmissionMethod
+	Endpoint  string
+	Method    SubmissionMethod
 	OutputDir string
-	client   *http.Client
+	client    *http.Client
 }
 
 // NewReporter creates a reporter with the given configuration.
@@ -111,12 +111,12 @@ func (r *Reporter) submitLocalSave(report *Report) error {
 
 // AggregateResult holds a summary of multiple telemetry reports.
 type AggregateResult struct {
-	TotalReports       int     `json:"total_reports"`
-	AvgRefusalRate     float64 `json:"avg_refusal_rate"`
-	AvgKLDivergence    float64 `json:"avg_kl_divergence"`
-	AvgCapabilityRetention float64 `json:"avg_capability_retention"`
-	ModelArchitectures []string `json:"model_architectures"`
-	SteeringMethods    []string `json:"steering_methods"`
+	TotalReports           int      `json:"total_reports"`
+	AvgRefusalRate         float64  `json:"avg_refusal_rate"`
+	AvgKLDivergence        float64  `json:"avg_kl_divergence"`
+	AvgCapabilityRetention float64  `json:"avg_capability_retention"`
+	ModelArchitectures     []string `json:"model_architectures"`
+	SteeringMethods        []string `json:"steering_methods"`
 }
 
 // Aggregate computes summary statistics from multiple reports.

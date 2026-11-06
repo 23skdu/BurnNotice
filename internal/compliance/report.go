@@ -23,18 +23,18 @@ type Report struct {
 
 // EUAIActReport holds EU AI Act compliance data.
 type EUAIActReport struct {
-	HighRiskAlerts     int
-	LimitedRiskAlerts  int
-	MinimalRiskAlerts  int
-	ComplianceMetrics  map[string]float64
+	HighRiskAlerts    int
+	LimitedRiskAlerts int
+	MinimalRiskAlerts int
+	ComplianceMetrics map[string]float64
 }
 
 // NISTAIRMFReport holds NIST AI RMF compliance data.
 type NISTAIRMFReport struct {
-	Govern   int
-	Map      int
-	Measure  int
-	Manage   int
+	Govern  int
+	Map     int
+	Measure int
+	Manage  int
 }
 
 // Reporter generates compliance reports.

@@ -54,7 +54,7 @@ func (e *MoEEngine) DetectRouting(layerIdx int, activation []float64) ([]int, []
 
 	var totalSumSq float64
 	expertSumSq := make([]float64, e.numExperts)
-	
+
 	start := 0
 	for idx := 0; idx < e.numExperts; idx++ {
 		dim := e.expertDims[idx]
@@ -62,14 +62,14 @@ func (e *MoEEngine) DetectRouting(layerIdx int, activation []float64) ([]int, []
 		if end > len(activation) {
 			end = len(activation)
 		}
-		
+
 		var sumSq float64
 		for i := start; i < end; i++ {
 			sumSq += activation[i] * activation[i]
 		}
 		expertSumSq[idx] = sumSq
 		totalSumSq += sumSq
-		
+
 		start = end
 	}
 

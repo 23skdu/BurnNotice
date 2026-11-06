@@ -13,10 +13,10 @@ import (
 
 // WASMBackend executes ONNX models compiled to WebAssembly for pure-Go inference.
 type WASMBackend struct {
-	runtime  wazero.Runtime
-	module   wazero.CompiledModule
-	config   wazero.ModuleConfig
-	loaded   bool
+	runtime wazero.Runtime
+	module  wazero.CompiledModule
+	config  wazero.ModuleConfig
+	loaded  bool
 }
 
 // NewWASMBackend creates a new WASM inference backend.
@@ -106,7 +106,7 @@ func (b *WASMBackend) Forward(input []float32) ([]float32, error) {
 	if results[0] > 1<<24 {
 		return nil, fmt.Errorf("output length out of range: %d", results[0])
 	}
-	outputLen := int(results[0]) // #nosec G115 — bounded by check above
+	outputLen := int(results[0])                                    // #nosec G115 — bounded by check above
 	outputBuf, ok := mem.Read(wasmInputOffset, uint32(outputLen*4)) // #nosec G115 — outputLen bounded to 1<<24 above
 	if !ok {
 		return nil, fmt.Errorf("failed to read output from WASM memory")

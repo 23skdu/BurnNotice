@@ -7,38 +7,38 @@ import (
 
 // AgentInfo holds information about a monitored agent.
 type AgentInfo struct {
-	ID              string
-	Name            string
-	LastActivity    time.Time
-	DeceptionScore  float64
-	TruthScore      float64
-	MessageCount    int
+	ID             string
+	Name           string
+	LastActivity   time.Time
+	DeceptionScore float64
+	TruthScore     float64
+	MessageCount   int
 }
 
 // InterAgentMessage represents a message between agents.
 type InterAgentMessage struct {
-	FromAgent   string
-	ToAgent     string
-	Timestamp   time.Time
-	Content     string
+	FromAgent      string
+	ToAgent        string
+	Timestamp      time.Time
+	Content        string
 	DeceptionScore float64
 }
 
 // MultiAgentGovernor tracks and governs inter-agent communication.
 type MultiAgentGovernor struct {
-	mu              sync.RWMutex
-	agents          map[string]*AgentInfo
-	messages        []InterAgentMessage
-	driftThreshold  float64
-	policies        []GovernancePolicy
+	mu             sync.RWMutex
+	agents         map[string]*AgentInfo
+	messages       []InterAgentMessage
+	driftThreshold float64
+	policies       []GovernancePolicy
 }
 
 // GovernancePolicy defines a rule for agent-to-agent communication.
 type GovernancePolicy struct {
-	Name        string
-	Description string
+	Name              string
+	Description       string
 	MaxDeceptionScore float64
-	Action      string // "block", "log", "alert"
+	Action            string // "block", "log", "alert"
 }
 
 // NewMultiAgentGovernor creates a new multi-agent governor.
@@ -49,10 +49,10 @@ func NewMultiAgentGovernor(driftThreshold float64) *MultiAgentGovernor {
 		driftThreshold: driftThreshold,
 		policies: []GovernancePolicy{
 			{
-				Name:        "no_deception_propagation",
-				Description: "Block messages with high deception scores",
+				Name:              "no_deception_propagation",
+				Description:       "Block messages with high deception scores",
 				MaxDeceptionScore: 0.7,
-				Action:      "block",
+				Action:            "block",
 			},
 		},
 	}

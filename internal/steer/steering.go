@@ -29,8 +29,9 @@ type Command struct {
 // NormPreservingAblation performs norm-preserving biprojected ablation (MPOA):
 // it removes the component along direction and restores the original L2 norm
 // of the activation, preventing representational degradation:
-//   h_ortho = h - (h · v)/(v · v + lambda) * v
-//   h' = h_ortho * (||h||_2 / ||h_ortho||_2)
+//
+//	h_ortho = h - (h · v)/(v · v + lambda) * v
+//	h' = h_ortho * (||h||_2 / ||h_ortho||_2)
 func NormPreservingAblation(activation, direction []float64, alpha float64, regAlpha float64) []float64 {
 	origNorm := vecNorm(activation)
 	if origNorm < 1e-10 {
@@ -79,9 +80,10 @@ func NormPreservingAblation(activation, direction []float64, alpha float64, regA
 
 // BiprojectedAblation removes the harmful direction while explicitly preserving/restoring
 // the benign direction component and the original activation norm:
-//   h_harm_free = h - (h · v_harm)/(||v_harm||^2 + reg) * v_harm
-//   h_benign_restored = h_harm_free + (h · v_benign)/(||v_benign||^2 + reg) * v_benign
-//   h' = h_benign_restored * (||h||_2 / ||h_benign_restored||_2)
+//
+//	h_harm_free = h - (h · v_harm)/(||v_harm||^2 + reg) * v_harm
+//	h_benign_restored = h_harm_free + (h · v_benign)/(||v_benign||^2 + reg) * v_benign
+//	h' = h_benign_restored * (||h||_2 / ||h_benign_restored||_2)
 func BiprojectedAblation(activation, harmDir, benignDir []float64, alpha, regAlpha float64) []float64 {
 	origNorm := vecNorm(activation)
 	if origNorm < 1e-10 || len(harmDir) != len(activation) {
@@ -235,7 +237,7 @@ func Angular(activation, direction []float64, alpha float64) []float64 {
 	// w = orthoNorm * u - proj * (ortho / orthoNorm)
 	result := make([]float64, len(activation))
 	for i := range activation {
-		result[i] = cosT*activation[i] + sinT*(orthoNorm*u[i] - proj*ortho[i]/orthoNorm)
+		result[i] = cosT*activation[i] + sinT*(orthoNorm*u[i]-proj*ortho[i]/orthoNorm)
 	}
 
 	return result
@@ -354,7 +356,7 @@ func rotate2D(h, v []float64, theta float64) []float64 {
 
 	result := make([]float64, len(h))
 	for i := range h {
-		result[i] = cosT*h[i] + sinT*(orthoNorm*v[i] - proj*ortho[i]/orthoNorm)
+		result[i] = cosT*h[i] + sinT*(orthoNorm*v[i]-proj*ortho[i]/orthoNorm)
 	}
 	return result
 }

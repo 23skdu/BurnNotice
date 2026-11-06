@@ -22,11 +22,11 @@ import (
 // Client wraps a backend for activation vector storage and retrieval.
 // Supports Longbow (Arrow Flight) and SQLite backends.
 type Client struct {
-	addr       string
-	dim        int
-	metric     string
-	m          int
-	efConstr   int
+	addr     string
+	dim      int
+	metric   string
+	m        int
+	efConstr int
 
 	sc *longbowclient.SmartClient
 	db *sql.DB

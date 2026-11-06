@@ -11,11 +11,11 @@ import (
 // longbowBackend stores activity data in Longbow's vector store.
 // Uses Arrow Flight for ingestion and retrieval, with local index for filtering.
 type longbowBackend struct {
-	addr       string
-	mu         sync.RWMutex
-	alerts     []Alert
-	interventions []Intervention
-	alertIndex     map[string][]int // session_id -> alert indices
+	addr              string
+	mu                sync.RWMutex
+	alerts            []Alert
+	interventions     []Intervention
+	alertIndex        map[string][]int // session_id -> alert indices
 	interventionIndex map[string][]int // session_id -> intervention indices
 }
 
@@ -24,10 +24,10 @@ func newLongbowBackend(addr string) (*longbowBackend, error) {
 		addr = "localhost:9090"
 	}
 	return &longbowBackend{
-		addr:       addr,
-		alerts:     make([]Alert, 0),
-		interventions: make([]Intervention, 0),
-		alertIndex:     make(map[string][]int),
+		addr:              addr,
+		alerts:            make([]Alert, 0),
+		interventions:     make([]Intervention, 0),
+		alertIndex:        make(map[string][]int),
 		interventionIndex: make(map[string][]int),
 	}, nil
 }

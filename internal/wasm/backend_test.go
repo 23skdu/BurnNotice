@@ -36,7 +36,7 @@ func buildTestModule() []byte {
 
 	// Type section (id=1): one type (i32)->(i32)
 	typeContent := []byte{0x01, 0x60, 0x01, 0x7f, 0x01, 0x7f}
-	buf.WriteByte(1)              // section id
+	buf.WriteByte(1)                            // section id
 	buf.Write(leb128(uint32(len(typeContent)))) // section size
 	buf.Write(typeContent)
 
@@ -54,7 +54,7 @@ func buildTestModule() []byte {
 
 	// Export section (id=7): "memory" (kind=2 idx=0), "forward" (kind=0 idx=0)
 	exportContent := []byte{
-		0x02,             // 2 exports
+		0x02,                                           // 2 exports
 		0x06, 'm', 'e', 'm', 'o', 'r', 'y', 0x02, 0x00, // "memory" mem=0
 		0x07, 'f', 'o', 'r', 'w', 'a', 'r', 'd', 0x00, 0x00, // "forward" func=0
 	}
@@ -271,13 +271,13 @@ func buildTestModuleWithIntermediate() []byte {
 	// Preamble
 	buf.Write([]byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00})
 
-		// Type section (id=1): two types
+	// Type section (id=1): two types
 	// Type 0: (i32) -> (i32)
 	// Type 1: (i32) -> (i32, i32)
 	typeContent := []byte{
-		0x02,                                // 2 types
-		0x60, 0x01, 0x7f, 0x01, 0x7f,        // Type 0
-		0x60, 0x01, 0x7f, 0x02, 0x7f, 0x7f,  // Type 1
+		0x02,                         // 2 types
+		0x60, 0x01, 0x7f, 0x01, 0x7f, // Type 0
+		0x60, 0x01, 0x7f, 0x02, 0x7f, 0x7f, // Type 1
 	}
 	buf.WriteByte(1)
 	buf.Write(leb128(uint32(len(typeContent))))
@@ -297,9 +297,9 @@ func buildTestModuleWithIntermediate() []byte {
 
 	// Export section (id=7): memory, forward, get_intermediate
 	exportContent := []byte{
-		0x03,                                                 // 3 exports
-		0x06, 'm', 'e', 'm', 'o', 'r', 'y', 0x02, 0x00,      // "memory"
-		0x07, 'f', 'o', 'r', 'w', 'a', 'r', 'd', 0x00, 0x00,  // "forward"
+		0x03,                                           // 3 exports
+		0x06, 'm', 'e', 'm', 'o', 'r', 'y', 0x02, 0x00, // "memory"
+		0x07, 'f', 'o', 'r', 'w', 'a', 'r', 'd', 0x00, 0x00, // "forward"
 		0x10, 'g', 'e', 't', '_', 'i', 'n', 't', 'e', 'r', 'm', 'e', 'd', 'i', 'a', 't', 'e', 0x00, 0x01, // "get_intermediate"
 	}
 	buf.WriteByte(7)
@@ -323,7 +323,7 @@ func buildTestModuleWithIntermediate() []byte {
 		0x01,             // 1 segment
 		0x00,             // active, memory 0
 		0x41, 0x00, 0x0b, // offset 0
-		0x10,             // 16 bytes
+		0x10,                   // 16 bytes
 		0x00, 0x00, 0x80, 0x3f, // 1.0
 		0x00, 0x00, 0x00, 0x40, // 2.0
 		0x00, 0x00, 0x40, 0x40, // 3.0
@@ -858,5 +858,3 @@ func TestGetIntermediate_ReadMemFailed(t *testing.T) {
 		t.Error("expected error when reading intermediate from memory bounds fails")
 	}
 }
-
-

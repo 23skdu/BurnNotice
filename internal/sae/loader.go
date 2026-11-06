@@ -16,13 +16,13 @@ import (
 
 // SAEWeights holds sparse autoencoder weight matrices.
 type SAEWeights struct {
-	EncoderWeights  [][]float64 `json:"encoder_weights"`
-	DecoderWeights  [][]float64 `json:"decoder_weights"`
-	EncoderBias     []float64   `json:"encoder_bias"`
-	DecoderBias     []float64   `json:"decoder_bias"`
-	FeatureCount    int         `json:"feature_count"`
-	InputDim        int         `json:"input_dim"`
-	LayerIndex      int         `json:"layer_index"`
+	EncoderWeights [][]float64 `json:"encoder_weights"`
+	DecoderWeights [][]float64 `json:"decoder_weights"`
+	EncoderBias    []float64   `json:"encoder_bias"`
+	DecoderBias    []float64   `json:"decoder_bias"`
+	FeatureCount   int         `json:"feature_count"`
+	InputDim       int         `json:"input_dim"`
+	LayerIndex     int         `json:"layer_index"`
 }
 
 // SAELoader loads and manages SAE weights.
@@ -149,10 +149,10 @@ func (l *SAELoader) Attribution(features []float64) map[int]float64 {
 
 // GemmaScopeConfig holds metadata for Gemma Scope SAEs.
 type GemmaScopeConfig struct {
-	ModelID     string `json:"model_id"`
-	LayerIndex  int    `json:"layer_index"`
-	HiddenDim   int    `json:"hidden_dim"`
-	FeatureDim  int    `json:"feature_dim"`
+	ModelID       string  `json:"model_id"`
+	LayerIndex    int     `json:"layer_index"`
+	HiddenDim     int     `json:"hidden_dim"`
+	FeatureDim    int     `json:"feature_dim"`
 	L1Coefficient float64 `json:"l1_coefficient"`
 }
 
@@ -163,7 +163,7 @@ type GemmaScopeConfig struct {
 //   - "decoder_weights" or "W_dec" (hidden_dim × feature_dim)
 //   - "decoder_bias" or "b_dec" (hidden_dim,)
 //
-	// The optional configPath can point to a JSON file with Gemma Scope metadata.
+// The optional configPath can point to a JSON file with Gemma Scope metadata.
 func (l *SAELoader) LoadGemmaScope(npzPath, configPath string) error {
 	// #nosec G304 -- CLI tool accepts user-provided SAE paths
 	w := &SAEWeights{}

@@ -2,16 +2,16 @@ package steer
 
 import (
 	"fmt"
-	"math"
 	"gonum.org/v1/gonum/floats"
+	"math"
 )
 
 // LoRASteerer implements LoRA-based reversible steering.
 type LoRASteerer struct {
-	dim   int
-	rank  int
-	A     [][]float64 // d x r
-	B     [][]float64 // r x d
+	dim     int
+	rank    int
+	A       [][]float64 // d x r
+	B       [][]float64 // r x d
 	applied bool
 }
 

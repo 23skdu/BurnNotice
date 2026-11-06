@@ -1,8 +1,8 @@
 package onnxpb
 
 import (
-	"testing"
 	"google.golang.org/protobuf/proto"
+	"testing"
 )
 
 func TestONNXPB_MarshalUnmarshal(t *testing.T) {

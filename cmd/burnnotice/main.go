@@ -179,10 +179,10 @@ Extraction method:
 			if err != nil {
 				return fmt.Errorf("load oversight dataset: %w", err)
 			}
-			
+
 			monitoredActs = make([][][]float64, 0, len(ods.Pairs))
 			deployedActs = make([][][]float64, 0, len(ods.Pairs))
-			
+
 			for _, pair := range ods.Pairs {
 				pos, err := model.ExtractActivation(pair.Truthful.Prompt, pair.Truthful.Response)
 				if err != nil {
@@ -195,7 +195,7 @@ Extraction method:
 				monitoredActs = append(monitoredActs, [][]float64{pos})
 				deployedActs = append(deployedActs, [][]float64{neg})
 			}
-			
+
 			oversightDirs, err = profile.ExtractOversightDirection(monitoredActs, deployedActs)
 			if err != nil {
 				return fmt.Errorf("extract oversight direction: %w", err)
@@ -465,8 +465,8 @@ input to verify the engine functions correctly end-to-end.`,
 		hiddenDim, _ := cmd.Flags().GetInt("hidden-dim")
 
 		cfg := engine.ModelConfig{
-			HiddenDim:  hiddenDim,
-			InputNames: []string{"input_ids"},
+			HiddenDim:   hiddenDim,
+			InputNames:  []string{"input_ids"},
 			OutputNames: []string{"hidden_states"},
 		}
 		eng := engine.NewONNXEngine(modelPath, cfg)

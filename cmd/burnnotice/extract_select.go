@@ -54,9 +54,9 @@ func isLargeModel(modelSize string) bool {
 // shouldUseWhitenedSVD decides whether the profile CLI should default to the
 // whitened-SVD extraction method. The decision is:
 //
-//	1. If the user explicitly set --whitened-svd, honor the flag value.
-//	2. Otherwise, default to true for models strictly larger than 7B
-//	   parameters (per docs/nextsteps.md 7.4), and false otherwise.
+//  1. If the user explicitly set --whitened-svd, honor the flag value.
+//  2. Otherwise, default to true for models strictly larger than 7B
+//     parameters (per docs/nextsteps.md 7.4), and false otherwise.
 func shouldUseWhitenedSVD(flagChanged, flagValue bool, modelSize string) bool {
 	if flagChanged {
 		return flagValue

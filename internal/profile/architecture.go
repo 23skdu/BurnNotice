@@ -21,10 +21,10 @@ const (
 type ArchitectureSpec struct {
 	Family                 ModelFamily       `json:"family"`
 	DisplayName            string            `json:"display_name"`
-	HasAttentionBias       bool              `json:"has_attention_bias"`        // true for Qwen (QKV projection bias)
-	RMSNormWithOffset      bool              `json:"rms_norm_with_offset"`     // true for Gemma (1.0 + weight)
-	EmbeddingScaling       bool              `json:"embedding_scaling"`        // true for Gemma (scaled by sqrt(d_model))
-	PrePostFeedforwardNorm bool              `json:"pre_post_ff_norm"`         // true for Gemma 2 dual layernorm
+	HasAttentionBias       bool              `json:"has_attention_bias"`   // true for Qwen (QKV projection bias)
+	RMSNormWithOffset      bool              `json:"rms_norm_with_offset"` // true for Gemma (1.0 + weight)
+	EmbeddingScaling       bool              `json:"embedding_scaling"`    // true for Gemma (scaled by sqrt(d_model))
+	PrePostFeedforwardNorm bool              `json:"pre_post_ff_norm"`     // true for Gemma 2 dual layernorm
 	SpecialTokens          map[string]string `json:"special_tokens"`
 	DefaultCriticalLayers  []int             `json:"default_critical_layers"`  // Layers with highest causal steering efficacy
 	CommitmentWindowTokens int               `json:"commitment_window_tokens"` // Prefill commitment window size
@@ -55,11 +55,11 @@ func GetArchitectureSpec(family ModelFamily, numLayers int) ArchitectureSpec {
 			EmbeddingScaling:       false,
 			PrePostFeedforwardNorm: false,
 			SpecialTokens: map[string]string{
-				"bos":            "<|begin_of_text|>",
-				"eos":            "<|end_of_text|>",
-				"eot":            "<|eot_id|>",
-				"header_start":   "<|start_header_id|>",
-				"header_end":     "<|end_header_id|>",
+				"bos":          "<|begin_of_text|>",
+				"eos":          "<|end_of_text|>",
+				"eot":          "<|eot_id|>",
+				"header_start": "<|start_header_id|>",
+				"header_end":   "<|end_header_id|>",
 			},
 			DefaultCriticalLayers:  crit,
 			CommitmentWindowTokens: 16,
@@ -79,10 +79,10 @@ func GetArchitectureSpec(family ModelFamily, numLayers int) ArchitectureSpec {
 			EmbeddingScaling:       false,
 			PrePostFeedforwardNorm: false,
 			SpecialTokens: map[string]string{
-				"im_start":     "<|im_start|>",
-				"im_end":       "<|im_end|>",
-				"think_start":  "<think>",
-				"think_end":    "</think>",
+				"im_start":    "<|im_start|>",
+				"im_end":      "<|im_end|>",
+				"think_start": "<think>",
+				"think_end":   "</think>",
 			},
 			DefaultCriticalLayers:  crit,
 			CommitmentWindowTokens: 20,
@@ -102,10 +102,10 @@ func GetArchitectureSpec(family ModelFamily, numLayers int) ArchitectureSpec {
 			EmbeddingScaling:       true, // Gemma scales input embeddings by sqrt(hidden_size)
 			PrePostFeedforwardNorm: true, // Gemma 2 has pre- and post-feedforward layernorms
 			SpecialTokens: map[string]string{
-				"bos":          "<bos>",
-				"eos":          "<eos>",
-				"turn_start":   "<start_of_turn>",
-				"turn_end":     "<end_of_turn>",
+				"bos":        "<bos>",
+				"eos":        "<eos>",
+				"turn_start": "<start_of_turn>",
+				"turn_end":   "<end_of_turn>",
 			},
 			DefaultCriticalLayers:  crit,
 			CommitmentWindowTokens: 12,

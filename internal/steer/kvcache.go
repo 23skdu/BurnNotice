@@ -23,11 +23,11 @@ type TurnSteeringRecord struct {
 // KVCacheAccumulationTracker tracks steering vector evolution across multi-turn sessions
 // to prevent cumulative KV-cache corruption and attention distortion.
 type KVCacheAccumulationTracker struct {
-	mu           sync.RWMutex
-	initialTurn  []float64
-	history      []TurnSteeringRecord
-	thetaMaxDeg  float64
-	alarmCount   int
+	mu          sync.RWMutex
+	initialTurn []float64
+	history     []TurnSteeringRecord
+	thetaMaxDeg float64
+	alarmCount  int
 }
 
 // NewKVCacheAccumulationTracker creates a new tracker initialized with default ThetaMax (15°).

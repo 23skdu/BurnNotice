@@ -19,23 +19,23 @@ const (
 
 // ApprovalRequest represents a human-in-the-loop approval request.
 type ApprovalRequest struct {
-	ID        string
-	SessionID string
-	Reason    string
-	Status    ApprovalStatus
-	CreatedAt time.Time
-	ReviewedAt *time.Time
-	Reviewer   string
+	ID           string
+	SessionID    string
+	Reason       string
+	Status       ApprovalStatus
+	CreatedAt    time.Time
+	ReviewedAt   *time.Time
+	Reviewer     string
 	RejectReason string
 }
 
 // ApprovalWorkflow manages approval requests with timeout.
 type ApprovalWorkflow struct {
-	mu            sync.RWMutex
-	requests      map[string]*ApprovalRequest
+	mu             sync.RWMutex
+	requests       map[string]*ApprovalRequest
 	defaultTimeout time.Duration
-	ticker        *time.Ticker
-	stopCh        chan struct{}
+	ticker         *time.Ticker
+	stopCh         chan struct{}
 }
 
 // NewApprovalWorkflow creates a new approval workflow.

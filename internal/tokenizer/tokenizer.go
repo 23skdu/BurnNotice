@@ -38,10 +38,10 @@ func (t *WordHashTokenizer) Tokenize(text string, out []int64) int {
 	var count int
 	var inWord bool
 	var currentHash uint64
-	
+
 	const fnvPrime = 1099511628211
 	const fnvOffset = 14695981039346656037
-	
+
 	emit := func() {
 		if inWord && count < len(out) {
 			// Convert the hash to a positive int64
@@ -50,7 +50,7 @@ func (t *WordHashTokenizer) Tokenize(text string, out []int64) int {
 		}
 		inWord = false
 	}
-	
+
 	for i := 0; i < len(text); i++ {
 		c := text[i]
 		if c == ' ' || c == '\n' || c == '\t' || c == '\r' {
@@ -68,6 +68,6 @@ func (t *WordHashTokenizer) Tokenize(text string, out []int64) int {
 		}
 	}
 	emit()
-	
+
 	return count
 }

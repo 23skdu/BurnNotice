@@ -381,4 +381,3 @@ func TestApplyCommand(t *testing.T) {
 		t.Errorf("MethodNormPreserving norm not preserved")
 	}
 }
-

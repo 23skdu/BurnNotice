@@ -17,12 +17,12 @@ const (
 
 // ConditionNode represents an evaluation node in a conditional steering rule graph.
 type ConditionNode struct {
-	Category       string            `json:"category"`
-	Vector         []float64         `json:"vector,omitempty"`
-	Threshold      float64           `json:"threshold"`
-	Operator       ConditionOperator `json:"operator"`
-	Children       []ConditionNode   `json:"children,omitempty"`
-	SmoothScaling  bool              `json:"smooth_scaling"` // If true, scale linearly in [threshold, 1.0]; if false, binary step
+	Category      string            `json:"category"`
+	Vector        []float64         `json:"vector,omitempty"`
+	Threshold     float64           `json:"threshold"`
+	Operator      ConditionOperator `json:"operator"`
+	Children      []ConditionNode   `json:"children,omitempty"`
+	SmoothScaling bool              `json:"smooth_scaling"` // If true, scale linearly in [threshold, 1.0]; if false, binary step
 }
 
 // ConditionalSteerer evaluates prompt and activation context against condition vectors
