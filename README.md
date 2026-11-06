@@ -69,13 +69,14 @@ BurnNotice provides native, architecture-calibrated profiling, extraction, and s
 │   ├── burnnotice/        # CLI: download, convert, profile, validate, recommend, aggregate
 │   └── dashboard/         # Live web dashboard: real-time latent governance visualization
 ├── docs/
-│   ├── architecture.md    # System design, component diagrams, model family specs
-│   ├── analysis_packages.md # Analysis packages: alignment, cone, cross-layer, latent vis
-│   ├── cli.md             # Full CLI reference for all commands and flags
-│   ├── metrics.md         # Prometheus metrics (50+) and OTel export configuration
-│   ├── testing.md         # Testing strategy, coverage, fuzz tests, benchmarks
-│   ├── nextsteps.md       # Implementation roadmap and completed milestones
-│   └── TELEMETRY.md       # Telemetry payload schema and zero-knowledge privacy spec
+│   ├── architecture.md               # System design, Mermaid diagrams, adversarial threat model, SaaS comparison
+│   ├── analysis_packages.md          # Analysis packages: alignment, cone, cross-layer CKA, KL, externalities, Heretic
+│   ├── cli.md                        # Full CLI & dashboard reference for all commands and flags
+│   ├── latent_space_visualization.md # FNV-1a cached Thin-SVD manifold projection, cluster hulls & trajectories
+│   ├── metrics.md                    # Prometheus metrics (50+) and OTel export configuration
+│   ├── roadmap.md                    # Implementation roadmap, completed milestones & CI quality gates
+│   ├── svd.md                        # Winsorized Ledoit-Wolf ZCA Whitened SVD mathematical pipeline
+│   └── testing.md                    # Testing strategy, 90%+ coverage, 72 fuzz targets, accuracy & oracle gates
 ├── internal/
 │   ├── agent/             # Multi-agent monitoring hooks (MCP, LangChain, CrewAI)
 │   ├── analysis/          # Geometry: latent visualizer, concept cone, externalities, Heretic score
@@ -125,13 +126,16 @@ BurnNotice provides native, architecture-calibrated profiling, extraction, and s
 
 | Document | Description |
 |---|---|
-| [architecture.md](docs/architecture.md) | System design, Mermaid diagrams, model family specifications |
-| [cli.md](docs/cli.md) | Full CLI reference for all commands and flags |
-| [metrics.md](docs/metrics.md) | Prometheus metrics and OpenTelemetry export configuration |
-| [testing.md](docs/testing.md) | Testing strategy, coverage, fuzz tests, benchmarks |
-| [analysis_packages.md](docs/analysis_packages.md) | Latent visualization, concept cone, cross-layer CKA, Heretic score |
-| [nextsteps.md](docs/nextsteps.md) | Implementation roadmap, strategic plan, completed milestones |
-| [TELEMETRY.md](TELEMETRY.md) | Telemetry schema, zero-knowledge privacy guarantees, aggregate CLI |
+| [architecture.md](docs/architecture.md) | System design, Mermaid diagrams, model family specs, adversarial analysis, SaaS comparison |
+| [cli.md](docs/cli.md) | Full CLI and dashboard reference for all commands and flags |
+| [analysis_packages.md](docs/analysis_packages.md) | Alignment imprint, concept cone, cross-layer CKA, KL divergence, externalities, Heretic score |
+| [latent_space_visualization.md](docs/latent_space_visualization.md) | FNV-1a cached Thin-SVD 2D manifold projection, 95% CI hulls, and token trajectories |
+| [svd.md](docs/svd.md) | Winsorized Ledoit-Wolf shrinkage ZCA Whitened SVD extraction |
+| [metrics.md](docs/metrics.md) | Prometheus metrics (50+) and OpenTelemetry OTLP/HTTP export configuration |
+| [testing.md](docs/testing.md) | Testing strategy, 90.3%–100% coverage, 72 fuzz targets, accuracy/oracle gates |
+| [roadmap.md](docs/roadmap.md) | Implementation roadmap, completed milestones, and reproducible quality gates |
+| [TELEMETRY.md](TELEMETRY.md) | Telemetry schema, zero-knowledge privacy guarantees, `burnnotice aggregate` CLI |
+| [arxiv/paper.pdf](arxiv/paper.pdf) | Full v0.8 technical paper ([LaTeX source](arxiv/paper.tex)) |
 
 ---
 
@@ -167,11 +171,13 @@ optimum-cli export onnx --model Qwen/Qwen2.5-0.5B ./onnx/qwen2.5-0.5b/
 
 ### 3. Profile a Model
 
-Extract behavioral directions, analyze concept cones, and evaluate commitment windows:
+Extract behavioral directions (with optional Oversight Ablation, Whitened SVD, and RDO), analyze concept cones, and evaluate commitment windows:
 
 ```bash
 burnnotice profile ./onnx/qwen2.5-0.5b/model.onnx \
   --dataset ./data/deception_pairs.json \
+  --whitened-svd \
+  --rdo \
   --cone-analysis \
   --commit-window \
   --output ./profiles/qwen2.5-0.5b
@@ -182,7 +188,7 @@ burnnotice profile ./onnx/qwen2.5-0.5b/model.onnx \
 Launch the real-time governance and latent space visualizer web interface:
 
 ```bash
-./bin/burnnotice-dashboard --port 8080 --profiles-dir ./profiles
+PORT=8080 ./bin/dashboard
 ```
 
 Navigate to `http://localhost:8080` to inspect live telemetry, safety gauges, and latent space manifold visualizers.

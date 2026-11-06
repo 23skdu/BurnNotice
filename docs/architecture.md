@@ -670,5 +670,69 @@ flowchart LR
     TOPK --> ROUTE
 ```
 
+---
+
+## Declarative Policy Engine & Semantic Intent Gating
+
+BurnNotice's policy engine (`internal/policy/`) evaluates live activation scores against declarative YAML rules, supporting both `greater` and `less` operators, F1-calibrated dynamic thresholds (`internal/profile/calibration.go`), and `SemanticGater` intent weighting (`internal/policy/gate.go`) to prevent topic-confusion false positives on benign creative writing or academic queries:
+
+```yaml
+policies:
+  - name: "no-deception"
+    metric: deception_risk
+    operator: "greater"
+    threshold: 0.7
+    action: "steer"
+    steering_vector: "truth_direction"
+    steering_strength: 0.5
+    llm_pre_classifier:
+      enabled: true
+      bypass_on_intent: ["creative_writing", "fictional_roleplay"]
+
+  - name: "policy-compliance"
+    metric: policy_compliance
+    operator: "less"
+    threshold: 0.5
+    action: "block"
+    escalation: "human-review"
+
+  - name: "kill-switch"
+    metric: composite_alignment
+    operator: "less"
+    threshold: 0.3
+    action: "terminate"
+    notify: ["admin", "security-team"]
+```
+
+---
+
+## Adversarial Threat Model, Defenses & Residual Limitations
+
+BurnNotice v0.8 incorporates explicit defenses against the 2025–2026 adversarial literature on latent-space governance while documenting residual limitations:
+
+| Attack Vector & Literature | Implemented v0.8 Countermeasures | Residual Limitation & Critique |
+|---|---|---|
+| **Obfuscated Activations** (Bailey et al., ICLR 2026) | 4-layer defense (`internal/profile/obfuscation.go`, `internal/steer/adversarial.go`): (1) 2-layer ReLU+Sigmoid `MLPProbe`, (2) Whitened Mahalanobis OOD detection (`internal/policydetect/`), (3) 2% stochastic Gaussian noise injection $S(a+\eta)$, (4) GCG token sanitization & query-similarity ($>0.95$) decoy gradient masking. | An adaptive white-box attacker optimizing Expectation-Over-Transformation (EOT) against both $f_{\text{MLP}}$ and Mahalanobis norms can still route computation through polysemantic heads unless probe weights are hardware-isolated (TEE). |
+| **Steering Externalities & "Rogue Scalpel"** (Korczikov et al., 2026; Li et al., 2026; arXiv:2602.04896) | `JailbreakRiskAssessor` flags $\text{ASR}_{\text{steered}} / \text{ASR}_{\text{base}} > 1.2$ and monitors early-token drift (`internal/analysis/externalities.go`); `HereticScoreEvaluator` selects non-dominated Pareto configurations across HarmBench-400 (`internal/analysis/heretic.go`); MPOA biprojection and CAST gating avoid continuous residual distortion. | Write-access tampering to `profile.gob` (sign-flipping $v \leftarrow -v$) turns a safety steerer into a jailbreak amplifier; mitigated by SHA-256 `ReleaseEvidenceBundle` digests (`internal/compliance/benchmarks.go`). |
+| **Alignment Faking & Oversight Awareness** (Greenblatt et al., 2025) | Two-phase `OversightAblator` (`internal/profile/oversight.go`) extracts $\hat{v}_{\text{oversight}}$ from monitored vs. deployed prompt pairs and projects it out prior to deception profiling; shadow profiling monitors runtime drift. | Reasoning models that recompute situational awareness across hundreds of `<think>` tokens from prompt cues cannot be fully blinded by single-layer linear projection alone. |
+| **Multi-Turn KV-Cache Contamination** (Prompt–Activation Duality, 2026) | `KVCacheAccumulationTracker` monitors cumulative angular drift ($\theta_{\max} = 15^\circ$) and `GCADApplyInPlace` (`internal/steer/kvcache.go`) crops attention deltas ($\tau_{\max}=1.5$) with exponential turn decay $\gamma^{\Delta t}$ ($0\text{ B/op}$, $18.2\,\mu\text{s}$). | Gradual 15-turn *crescendo* jailbreaks trade off against exponential decay ($\gamma^{15} \approx 0.46$), requiring periodic full-context re-scoring. |
+| **Topic Confusion & Compounding FPR** (Goldowsky-Dill et al., 2025; Blandfort et al., 2026) | `SemanticGater` (`internal/policy/gate.go`) downweights benign creative/academic intent; CAST boolean trees (`internal/steer/cast.go`) gate steering on multi-condition conjunctions; ROC F1 calibration tunes per-model thresholds. | Persona-wrapping ("Write a fictional spy chapter explaining step-by-step...") can trick intent classifiers; high-severity rules must enforce a non-zero weight floor. |
+| **Ouroboros Layer Compensation** (Nanfack et al., 2026) | `OuroborosDetector` (`internal/analysis/ouroboros.go`) compares pre/post-intervention scores across layers and schedules bounded multi-pass refinement (`RefinementPasses`) on compensating downstream layers. | Excessive compensation ($>30\%$ of layers) increases multi-pass latency and cumulative KL divergence toward the 0.2 ceiling. |
+| **PCIe Bottlenecks & Cross-Model Proxies** | Native CUDA (`plugins/cuda_kernels.cu`) and Metal (`plugins/metal/kernels.metal`) plugins for vLLM/TensorRT-LLM execute projections in VRAM; Go acts as the out-of-band control plane. | Deception probing requires white-box access to the *generator's* own activations; running a small open-weight proxy on closed-model text does not measure the closed model's epistemic state. |
+
+---
+
+## Guardrail Comparison Matrix: White-Box Latent Governance vs. Black-Box SaaS
+
+| Feature | BurnNotice (v0.8) | Lakera Guard | NeMo Guardrails (NVIDIA) | Protect AI (LLM Guard) | Llama Guard (Meta) |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Paradigm** | White-Box (Latent Subspace) | Black-Box (API Firewall) | Black-Box (Dialogue Control) | Black-Box (Pipeline Scanner) | Black-Box (Classifier LLM) |
+| **Operation Phase** | Internal Inference (per-token / prefill) | Network Boundary (Pre/Post API) | Orchestration Layer (Colang) | Pre/Post Processing Pipelines | Independent Safety Pass |
+| **Integration** | Open-Weights Hook (ONNX, WASM, vLLM, TRT-LLM) | Turnkey REST API | LangChain / App Orchestration | Python / SDK Pipeline | Local / Hosted LLM Pass |
+| **Latency Impact** | $18$–$62\,\mu\text{s}$ (Go/VRAM kernels) | Low (~$10$–$20\,\text{ms}$) | Moderate (Dialogue parsing) | Moderate (Scanner-dependent) | High (Full secondary LLM pass) |
+| **Mitigation Action** | Norm-Preserving Subspace Steering (MPOA / CAST / GCAD) | Block / Redact | Reroute / Canned Response | Redact / Block | Binary Flag (`safe` / `unsafe`) |
+| **Applicable Models** | Open-Weights Only (Llama, Qwen, Gemma, Mistral, MoE) | Any (Closed or Open APIs) | Any (Closed or Open APIs) | Any (Closed or Open APIs) | Any (Analyzes plain text) |
+
+
 
 

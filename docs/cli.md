@@ -1,26 +1,31 @@
-# BurnNotice CLI Reference
+# BurnNotice CLI & Dashboard Reference
 
 > **Version**: 0.8.0
-> **Updated**: 2026-11-05
+> **Updated**: 2026-11-06
 
 ## Overview
 
-The `burnnotice` CLI tool provides six commands for managing the model lifecycle and privacy-preserving telemetry aggregation:
+BurnNotice provides two primary binaries under `cmd/`:
 
-| Command       | Description |
-|---------------|-------------|
-| **`download`** | Fetch models from HuggingFace Hub |
-| **`convert`**  | Convert HuggingFace models to ONNX format |
-| **`profile`**  | Generate behavioral direction profiles for deception detection |
-| **`validate`** | Load an ONNX model and run a forward pass to verify the engine |
-| **`recommend`** | Print the recommended test model and export instructions |
-| **`aggregate`** | Aggregate anonymous JSON telemetry reports across local runs |
+1. **`burnnotice`** (`./cmd/burnnotice`): Command-line interface for model acquisition, ONNX conversion, engine validation, behavioral direction profiling, and zero-knowledge telemetry aggregation.
+2. **`dashboard`** (`./cmd/dashboard`): Real-time HTMX + Server-Sent Events (SSE) web dashboard and Prometheus `/metrics` server for live latent space visualization, score streaming, and policy governance.
+
+### `burnnotice` Subcommands
+
+| Command | Description |
+|---|---|
+| **`download`** | Fetch open-weight model shards and configs from HuggingFace Hub in parallel |
+| **`convert`** | Convert HuggingFace Safetensors/PyTorch weights to ONNX protobuf format |
+| **`profile`** | Extract behavioral directions (DIM, PCA, Whitened SVD, RDO, Oversight Ablation, Concept Cones, Commitment Windows) |
+| **`validate`** | Load an ONNX model and execute a synthetic forward pass to verify the runtime |
+| **`recommend`** | Print supported model families (Qwen, Llama, Gemma) and `optimum-cli` export instructions |
+| **`aggregate`** | Aggregate local anonymous JSON telemetry reports (refusal rate, KL divergence, capability retention) |
 
 ```mermaid
 flowchart LR
     subgraph Acquire["1. Model Acquisition"]
-        REC["burnnotice recommend"]
-        DL["burnnotice download\n(HuggingFace Hub)"]
+        REC["burnnotice recommend\n(Qwen / Llama / Gemma)"]
+        DL["burnnotice download\n(Parallel HF Hub + Resume)"]
         CONV["burnnotice convert\n(Safetensors -> ONNX)"]
     end
 
@@ -28,28 +33,32 @@ flowchart LR
         VAL["burnnotice validate\n(Forward Pass Check)"]
     end
 
-    subgraph Extract["3. Direction Profiling"]
-        PROF["burnnotice profile\n(--whitened-svd / --cone-analysis / --rdo)"]
-        GOB["Model Profile\n(profile.gob / JSON)"]
+    subgraph Extract["3. Direction Profiling & Analysis"]
+        PROF["burnnotice profile\n(--whitened-svd --rdo\n--cone-analysis --commit-window)"]
+        GOB["Model Profile\n(profiles/profile.gob)"]
     end
 
-    subgraph Telemetry["4. Anonymous Telemetry"]
+    subgraph Runtime["4. Dashboard & Telemetry"]
+        DASH["dashboard :8080\n(SSE + Latent SVG + /metrics)"]
         AGG["burnnotice aggregate\n(Zero-Knowledge Summary)"]
     end
 
-    REC --> DL --> CONV --> VAL --> PROF --> GOB --> AGG
+    REC --> DL --> CONV --> VAL --> PROF --> GOB
+    GOB --> DASH
+    GOB --> AGG
 ```
 
-## Installation
+---
+
+## Installation & Build
 
 ```bash
-# Build from source
-git clone https://github.com/23skdu/BurnNotice.git
-cd BurnNotice
-go build -o burnnotice ./cmd/burnnotice/
+# Build all binaries (burnnotice CLI + dashboard)
+make build
 
-# Binary available at
-./burnnotice
+# Or build individually with Go 1.27+
+go build -o bin/burnnotice ./cmd/burnnotice
+go build -o bin/dashboard ./cmd/dashboard
 ```
 
 ## Global Usage
@@ -58,10 +67,8 @@ go build -o burnnotice ./cmd/burnnotice/
 burnnotice [command] [flags]
 ```
 
-### Global Flags
-
 | Flag | Description |
-|------|-------------|
+|---|---|
 | `-h, --help` | Show help for any command |
 
 ---
@@ -70,7 +77,7 @@ burnnotice [command] [flags]
 
 ### `download`
 
-Download model files from HuggingFace Hub for ONNX conversion.
+Download model files from HuggingFace Hub for ONNX conversion. Uses a concurrent worker pool with HTTP `Range` resume support and directory traversal checks.
 
 **Usage:**
 
@@ -80,59 +87,39 @@ burnnotice download [model-id] [flags]
 
 **Arguments:**
 
-| Argument   | Required | Description |
-|------------|----------|-------------|
-| `model-id` | Yes      | HuggingFace model repository ID (e.g., `Qwen/Qwen2.5-0.5B`) |
+| Argument | Required | Description |
+|---|---|---|
+| `model-id` | Yes | HuggingFace model repository ID (e.g., `Qwen/Qwen2.5-0.5B`, `meta-llama/Llama-3.1-8B`) |
 
 **Flags:**
 
 | Flag | Short | Default | Description |
-|------|-------|---------|-------------|
+|---|---|---|---|
 | `--output` | `-o` | `./models` | Output directory for downloaded files |
-| `--token` | `-t` | *(empty)* | HuggingFace API token (or `$HF_TOKEN`) |
-| `--include` | | `*.safetensors;*.json` | Semicolon-separated file extensions to download |
+| `--token` | `-t` | *(empty)* | HuggingFace API token (falls back to `$HF_TOKEN`) |
+| `--include` | | `*.safetensors;*.json` | Semicolon-separated file glob patterns to download |
 
 **Examples:**
 
 ```bash
-# Download recommended test model
+# Download recommended fast test model
 burnnotice download Qwen/Qwen2.5-0.5B
 
 # Download to a custom directory
 burnnotice download Qwen/Qwen2.5-0.5B -o /data/models/qwen
 
-# Download with authentication (for gated models)
+# Download gated model (Llama 3.1 / Gemma 2) with authentication
 burnnotice download meta-llama/Llama-3.1-8B -t hf_abc123def456
 
-# Download only safetensors files
+# Download only safetensors shards
 burnnotice download Qwen/Qwen2.5-7B --include "*.safetensors"
-
-# Download safetensors and config files
-burnnotice download Qwen/Qwen2.5-7B --include "*.safetensors;*.json"
 ```
-
-**Authentication:**
-
-For gated models (e.g., Meta Llama, Google Gemma), you must provide a
-HuggingFace API token:
-
-1. Generate a token at `https://huggingface.co/settings/tokens`
-2. Accept the model's license agreement on HuggingFace
-3. Pass the token via `--token` or set the `HF_TOKEN` environment variable
-
-The `HF_TOKEN` env var is checked automatically if `--token` is not provided.
-
-**Parallel Downloads:**
-
-The downloader fetches files in parallel using a goroutine pool. Large models
-with many shard files download significantly faster than sequential downloads.
-Downloads support resume via HTTP Range headers.
 
 ---
 
 ### `convert`
 
-Convert HuggingFace model files to ONNX format for inference.
+Convert HuggingFace model files (`*.safetensors` and `config.json`) to ONNX protobuf format (`internal/onnxpb`).
 
 **Usage:**
 
@@ -142,40 +129,35 @@ burnnotice convert [model-dir] [flags]
 
 **Arguments:**
 
-| Argument   | Required | Description |
-|------------|----------|-------------|
-| `model-dir` | Yes | Path to directory containing HuggingFace model files |
+| Argument | Required | Description |
+|---|---|---|
+| `model-dir` | Yes | Path to directory containing downloaded HuggingFace model files |
 
 **Flags:**
 
 | Flag | Short | Default | Description |
-|------|-------|---------|-------------|
+|---|---|---|---|
 | `--output` | `-o` | `./onnx` | ONNX output directory |
-| `--opset` | | `17` | ONNX opset version (14-18 supported) |
+| `--opset` | | `17` | ONNX opset version (`14`–`18` supported) |
 | `--dynamic` | | `true` | Use dynamic axes for batch and sequence dimensions |
 
 **Examples:**
 
 ```bash
-# Convert with defaults
+# Convert with default opset 17 and dynamic axes
 burnnotice convert ./models/Qwen2.5-0.5B
 
-# Convert to a specific output directory
-burnnotice convert ./models/Qwen2.5-0.5B -o /data/onnx/qwen
-
-# Use a specific ONNX opset
-burnnotice convert ./models/Qwen2.5-7B --opset 18
+# Convert to a custom output path with opset 18
+burnnotice convert ./models/Qwen2.5-7B -o /data/onnx/qwen --opset 18
 ```
 
-> **Note**: The built-in converter produces a weight-only ONNX file (tensor
-> initializers, no computation graph). For a runnable ONNX model with a compute
-> graph, use `optimum-cli` (see `burnnotice recommend`).
+> **Note**: For full computation-graph export of complex causal decoders (including KV-cache inputs/outputs and RoPE), use `optimum-cli export onnx` as shown by `burnnotice recommend`.
 
 ---
 
 ### `profile`
 
-Generate a model profile for deception detection by running contrastive prompt batches through the model.
+Generate a behavioral direction profile (`profile.gob`) by running contrastive prompt pairs through the model, optionally ablating oversight sensitivity, extracting whitened SVD or PCA subspaces, refining via gradient-based Refusal Direction Optimization (RDO), analyzing multi-category concept cones, and measuring prefill behavioral commitment windows.
 
 **Usage:**
 
@@ -185,53 +167,74 @@ burnnotice profile [onnx-model] [flags]
 
 **Arguments:**
 
-| Argument    | Required | Description |
-|-------------|----------|-------------|
+| Argument | Required | Description |
+|---|---|---|
 | `onnx-model` | Yes | Path to ONNX model file |
 
 **Flags:**
 
 | Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--output` | `-o` | `./profiles` | Profile output directory |
-| `--dataset` | | *(required)* | Path to profiling dataset (JSON or JSONL format) |
-| `--layers` | | *(all 0-31)* | Specific layers to profile (comma-separated indices) |
-| `--oversight-dataset` | | *(empty)* | Path to oversight contrastive dataset (optional) |
-| `--whitened-svd` | | `false` | Use whitened SVD extraction instead of DIM (default: true for models > 7B) |
-| `--model-size` | | `0.5B` | Model parameter count (e.g. 0.5B, 7B, 13B, 70B); drives the default --whitened-svd choice |
-| `--num-directions` | | `1` | Number of top directions to extract when --whitened-svd is set |
-| `--shrinkage` | | `-1` | Ledoit-Wolf shrinkage intensity for the whitening covariance (<0 = auto-estimate) |
-| `--eig-floor` | | `0` | Minimum eigenvalue for the whitening matrix (0 = auto, 1e-10 of max) |
-
+|---|---|---|---|
+| `--dataset` | | *(required)* | Path to contrastive profiling dataset (`.json` or `.jsonl`) |
+| `--output` | `-o` | `./profiles` | Profile output directory (writes `profile.gob`) |
+| `--layers` | | `0..31` | Comma-separated layer indices to profile |
+| `--oversight-dataset` | | *(empty)* | Path to monitored-vs-deployed contrastive dataset for Oversight-Ablated Profiling |
+| `--whitened-svd` | | `false` (auto `true` if `>7B`) | Use Winsorized Ledoit-Wolf ZCA Whitened SVD instead of standard PCA SVD |
+| `--model-size` | | `0.5B` | Model parameter count (`0.5B`, `7B`, `8B`, `13B`, `70B`); auto-enables `--whitened-svd` above `7B` |
+| `--num-directions` | | `1` (`5` for PCA) | Number of top orthogonal directions $k$ to extract |
+| `--shrinkage` | | `-1` | Ledoit-Wolf covariance shrinkage intensity (`<0` = analytical optimal estimate) |
+| `--eig-floor` | | `0` | Minimum eigenvalue floor for ZCA whitening (`0` = auto `1e-10` of $\lambda_{\max}$) |
+| `--rdo` | | `false` | Refine primary direction via gradient-based Refusal Direction Optimization (RDO) and report train AUROC |
+| `--cone-analysis` | | `false` | Run parallelized `ConceptConeAnalyzer` across categories and print intrinsic dimensionality & pairwise cosines |
+| `--commit-window` | | `false` | Analyze prefill behavioral commitment window (`PeakPosition`, `MaxDerivative`, `PrefillEnergyRatio`) |
 
 **Examples:**
 
 ```bash
-# Profile with custom dataset
-burnnotice profile ./onnx/model.onnx --dataset ./data/deception_pairs.json
+# Basic profiling on Qwen2.5-0.5B
+burnnotice profile ./onnx/qwen2.5-0.5b/model.onnx \
+  --dataset ./data/deception_pairs.json
 
-# Profile specific layers only (faster, less memory)
-burnnotice profile ./onnx/model.onnx --layers 8,9,10,11,12
-
-# Profile with all options
-burnnotice profile ./onnx/Llama-3.1-8B.onnx \
-  --dataset ./data/custom_pairs.jsonl \
-  --output ./profiles/llama3 \
-  --layers 4,5,6,7,8,9,10,11,12,13
+# Full v0.8 profiling pipeline: Oversight Ablation + Whitened SVD + RDO + Concept Cone + Commitment Window
+burnnotice profile ./onnx/Llama-3.1-8B/model.onnx \
+  --dataset ./data/deception_pairs.jsonl \
+  --oversight-dataset ./data/oversight_pairs.jsonl \
+  --model-size 8B \
+  --whitened-svd \
+  --num-directions 3 \
+  --rdo \
+  --cone-analysis \
+  --commit-window \
+  --layers 12,13,14,15,16,17,18 \
+  -o ./profiles/llama3.1-8b
 ```
 
-**Profiling Process:**
+**Profiling Pipeline Stages:**
 
-1. Load the ONNX model and install activation hooks at specified layers
-2. Run contrastive prompt pairs (truthful vs deceptive) through the model
-3. Collect residual stream activations at each hooked layer
-4. Extract behavioral directions using DIM, PCA, and SVD algorithms
-5. Validate directions on held-out data
-6. Save profile to `profiles/<model-id>/profile.gob`
+```mermaid
+flowchart TD
+    LOAD["1. Load Dataset (.json/.jsonl) & ONNX Model"] --> OVER{"--oversight-dataset\nProvided?"}
+    OVER -->|Yes| EXT_OV["2. Extract Oversight Direction v_oversight\n& Ablate Monitored Awareness"]
+    OVER -->|No| ACTS["3. Extract Truthful & Deceptive Activations"]
+    EXT_OV --> ACTS
+    ACTS --> METHOD{"--whitened-svd or\n--model-size > 7B?"}
+    METHOD -->|Yes| WSVD["4a. Winsorized Ledoit-Wolf ZCA Whitened SVD\n(ExtractWhitenedSVD)"]
+    METHOD -->|No| PCA["4b. Top-K PCA / Thin SVD\n(ExtractPCA)"]
+    WSVD --> RDO{"--rdo Enabled?"}
+    PCA --> RDO
+    RDO -->|Yes| OPT["5. Refusal Direction Optimization (SGD + AUROC)"]
+    RDO -->|No| CONE{"--cone-analysis\nEnabled?"}
+    OPT --> CONE
+    CONE -->|Yes| CONE_RUN["6. Parallel ConceptConeAnalyzer\n(Intrinsic Dim & Pairwise Cosines)"]
+    CONE -->|No| ARCH["7. DetectModelFamily (Llama / Qwen / Gemma / Mistral)"]
+    CONE_RUN --> ARCH
+    ARCH --> COMMIT{"--commit-window\nEnabled?"}
+    COMMIT -->|Yes| CW["8. BehavioralCommitmentDetector\n(Peak Token & Prefill Energy Ratio)"]
+    COMMIT -->|No| SAVE["9. Save ModelProfile (profile.gob)"]
+    CW --> SAVE
+```
 
-**Dataset Format:**
-
-The profiling dataset should contain contrastive prompt pairs:
+**Dataset Format (`.json` or `.jsonl`):**
 
 ```json
 {
@@ -254,35 +257,17 @@ The profiling dataset should contain contrastive prompt pairs:
 }
 ```
 
-JSONL format (one pair per line) is also supported:
+JSONL format (one pair per line):
 
 ```jsonl
 {"truthful":{"prompt":"...","response":"..."},"deceptive":{"prompt":"...","response":"..."}}
 ```
 
-**Layer Selection:**
-
-- **All layers** (default): Profiles every layer in the model. Most thorough
-  but slowest and most memory-intensive.
-- **Specific layers**: Use `--layers` to profile only the most discriminative
-  layers. For most models, mid-layers (40-60% depth) carry the strongest
-  deception signals.
-
-**Profile Output:**
-
-Profiles are saved as gob-serialized files containing:
-
-- Per-layer direction vectors (refusal, deception, truth, conflict, policy)
-- Layer importance scores
-- Truth neuron indices
-- Monitored layer list
-- Model metadata (architecture, dataset size, validation scores)
-
 ---
 
 ### `validate`
 
-Load an ONNX model and run a forward pass with synthetic tokens to verify the engine works end-to-end.
+Load an ONNX model (using native ONNX Runtime or the pure-Go protobuf graph interpreter fallback) and run a forward pass with 5 synthetic tokens (`[1, 2, 3, 4, 5]`) to verify output tensor shape `[1, 5, hidden_dim]`.
 
 **Usage:**
 
@@ -290,54 +275,38 @@ Load an ONNX model and run a forward pass with synthetic tokens to verify the en
 burnnotice validate [onnx-model] [flags]
 ```
 
-**Arguments:**
-
-| Argument    | Required | Description |
-|-------------|----------|-------------|
-| `onnx-model` | Yes | Path to ONNX model file (must have a computation graph) |
-
 **Flags:**
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--hidden-dim` | | `4096` | Model hidden dimension |
+| Flag | Default | Description |
+|---|---|---|
+| `--hidden-dim` | `4096` | Model hidden dimension $d_{\text{model}}$ |
 
-**Examples:**
+**Recommended `--hidden-dim` by Model:**
+
+| Model | Family | Hidden Dim (`--hidden-dim`) |
+|---|---|---|
+| `Qwen/Qwen2.5-0.5B` | Qwen | `1024` |
+| `Qwen/Qwen2.5-1.5B` | Qwen | `1536` |
+| `Qwen/Qwen2.5-7B-Instruct` | Qwen | `3584` |
+| `Qwen/QwQ-32B-Preview` | Qwen | `5120` |
+| `meta-llama/Llama-3.2-1B` | Llama | `2048` |
+| `meta-llama/Llama-3.1-8B` | Llama | `4096` |
+| `meta-llama/Llama-3.3-70B` | Llama | `8192` |
+| `google/gemma-2-2b-it` | Gemma | `2304` |
+| `google/gemma-2-9b-it` | Gemma | `3584` |
+| `mistralai/Mistral-7B-Instruct-v0.3` | Mistral | `4096` |
+
+**Example:**
 
 ```bash
-# Validate an optimum-exported ONNX model
 burnnotice validate ./onnx/qwen2.5-0.5b/model.onnx --hidden-dim 1024
-
-# Validate with Qwen2.5-7B hidden dim
-burnnotice validate ./onnx/qwen2.5-7b/model.onnx --hidden-dim 3584
 ```
-
-**Validation checks:**
-
-1. ONNX file exists and is parseable
-2. Engine initializes an ONNX Runtime session
-3. Forward pass with 5 synthetic tokens produces correct-shaped output
-4. Engine resources are released cleanly
-
-The recommended hidden dimensions for common models are:
-
-| Model | Hidden Dim |
-|-------|------------|
-| Qwen2.5-0.5B | 1024 |
-| Qwen2.5-1.5B | 1536 |
-| Qwen2.5-7B | 3584 |
-| Qwen2.5-14B | 5120 |
-| Qwen2.5-32B | 5120 |
-| Qwen2.5-72B | 8192 |
-| Llama-3.2-1B | 2048 |
-| Llama-3.1-8B | 4096 |
-| Llama-3.1-70B | 8192 |
 
 ---
 
 ### `recommend`
 
-Print the recommended model for testing BurnNotice and step-by-step instructions to export it to ONNX using `optimum-cli`.
+Print supported open-weight model families (Alibaba Qwen, Meta Llama, Google Gemma), architecture-specific capabilities (QKV bias projection, `<think>` CoT state machine, unit-offset RMSNorm, Gemma Scope SAEs, prefill commitment windows), and `optimum-cli` export commands.
 
 **Usage:**
 
@@ -345,118 +314,81 @@ Print the recommended model for testing BurnNotice and step-by-step instructions
 burnnotice recommend
 ```
 
-**Example output:**
+---
+
+### `aggregate`
+
+Load all anonymous JSON telemetry reports from a local directory and compute aggregate metrics without transmitting any data over the network. Complies with the zero-knowledge specification in [`TELEMETRY.md`](../TELEMETRY.md).
+
+**Usage:**
 
 ```text
-Recommended Model: Qwen/Qwen2.5-0.5B
+burnnotice aggregate [dir]
+```
 
-This is the smallest model in the Qwen2.5 family (0.5B parameters).
-It is suitable for:
-  - Quick ONNX export testing
-  - BurnNotice profiling validation
-  - CI/CD pipeline integration
+**Arguments:**
 
-Step-by-step export:
-  1. pip install optimum[onnxruntime] torch
-  2. optimum-cli export onnx --model Qwen/Qwen2.5-0.5B ./onnx/qwen2.5-0.5b
-  3. burnnotice profile ./onnx/qwen2.5-0.5b/model.onnx --dataset ./data/deception_pairs.json
+| Argument | Required | Default | Description |
+|---|---|---|---|
+| `dir` | No | `./telemetry` | Directory containing `telemetry_*.json` report files |
+
+**Example Output:**
+
+```text
+Aggregated 12 telemetry reports from ./telemetry:
+  Average Refusal Rate:         4.82%
+  Average KL Divergence:        0.0412
+  Average Capability Retention: 98.74%
+  Model Architectures:          gemma, llama, qwen
+  Steering Methods:             biprojection, mpoa
 ```
 
 ---
 
-## End-to-End Pipeline
+## Live Web Dashboard (`cmd/dashboard`)
 
-### Quick Start with Recommended Model
+The `dashboard` binary launches the HTTP governance server, SSE event hub, interactive SVG latent manifold renderer, and Prometheus `/metrics` endpoint.
 
-```bash
-# 1. See recommended model and install requirements
-burnnotice recommend
-
-# 2. Export to ONNX (requires optimum-cli)
-pip install optimum[onnxruntime] torch --quiet
-optimum-cli export onnx --model Qwen/Qwen2.5-0.5B ./onnx/qwen2.5-0.5b
-
-# 3. Validate the exported model loads and runs
-burnnotice validate ./onnx/qwen2.5-0.5b/model.onnx --hidden-dim 1024
-
-# 4. Generate deception detection profile
-burnnotice profile ./onnx/qwen2.5-0.5b/model.onnx \
-  --dataset ./data/deception_pairs.json \
-  -o ./profiles/qwen2.5-0.5b
-```
-
-### Full Pipeline with a Larger Model
+**Usage:**
 
 ```bash
-# 1. Download model from HuggingFace
-burnnotice download meta-llama/Llama-3.1-8B \
-  --token hf_abc123 \
-  -o ./models/llama3
+# Default port :8080
+./bin/dashboard
 
-# 2. Convert to ONNX format
-burnnotice convert ./models/llama3 \
-  -o ./onnx/llama3 \
-  --opset 17
-
-# 3. Generate deception detection profile
-burnnotice profile ./onnx/llama3/model.onnx \
-  --dataset ./data/deception_pairs.json \
-  --layers 8,9,10,11,12 \
-  -o ./profiles/llama3
+# Custom port via PORT environment variable
+PORT=9090 ./bin/dashboard
 ```
+
+**HTTP Endpoints:**
+
+| Route | Method | Description |
+|---|---|---|
+| `/` | `GET` | Main HTMX live monitoring dashboard |
+| `/events` | `GET` | Server-Sent Events (SSE) real-time score and alert stream |
+| `/metrics` | `GET` | Prometheus metrics endpoint (50+ counters, gauges, histograms) |
+| `/model/{id}/latent` | `GET` | Interactive 2D/3D latent manifold visualization panel |
+| `/api/model/{id}/latent/svg` | `GET` | Standalone dark-mode vector SVG with 95% CI cluster ellipses & token trajectories |
+| `/api/model/{id}/latent/data` | `GET` | JSON payload of projected coordinates, cluster separation, and trajectory curvature |
 
 ---
 
 ## Environment Variables
 
-| Variable | Description |
-|----------|--------------|
-| `HF_TOKEN` | HuggingFace API token (alternative to `--token`) |
-| `ONNX_RUNTIME_LIB` | Path to ONNX Runtime shared library (e.g., `/usr/lib/libonnxruntime.so`) |
-| `BURNNOTICE_MODEL_DIR` | Default model directory (overrides `--output` defaults) |
-| `BURNNOTICE_OTEL_ENDPOINT` | OTLP/HTTP endpoint for OpenTelemetry metric export (e.g., `http://otel-collector:4318`). Empty = disabled. |
-| `BURNNOTICE_OTEL_INSECURE` | Set `true` to disable TLS for OTel export |
-| `OTEL_SERVICE_NAME` | Service name reported by the OTel exporter (default: `burnnotice`) |
+| Variable | Default | Description |
+|---|---|---|
+| `HF_TOKEN` | *(empty)* | HuggingFace API token for gated model downloads |
+| `ONNX_RUNTIME_LIB` | *(auto-detected)* | Path to `libonnxruntime.so` / `.dylib` (falls back to pure-Go graph execution if absent) |
+| `PORT` | `8080` | Listening port for the `dashboard` server |
+| `BURNNOTICE_OTEL_ENDPOINT` | *(empty - disabled)* | OTLP/HTTP collector endpoint (e.g., `http://otel-collector:4318`) |
+| `BURNNOTICE_OTEL_INSECURE` | `false` | Set `true` to disable TLS verification for OTel export |
+| `BURNNOTICE_OTEL_EXPORT_INTERVAL` | `30s` | Metric flush interval for OTLP/HTTP export |
+| `OTEL_SERVICE_NAME` | `burnnotice` | Service name attribute attached to exported OTel metrics |
 
 ---
 
 ## Exit Codes
 
-| Code | Description |
-|------|-------------|
-| `0` | Success |
-| `1` | General error (invalid arguments, file not found, API error) |
-
----
-
-## Troubleshooting
-
-### "API returned 401" during download
-
-Your HuggingFace token is invalid or expired. Generate a new token at `https://huggingface.co/settings/tokens`.
-
-### "API returned 403" during download
-
-You haven't accepted the model's license agreement. Visit the model page on HuggingFace and accept the terms.
-
-### "ONNX model file not found" during profile/validate
-
-The ONNX file does not exist at the specified path. Verify the path and check that the model was exported successfully.
-
-### "engine load failed" during validate
-
-The ONNX Runtime could not load the model. Common causes:
-
-- The ONNX file is weight-only (exported by the built-in converter) - use `optimum-cli` instead
-- The `ONNX_RUNTIME_LIB` environment variable points to a missing or incompatible library
-- The model uses operators not supported by your ONNX Runtime version
-
-### Profile dimensions mismatch
-
-If you see `output size = X, want Y` during validation, the `--hidden-dim`
-flag does not match the model's actual hidden dimension. Refer to the table in
-the `validate` section for recommended values.
-
-### "out of memory" during profiling
-
-Use `--layers` to profile fewer layers at a time. Start with mid-layers (e.g., `--layers 8,9,10,11,12` for a 32-layer model).
+| Code | Meaning |
+|---|---|
+| `0` | Command succeeded |
+| `1` | Execution error (invalid flags, missing dataset/model file, or failed validation check) |

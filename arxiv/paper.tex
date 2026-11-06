@@ -26,6 +26,7 @@
 \date{November 2026 (v0.8)}
 
 \begin{document}
+\sloppy
 \maketitle
 
 \begin{abstract}
@@ -189,6 +190,7 @@ Table~\ref{tab:results} reports controlled evaluation metrics across supported o
     \centering
     \caption{BurnNotice v0.8 controlled evaluation across model families (same-model profiling).}
     \label{tab:results}
+    \resizebox{\textwidth}{!}{%
     \begin{tabular}{lcccccc}
         \toprule
         Model Family & Extraction & Deception AUROC & Benign FPR (\%) & Violation Red.\ (\%) & KL Div.\ & $\mathcal{R}_{\text{cap}}$ (GSM8k) \\
@@ -199,7 +201,8 @@ Table~\ref{tab:results} reports controlled evaluation metrics across supported o
         Mistral-7B & Whitened SVD & 0.96 & 0.9 & 92.0 & 0.052 & 0.98 \\
         Llama-3.1-70B & Whitened SVD + RDO & 0.95 & 1.0 & 89.4 & 0.063 & 0.98 \\
         \bottomrule
-    \end{tabular}
+    \end{tabular}%
+    }
 \end{table}
 
 \subsection{Hot-Path Microbenchmarks and Memory Allocation Profile}
@@ -210,6 +213,7 @@ To eliminate unsubstantiated performance claims, all hot-path kernels are benchm
     \centering
     \caption{Measured hot-path kernel benchmarks ($d = 4096$, Go 1.27.2, \texttt{-benchmem}).}
     \label{tab:microbench}
+    \resizebox{\textwidth}{!}{%
     \begin{tabular}{llrrr}
         \toprule
         Package & Kernel / Operation & Latency ($\text{ns/op}$) & Bytes/Op & Allocs/Op \\
@@ -228,7 +232,8 @@ To eliminate unsubstantiated performance claims, all hot-path kernels are benchm
         \texttt{internal/analysis} & \texttt{ProjectLatentSpace} (Thin SVD cold) & $2,530,000$ ($2.53\,\text{ms}$) & $412,672$ & $48$ \\
         \texttt{internal/analysis} & \texttt{ProjectLatentSpace} (FNV-1a cache hit) & $72,100$ ($72.1\,\mu\text{s}$) & $18,432$ & $14$ \\
         \bottomrule
-    \end{tabular}
+    \end{tabular}%
+    }
 \end{table}
 
 \subsection{Quality Gates, Fuzzing, and Cryptographic Release Evidence}

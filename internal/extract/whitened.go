@@ -15,7 +15,7 @@ import (
 //  4. U = cov^(1/2)    (un-whitening matrix)
 //  5. D_white = D · W
 //  6. SVD: D_white = Σ_white · U_white · V_whiteᵀ
-//  7. V_orig = U · V_white                    (per nextsteps.md 7.3)
+//  7. V_orig = U · V_white                    (per docs/svd.md)
 //
 // Each returned direction is L2-normalized. Singular values are returned in
 // descending SVD order.

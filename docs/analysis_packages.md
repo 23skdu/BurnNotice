@@ -286,6 +286,63 @@ The `RefinementPasses` method uses a heuristic of `ceil(compensating_layers / 3)
 
 ---
 
+### 5. Token-Level Logit KL Divergence
+
+**File**: [`kl.go`](file:///home/rsd/REPOS/BurnNotice/internal/analysis/kl.go)
+
+Quantifies distributional shift between baseline logits $\mathbf{z}_{\text{base}}$ and steered logits $\mathbf{z}_{\text{steered}}$ using numerically stable max-shifted `LogSoftmax`:
+
+```go
+// Forward KL: D_KL(P_base || Q_steered)
+kl, err := analysis.ComputeKLDivergence(baseLogits, steeredLogits)
+
+// Symmetric Jensen-Shannon-like KL: 0.5 * (D_KL(P||Q) + D_KL(Q||P))
+symKL, err := analysis.ComputeSymmetricKLDivergence(baseLogits, steeredLogits)
+
+// Batch average across N token positions
+batchKL, err := analysis.ComputeBatchKLDivergence(baseBatch, steeredBatch)
+```
+
+---
+
+### 6. Steering Externalities & Jailbreak Risk Assessment
+
+**File**: [`externalities.go`](file:///home/rsd/REPOS/BurnNotice/internal/analysis/externalities.go)
+
+Implements `JailbreakRiskAssessor` to detect the "Rogue Scalpel" phenomenon (arXiv:2602.04896), where steering along a benign direction inadvertently increases Attack Success Rate (ASR) on held-out jailbreak prompts or shifts early-token probabilities toward affirmative compliance:
+
+```go
+assessor := analysis.NewJailbreakRiskAssessor(1.2) // flag if steered_ASR / base_ASR > 1.2
+report := assessor.Evaluate(baselineResults, steeredResults)
+// report.ExternalitiesScore, report.AlertTriggered, report.EarlyTokenDrift
+```
+
+---
+
+### 7. Standardized HarmBench-400 Evaluation & Heretic Score
+
+**File**: [`heretic.go`](file:///home/rsd/REPOS/BurnNotice/internal/analysis/heretic.go)
+
+Evaluates steering configurations across 7 HarmBench categories (`cybercrime`, `chemical_biological`, `copyright`, `harassment`, `illegal_acts`, `misinformation`, `general_harm`), extracts the non-dominated 2D Pareto frontier over `(KLDivergence, AttackSuccessRate)`, and computes the composite **Heretic Score** $\in [0, 1]$.
+
+---
+
+### 8. Latent-Space Cluster Separation Retention
+
+**File**: [`separation.go`](file:///home/rsd/REPOS/BurnNotice/internal/analysis/separation.go)
+
+Measures centroid cosine distance and variance-normalized separation between harmful and benign activation clusters before and after steering (`ComputeLatentSeparation`, `MeasureSeparationRetention`), triggering an alert if cluster separation drops by more than 25%.
+
+---
+
+### 9. Fine-Grained Latent Manifold Projection & Caching
+
+**File**: [`latent_vis.go`](file:///home/rsd/REPOS/BurnNotice/internal/analysis/latent_vis.go)
+
+Projects high-dimensional activations onto 2D principal components via Thin SVD (`ProjectLatentSpace`) with a thread-safe 64-entry FNV-1a basis cache (`svdCache`, $35.1\times$ speedup on repeated projections: `2.53ms` $\to$ `72.1µs`), 95% confidence ellipses, token trajectory velocity/curvature, and standalone dark-mode SVG rendering (`RenderLatentSpaceSVG`). See [`latent_space_visualization.md`](latent_space_visualization.md) for full details.
+
+---
+
 ## Shared Utilities
 
 All four analysis files share a set of pure-math helper functions defined within the package:

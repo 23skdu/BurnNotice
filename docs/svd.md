@@ -47,10 +47,16 @@ If $\alpha < 0.0$ is provided, BurnNotice dynamically calculates the optimal Led
 
 ## Usage
 
-You can use the whitened SVD extraction method in the BurnNotice CLI by passing the `--whitened-svd` flag during profiling:
+You can use the whitened SVD extraction method in the BurnNotice CLI by passing `--whitened-svd` (or `--model-size` above `7B`, which enables it automatically) during profiling:
 
 ```bash
-burnnotice profile ./onnx/qwen2.5-0.5b/model.onnx --dataset ./data/deception_pairs.json --whitened-svd
+burnnotice profile ./onnx/qwen2.5-0.5b/model.onnx \
+  --dataset ./data/deception_pairs.json \
+  --whitened-svd \
+  --num-directions 5 \
+  --shrinkage -1 \
+  --eig-floor 0 \
+  --rdo
 ```
 
-When this flag is active, BurnNotice will extract the top 5 principal directions ($k=5$) using a dynamically computed Ledoit-Wolf optimal $\alpha$, and it will select the primary direction as the main deception direction.
+When `--whitened-svd` is active, BurnNotice extracts the top $k$ (`--num-directions`, default `1`) principal directions using an analytically estimated Ledoit-Wolf shrinkage intensity $\alpha$ (`--shrinkage -1`) and registers `deception_0` as the primary `deception` direction (optionally refined via gradient-based `--rdo`).

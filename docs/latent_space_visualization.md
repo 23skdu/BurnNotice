@@ -1,8 +1,8 @@
 # Fine-Grained Semantic Latent Space Visualization & Manifold Analysis
 
-> **Status**: Active Architecture Specification  
+> **Status**: Current  
 > **Module**: `internal/analysis/latent_vis.go`, `internal/web/`  
-> **Version**: 0.7  
+> **Version**: 0.8  
 
 ---
 

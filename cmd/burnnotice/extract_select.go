@@ -7,7 +7,7 @@ import (
 
 // largeModelThreshold is the parameter count above which whitened SVD
 // extraction is the default for the `burnnotice profile` command. This
-// matches the size cutoff called out in docs/nextsteps.md (Step 7.4).
+// matches the size cutoff called out in docs/roadmap.md.
 const largeModelThreshold = 7e9
 
 // parseModelSize converts a human-readable model-size string like "0.5B",
@@ -56,7 +56,7 @@ func isLargeModel(modelSize string) bool {
 //
 //  1. If the user explicitly set --whitened-svd, honor the flag value.
 //  2. Otherwise, default to true for models strictly larger than 7B
-//     parameters (per docs/nextsteps.md 7.4), and false otherwise.
+//     parameters (per docs/roadmap.md), and false otherwise.
 func shouldUseWhitenedSVD(flagChanged, flagValue bool, modelSize string) bool {
 	if flagChanged {
 		return flagValue
