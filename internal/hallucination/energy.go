@@ -2,6 +2,8 @@ package hallucination
 
 import (
 	"fmt"
+	"math"
+	"strings"
 )
 
 // HallucinationDetector computes energy metrics for hallucination detection.
@@ -122,4 +124,34 @@ func (d *HallucinationDetector) Validate() error {
 		return fmt.Errorf("windowSize must be >= 1")
 	}
 	return nil
+}
+
+// FamilyEnergyScale returns the canonical SAE feature-energy normalization factor
+// for Gemma Scope, Llama-Scope, and Qwen-SAE dictionaries.
+func FamilyEnergyScale(family string) float64 {
+	switch strings.ToLower(strings.TrimSpace(family)) {
+	case "gemma-scope", "gemma":
+		return 1.0
+	case "llama-scope", "llama":
+		return 0.90
+	case "qwen-sae", "qwen":
+		return 0.95
+	default:
+		return 1.0
+	}
+}
+
+// IngestFamilyFeatures normalizes SAE feature activations for a given SAE family
+// (Gemma Scope, Llama-Scope, or Qwen-SAE), updates the rolling window via DetectSpike,
+// and returns the risk score, spike flag, and hallucination flag.
+func (d *HallucinationDetector) IngestFamilyFeatures(layerIdx int, saeFeatures []float64, family string) (risk float64, spike bool, hallucinating bool) {
+	scale := math.Sqrt(FamilyEnergyScale(family))
+	scaled := make([]float64, len(saeFeatures))
+	for i, f := range saeFeatures {
+		scaled[i] = f * scale
+	}
+	risk = d.RiskScore(layerIdx, scaled)
+	hallucinating = d.DetectHallucination(layerIdx, scaled)
+	spike = d.DetectSpike(layerIdx, scaled)
+	return risk, spike, hallucinating
 }

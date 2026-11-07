@@ -1,6 +1,7 @@
 package steer
 
 import (
+	"context"
 	"math"
 	"testing"
 )
@@ -114,6 +115,70 @@ func FuzzDispatcher(f *testing.F) {
 			if math.IsInf(result[i], 0) || math.IsNaN(result[i]) {
 				t.Errorf("result[%d] = %f (invalid)", i, result[i])
 			}
+		}
+	})
+}
+
+func FuzzCrescendoReAnchoring(f *testing.F) {
+	f.Add(0.5, 0.5, 1.0, 5)
+	f.Add(0.1, 0.9, 0.2, 3)
+
+	f.Fuzz(func(t *testing.T, a0, a1, a2 float64, cadence int) {
+		for _, v := range []float64{a0, a1, a2} {
+			if math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) > 1e5 {
+				return
+			}
+		}
+		if cadence < 1 || cadence > 10 {
+			return
+		}
+		act := []float64{a0, a1, a2}
+		if vecNorm(act) < 1e-6 {
+			return
+		}
+		cfg := DefaultCrescendoConfig()
+		cfg.ReAnchorCadence = cadence
+		det, err := NewCrescendoDetector([][]float64{{1, 0, 0}, {0, 1, 0}}, cfg)
+		if err != nil {
+			t.Fatalf("NewCrescendoDetector failed: %v", err)
+		}
+		res, err := det.StepTurn(context.Background(), 0, act, act, [][]float64{act})
+		if err != nil {
+			t.Fatalf("StepTurn failed: %v", err)
+		}
+		if res.SubspaceScore < -1e-9 || res.SubspaceScore > 1.0+1e-9 {
+			t.Errorf("SubspaceScore out of [0,1]: %f", res.SubspaceScore)
+		}
+		if res.IncrementalDriftDeg > cfg.ThetaMaxDeg+1e-6 {
+			t.Errorf("IncrementalDriftDeg %f > ThetaMaxDeg %f", res.IncrementalDriftDeg, cfg.ThetaMaxDeg)
+		}
+	})
+}
+
+func FuzzDoRAExtendedRefusal(f *testing.F) {
+	f.Add(3.0, 4.0, 1.0, 2.0, 0.8)
+	f.Add(1.5, -2.5, 0.5, 1.5, 0.5)
+
+	f.Fuzz(func(t *testing.T, w00, w01, w10, w11, strength float64) {
+		for _, v := range []float64{w00, w01, w10, w11, strength} {
+			if math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) > 1e4 {
+				return
+			}
+		}
+		if strength <= 0.05 || strength > 1.0 {
+			return
+		}
+		cfg := DefaultDoRAConfig()
+		cfg.Strength = strength
+		cfg.Rank = 1
+		ft := NewExtendedRefusalFineTuner(cfg)
+		w := [][]float64{{w00, w01}, {w10, w11}}
+		adapter, hardened, err := ft.HardenLayer(0, w, [][]float64{{1.0, 0.0}}, []float64{0.0, 1.0})
+		if err != nil {
+			t.Fatalf("HardenLayer failed: %v", err)
+		}
+		if len(hardened) != 2 || adapter.BaselineKL > cfg.MaxKLDivergence+1e-6 {
+			t.Errorf("unexpected DoRA output: len=%d, BaselineKL=%f", len(hardened), adapter.BaselineKL)
 		}
 	})
 }

@@ -67,3 +67,51 @@ func FuzzNpyHeaderParser(f *testing.F) {
 		_, _, _ = readNpyHeader(data)
 	})
 }
+
+func FuzzSAEFeatureAbsorptionAndAlignment(f *testing.F) {
+	f.Add(1.0, 0.5, 0.2, 1.5)
+	f.Add(2.0, 0.0, 0.5, 2.0)
+
+	f.Fuzz(func(t *testing.T, x0, x1, y0, y1 float64) {
+		for _, v := range []float64{x0, x1, y0, y1} {
+			if math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) > 1e4 {
+				return
+			}
+		}
+		d1 := &SAELoader{}
+		_ = d1.LoadFromMemory(&SAEWeights{
+			Family:         SAELlamaScope,
+			EncoderWeights: [][]float64{{1, 0}, {0, 1}},
+			DecoderWeights: [][]float64{{1, 0}, {0, 1}},
+			EncoderBias:    []float64{0, 0},
+			DecoderBias:    []float64{0, 0},
+			FeatureCount:   2,
+			InputDim:       2,
+		})
+		d2 := &SAELoader{}
+		_ = d2.LoadFromMemory(&SAEWeights{
+			Family:         SAEQwenSAE,
+			EncoderWeights: [][]float64{{1, 0}, {0, 1}},
+			DecoderWeights: [][]float64{{1, 0}, {0, 1}},
+			EncoderBias:    []float64{0, 0},
+			DecoderBias:    []float64{0, 0},
+			FeatureCount:   2,
+			InputDim:       2,
+		})
+		acts := [][]float64{{x0, x1}, {y0, y1}}
+		rep, err := AnalyzeFeatureAbsorption(d1, acts, map[string][]float64{"deception": {1, 0}})
+		if err != nil {
+			t.Fatalf("AnalyzeFeatureAbsorption failed: %v", err)
+		}
+		if rep.AbsorptionRate < 0 || rep.AbsorptionRate > 1.0 {
+			t.Errorf("AbsorptionRate out of [0,1]: %f", rep.AbsorptionRate)
+		}
+		alignRes, err := AlignSAEDictionaries(d1, d2, acts, acts, 2)
+		if err != nil {
+			t.Fatalf("AlignSAEDictionaries failed: %v", err)
+		}
+		if alignRes.LinearCKA < -1e-9 || alignRes.LinearCKA > 1.0+1e-9 {
+			t.Errorf("LinearCKA out of [0,1]: %f", alignRes.LinearCKA)
+		}
+	})
+}

@@ -13,21 +13,25 @@ const ThetaMaxDegrees = 15.0
 
 // TurnSteeringRecord captures the steering intervention applied during a single dialogue turn.
 type TurnSteeringRecord struct {
-	TurnIndex    int       `json:"turn_index"`
-	Vector       []float64 `json:"vector"`
-	Norm         float64   `json:"norm"`
-	AngularDrift float64   `json:"angular_drift_deg"` // angular deviation from initial baseline turn (degrees)
-	ExceedsLimit bool      `json:"exceeds_limit"`
+	TurnIndex        int       `json:"turn_index"`
+	Vector           []float64 `json:"vector"`
+	Norm             float64   `json:"norm"`
+	AngularDrift     float64   `json:"angular_drift_deg"` // angular deviation from active anchor turn (degrees)
+	ExceedsLimit     bool      `json:"exceeds_limit"`
+	SubspaceScore    float64   `json:"subspace_score,omitempty"`
+	ReAnchored       bool      `json:"re_anchored,omitempty"`
+	IsEscalationStep bool      `json:"is_escalation_step,omitempty"`
 }
 
 // KVCacheAccumulationTracker tracks steering vector evolution across multi-turn sessions
 // to prevent cumulative KV-cache corruption and attention distortion.
 type KVCacheAccumulationTracker struct {
-	mu          sync.RWMutex
-	initialTurn []float64
-	history     []TurnSteeringRecord
-	thetaMaxDeg float64
-	alarmCount  int
+	mu            sync.RWMutex
+	initialTurn   []float64
+	history       []TurnSteeringRecord
+	thetaMaxDeg   float64
+	alarmCount    int
+	reAnchorCount int
 }
 
 // NewKVCacheAccumulationTracker creates a new tracker initialized with default ThetaMax (15°).
@@ -122,6 +126,41 @@ func (t *KVCacheAccumulationTracker) AlarmCount() int {
 	return t.alarmCount
 }
 
+// ReAnchorCount returns how many times the drift baseline has been re-anchored.
+func (t *KVCacheAccumulationTracker) ReAnchorCount() int {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.reAnchorCount
+}
+
+// ReAnchorBaseline refreshes the baseline drift reference vector after a full-prefix
+// subspace re-score so incremental angular drift does not saturate ThetaMax across 15+ turns.
+func (t *KVCacheAccumulationTracker) ReAnchorBaseline(newBaseline []float64) error {
+	if len(newBaseline) == 0 {
+		return fmt.Errorf("empty anchor vector")
+	}
+	norm := floats.Norm(newBaseline, 2)
+	if norm < 1e-9 {
+		return fmt.Errorf("anchor vector norm is zero")
+	}
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if len(t.initialTurn) > 0 && len(newBaseline) != len(t.initialTurn) {
+		return fmt.Errorf("anchor dimension %d mismatches baseline %d", len(newBaseline), len(t.initialTurn))
+	}
+	if len(t.initialTurn) != len(newBaseline) {
+		t.initialTurn = make([]float64, len(newBaseline))
+	}
+	copy(t.initialTurn, newBaseline)
+	t.reAnchorCount++
+	if len(t.history) > 0 {
+		t.history[len(t.history)-1].ReAnchored = true
+	}
+	return nil
+}
+
 // Reset clears the tracker state.
 func (t *KVCacheAccumulationTracker) Reset() {
 	t.mu.Lock()
@@ -129,6 +168,7 @@ func (t *KVCacheAccumulationTracker) Reset() {
 	t.initialTurn = nil
 	t.history = nil
 	t.alarmCount = 0
+	t.reAnchorCount = 0
 }
 
 // GCADConfig specifies parameters for Gated Cropped Attention-Delta defense.

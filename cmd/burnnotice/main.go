@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"os"
@@ -531,6 +532,75 @@ aggregate statistics (refusal rate, KL divergence, capability retention).`,
 	},
 }
 
+var finetuneCmd = &cobra.Command{
+	Use:   "finetune [checkpoint-json]",
+	Short: "Run DoRA extended-refusal weight-hardening on a deployment checkpoint",
+	Long: `Pairs inference-time MPOA biprojected steering with Weight-Decomposed
+Low-Rank Adaptation (DoRA) on high-risk deployment checkpoints.`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ckptPath := args[0]
+		extRefusal, _ := cmd.Flags().GetBool("extended-refusal")
+		if !extRefusal {
+			return fmt.Errorf("--extended-refusal is required for DoRA weight hardening")
+		}
+		outputPath, _ := cmd.Flags().GetString("output")
+		rank, _ := cmd.Flags().GetInt("rank")
+		alpha, _ := cmd.Flags().GetFloat64("alpha")
+		maxKL, _ := cmd.Flags().GetFloat64("max-kl")
+		dryRun, _ := cmd.Flags().GetBool("dry-run")
+		highRisk, _ := cmd.Flags().GetBool("high-risk")
+
+		// #nosec G304 -- CLI tool accepts user-provided checkpoint paths
+		raw, err := os.ReadFile(ckptPath)
+		if err != nil {
+			return fmt.Errorf("read checkpoint: %w", err)
+		}
+		var ckpt steer.CheckpointWeights
+		if err := json.Unmarshal(raw, &ckpt); err != nil {
+			return fmt.Errorf("parse checkpoint: %w", err)
+		}
+		if highRisk {
+			ckpt.HighRisk = true
+		}
+
+		subspace := make(map[int][][]float64, len(ckpt.Layers))
+		for l, mat := range ckpt.Layers {
+			if len(mat) > 0 && len(mat[0]) > 0 {
+				dir := make([]float64, len(mat[0]))
+				dir[0] = 1.0
+				subspace[l] = [][]float64{dir}
+			}
+		}
+
+		cfg := steer.DefaultDoRAConfig()
+		cfg.Rank = rank
+		cfg.Alpha = alpha
+		cfg.MaxKLDivergence = maxKL
+		cfg.DryRun = dryRun
+
+		tuner := steer.NewExtendedRefusalFineTuner(cfg)
+		res, err := tuner.HardenCheckpoint(&ckpt, subspace, nil)
+		if err != nil {
+			return fmt.Errorf("dora harden checkpoint: %w", err)
+		}
+
+		fmt.Printf("DoRA Extended-Refusal Hardening (%s): rank=%d, alpha=%.2f, max_kl=%.4f, base_sha=%s, hardened_sha=%s\n",
+			res.ModelID, res.Rank, res.Alpha, res.MaxMeasuredKL, res.BaseCheckpointHash[:12], res.HardenedCheckpointHash[:12])
+
+		if outputPath != "" && !dryRun {
+			outBytes, err := json.MarshalIndent(ckpt, "", "  ")
+			if err != nil {
+				return fmt.Errorf("marshal hardened checkpoint: %w", err)
+			}
+			if err := os.WriteFile(outputPath, outBytes, 0600); err != nil {
+				return fmt.Errorf("write hardened checkpoint: %w", err)
+			}
+		}
+		return nil
+	},
+}
+
 func init() {
 	downloadCmd.Flags().StringP("output", "o", "./models", "Output directory for downloaded files")
 	downloadCmd.Flags().StringP("token", "t", "", "HuggingFace API token (or $HF_TOKEN)")
@@ -555,7 +625,15 @@ func init() {
 
 	validateCmd.Flags().Int("hidden-dim", 4096, "Model hidden dimension")
 
-	rootCmd.AddCommand(downloadCmd, convertCmd, profileCmd, recommendCmd, validateCmd, aggregateCmd)
+	finetuneCmd.Flags().Bool("extended-refusal", false, "Enable DoRA extended-refusal weight hardening")
+	finetuneCmd.Flags().StringP("output", "o", "", "Output path for hardened checkpoint JSON")
+	finetuneCmd.Flags().Int("rank", 4, "DoRA low-rank adaptation rank")
+	finetuneCmd.Flags().Float64("alpha", 4.0, "DoRA scaling alpha")
+	finetuneCmd.Flags().Float64("max-kl", 0.20, "Maximum permissible KL divergence ceiling")
+	finetuneCmd.Flags().Bool("dry-run", false, "Compute DoRA metrics and digests without writing checkpoint")
+	finetuneCmd.Flags().Bool("high-risk", false, "Mark checkpoint as high-risk deployment target")
+
+	rootCmd.AddCommand(downloadCmd, convertCmd, profileCmd, recommendCmd, validateCmd, aggregateCmd, finetuneCmd)
 }
 
 func main() {

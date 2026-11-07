@@ -1,6 +1,7 @@
 package steer
 
 import (
+	"context"
 	"math/rand"
 	"testing"
 )
@@ -149,6 +150,42 @@ func BenchmarkLoRASteerer_ApplyLoRA(b *testing.B) {
 			b.Fatal(err)
 		}
 		if _, err := l.ReverseLoRA(weights); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkCrescendoDetector_StepTurn(b *testing.B) {
+	b.ReportAllocs()
+	subspace := [][]float64{randomVecF64(512), randomVecF64(512)}
+	det, err := NewCrescendoDetector(subspace, DefaultCrescendoConfig())
+	if err != nil {
+		b.Fatal(err)
+	}
+	act := randomVecF64(512)
+	ctx := context.Background()
+
+	idx := 0
+	b.ResetTimer()
+	for b.Loop() {
+		_, _ = det.StepTurn(ctx, idx, act, act, nil)
+		idx++
+	}
+}
+
+func BenchmarkExtendedRefusalFineTuner_HardenLayer(b *testing.B) {
+	b.ReportAllocs()
+	ft := NewExtendedRefusalFineTuner(DefaultDoRAConfig())
+	weights := make([][]float64, 64)
+	for i := range weights {
+		weights[i] = randomVecF64(64)
+	}
+	refusalDirs := [][]float64{randomVecF64(64), randomVecF64(64)}
+	benignDir := randomVecF64(64)
+
+	b.ResetTimer()
+	for b.Loop() {
+		if _, _, err := ft.HardenLayer(0, weights, refusalDirs, benignDir); err != nil {
 			b.Fatal(err)
 		}
 	}

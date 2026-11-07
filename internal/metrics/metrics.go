@@ -413,4 +413,44 @@ var (
 		},
 		[]string{"method"},
 	)
+
+	CrescendoReAnchorsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "burnnotice_crescendo_reanchors_total",
+			Help: "Total number of full-prefix KV-cache crescendo context re-anchoring passes executed",
+		},
+		[]string{"model_id"},
+	)
+
+	CrescendoEscalationsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "burnnotice_crescendo_escalations_total",
+			Help: "Total number of multi-turn crescendo escalations flagged",
+		},
+		[]string{"model_id"},
+	)
+
+	DoRAHardeningPassesTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "burnnotice_dora_hardening_passes_total",
+			Help: "Total number of DoRA extended-refusal weight-hardening passes executed",
+		},
+		[]string{"model_id", "status"},
+	)
+
+	SAEFeatureAbsorptionRate = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "burnnotice_sae_feature_absorption_rate",
+			Help: "Fraction of SAE concept directions exhibiting feature absorption (0-1)",
+		},
+		[]string{"sae_family"},
+	)
+
+	SAECrossArchAlignmentCKA = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "burnnotice_sae_cross_arch_alignment_cka",
+			Help: "Linear CKA similarity across aligned SAE dictionary architectures (0-1)",
+		},
+		[]string{"source_family", "target_family"},
+	)
 )

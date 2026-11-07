@@ -295,3 +295,38 @@ func TestBurnNotice_AggregateCmd(t *testing.T) {
 		t.Errorf("aggregate failed on valid reports: %v", err)
 	}
 }
+
+func TestBurnNotice_FinetuneCmd(t *testing.T) {
+	rootCmd.SetOut(&bytes.Buffer{})
+	rootCmd.SetErr(&bytes.Buffer{})
+
+	dir := t.TempDir()
+	ckptPath := filepath.Join(dir, "ckpt.json")
+	outPath := filepath.Join(dir, "ckpt_hardened.json")
+
+	ckptJSON := `{"model_id":"qwen2.5-7b","high_risk":false,"risk_score":0.95,"layers":{"0":[[3.0,4.0],[0.0,5.0]]}}`
+	if err := os.WriteFile(ckptPath, []byte(ckptJSON), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Missing --extended-refusal flag
+	rootCmd.SetArgs([]string{"finetune", ckptPath})
+	if err := rootCmd.Execute(); err == nil {
+		t.Error("expected error when --extended-refusal is omitted")
+	}
+
+	// Valid execution with --extended-refusal and output
+	rootCmd.SetArgs([]string{"finetune", ckptPath, "--extended-refusal", "--output", outPath, "--rank", "2", "--alpha", "2.0", "--high-risk"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("finetune command failed: %v", err)
+	}
+	if _, err := os.Stat(outPath); err != nil {
+		t.Errorf("expected hardened checkpoint output at %s: %v", outPath, err)
+	}
+
+	// Nonexistent checkpoint error
+	rootCmd.SetArgs([]string{"finetune", filepath.Join(dir, "missing.json"), "--extended-refusal"})
+	if err := rootCmd.Execute(); err == nil {
+		t.Error("expected error for missing checkpoint")
+	}
+}

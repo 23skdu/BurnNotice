@@ -50,4 +50,19 @@ func TestCalibration_HallucinationRollingWindowAndSpikes(t *testing.T) {
 	if score := det.RiskScore(1, baseFeat); math.Abs(score-4.0/25.0) > 1e-12 {
 		t.Errorf("RiskScore(1) = %f, want 0.16", score)
 	}
+
+	// Verify multi-family SAE energy ingestion (Gemma Scope, Llama-Scope, Qwen-SAE, generic)
+	for _, fam := range []string{"gemma-scope", "llama-scope", "qwen-sae", "generic"} {
+		det.ResetHistory()
+		for i := 0; i < 4; i++ {
+			r, sp, hal := det.IngestFamilyFeatures(0, baseFeat, fam)
+			if sp || hal || r <= 0 {
+				t.Errorf("family %s warmup step %d unexpected: r=%f, sp=%v, hal=%v", fam, i, r, sp, hal)
+			}
+		}
+		rSpike, sp, hal := det.IngestFamilyFeatures(0, []float64{5.0, 0.0}, fam)
+		if !sp || !hal || rSpike != 1.0 {
+			t.Errorf("family %s expected spike & hallucination on [5,0], got r=%f, sp=%v, hal=%v", fam, rSpike, sp, hal)
+		}
+	}
 }

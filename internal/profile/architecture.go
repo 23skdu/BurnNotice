@@ -29,6 +29,7 @@ type ArchitectureSpec struct {
 	DefaultCriticalLayers  []int             `json:"default_critical_layers"`  // Layers with highest causal steering efficacy
 	CommitmentWindowTokens int               `json:"commitment_window_tokens"` // Prefill commitment window size
 	LayerPrefix            string            `json:"layer_prefix"`
+	DefaultSAEFamily       string            `json:"default_sae_family,omitempty"`
 }
 
 // HuggingFaceConfig represents the minimum required fields from config.json.
@@ -64,6 +65,7 @@ func GetArchitectureSpec(family ModelFamily, numLayers int) ArchitectureSpec {
 			DefaultCriticalLayers:  crit,
 			CommitmentWindowTokens: 16,
 			LayerPrefix:            "model.layers",
+			DefaultSAEFamily:       "llama-scope",
 		}
 
 	case FamilyQwen:
@@ -87,6 +89,7 @@ func GetArchitectureSpec(family ModelFamily, numLayers int) ArchitectureSpec {
 			DefaultCriticalLayers:  crit,
 			CommitmentWindowTokens: 20,
 			LayerPrefix:            "model.layers",
+			DefaultSAEFamily:       "qwen-sae",
 		}
 
 	case FamilyGemma:
@@ -110,6 +113,7 @@ func GetArchitectureSpec(family ModelFamily, numLayers int) ArchitectureSpec {
 			DefaultCriticalLayers:  crit,
 			CommitmentWindowTokens: 12,
 			LayerPrefix:            "model.layers",
+			DefaultSAEFamily:       "gemma-scope",
 		}
 
 	case FamilyMistral:
@@ -131,6 +135,7 @@ func GetArchitectureSpec(family ModelFamily, numLayers int) ArchitectureSpec {
 			DefaultCriticalLayers:  crit,
 			CommitmentWindowTokens: 16,
 			LayerPrefix:            "model.layers",
+			DefaultSAEFamily:       "generic",
 		}
 
 	default:
@@ -149,6 +154,7 @@ func GetArchitectureSpec(family ModelFamily, numLayers int) ArchitectureSpec {
 			DefaultCriticalLayers:  crit,
 			CommitmentWindowTokens: 16,
 			LayerPrefix:            "model.layers",
+			DefaultSAEFamily:       "generic",
 		}
 	}
 }

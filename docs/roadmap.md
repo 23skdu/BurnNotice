@@ -1,183 +1,183 @@
-# BurnNotice Implementation Roadmap, Milestones & Quality Gates
+# BurnNotice Implementation Roadmap: 10-Part Improvement Plan
 
-> **Status**: Active (All v0.8 Core & Quality Gate Milestones Completed)
+> **Status**: Completed (All v0.8 & v0.9 10-Part Improvement Plan Milestones Resolved)
 > **Last Updated**: 2026-11-06
-> **Version**: 0.8
+> **Version**: 0.9
+> **Scope**: Ten-part improvement plan spanning multi-turn crescendo re-anchoring, DoRA extended-refusal fine-tuning, cross-architecture SAE alignment, performance, accuracy, testing, CI/release, architecture compatibility, adversarial defenses, and observability/deployment.
 
 ---
 
-## 1. Executive Summary & Verification Baseline
+## Part 1 — Multi-Turn Crescendo Context Re-Anchoring
 
-BurnNotice v0.8 maintains a fully formatted (`gofmt -s`), lint-clean (`golangci-lint run ./...` -> **0 issues**), vulnerability-free (`gosec` -> **0 issues**, `govulncheck` -> **0 vulnerabilities**), and race-clean (`go test -race ./...`) codebase:
+**Goal**: Detect slow 15+ turn crescendo escalations without saturating the `15°` angular drift budget, by combining exponential GCAD KV-cache decay with periodic full-prefix subspace re-scoring.
 
-- **Static Analysis & Security**: Zero `golangci-lint`, `gosec`, and `govulncheck` findings enforced on every commit via `scripts/verify.sh` and `.github/workflows/ci.yml`.
-- **Fuzz Coverage**: **73 native Go `Fuzz*` targets across 25 packages**, covering all `internal/*` and `cmd/*` packages.
-- **Unit Test Coverage**: **90.1%–100.0%** statement coverage across all 26 core packages (`internal/hallucination`: 100.0%, `internal/memory`: 100.0%, `internal/scheduler`: 100.0%, `internal/checkpoint`: 100.0%, `internal/tokenizer`: 100.0%, `internal/profile`: 98.1%, `internal/policydetect`: 98.1%, `internal/math`: 96.6%, `internal/metrics`: 96.3%, `internal/ledger`: 96.0%, `internal/agent`: 95.8%, `internal/datasets`: 95.2%, `internal/telemetry`: 94.4%, `internal/compliance`: 94.2%, `internal/steer`: 93.3%, `internal/analysis`: 93.2%, `internal/scoring`: 92.8%, `internal/sae`: 92.7%, `internal/engine`: 92.4%, `internal/extract`: 92.3%, `internal/longbow`: 92.1%, `internal/wasm`: 92.1%, `cmd/dashboard`: 90.9%, `internal/profiler`: 90.4%, `internal/web`: 90.3%, `internal/policy`: 90.1%).
-- **Deterministic Oracles & Accuracy Gates**: Enforced via `make accuracy-gate` and `make oracle-gate` (`go test -count=2`).
-- **Tamper-Evident Release Evidence**: `BenchmarkManifest` and `ReleaseEvidenceBundle` (`internal/compliance/benchmarks.go`, `make release-evidence`) pin OS, CPU, Go/ORT versions, dataset SHA-256 digests, and commit SHAs.
+- [x] **Crescendo-aware turn windowing**: Added sliding turn-window tracking and escalation step tagging (`internal/steer/kvcache.go`, `internal/steer/crescendo.go`).
+- [x] **Exponential GCAD decay with re-anchor cadence**: Retained `GCADApplyInPlace` exponential decay `γ^Δt` per turn (`0 B/op`) and triggered full-prefix subspace re-scoring every `K` turns (default `K=5`).
+- [x] **Angular drift budget accounting**: Maintained incremental angular drift accumulator capped at `θ_max = 15°` and re-baselined the drift reference (`ReAnchorBaseline`) on every full-prefix re-score.
+- [x] **Crescendo escalation detector**: Implemented `CrescendoDetector` (`internal/steer/crescendo.go`) combining per-turn drift, full-prefix re-score deltas, and monotonic linear slope across the sliding turn window to flag 15+ turn slow escalations.
+- [x] **KV-cache re-anchoring hook**: Exposed `ReAnchor(ctx, prefix)` on `CrescendoDetector` and `ReAnchorBaseline(newBaseline)` on `KVCacheAccumulationTracker`.
+- [x] **Tests & oracles**: Added golden oracle (`TestOracleCrescendoReAnchoring`), recall/FPR/drift accuracy gate (`TestAccuracyCrescendoRecallAndDriftBound`), fuzz target (`FuzzCrescendoReAnchoring`), and `-race` concurrency tests (`internal/steer/crescendo_test.go`).
+- [x] **Docs & metrics**: Documented re-anchor cadence and drift budget in `docs/architecture.md`; added `burnnotice_crescendo_reanchors_total` and `burnnotice_crescendo_escalations_total` in `internal/metrics/metrics.go`.
 
-```mermaid
-flowchart TD
-    subgraph Perf["1. Performance & Memory (Items 1-8)"]
-        P1["MoE Cumulative Offset Slicing\n(internal/engine/moe.go)"]
-        P2["Pooled Scoring & Ring Buffer\n(internal/scoring/scorer.go, async.go)"]
-        P3["FNV-1a Cached Thin-SVD Projection\n(internal/analysis/latent_vis.go)"]
-        P4["Zero-Alloc In-Place GCAD Decay\n(internal/steer/kvcache.go)"]
-        P5["Worker-Pool Concept Cone SVD\n(internal/analysis/cone.go)"]
-        P6["CPU/Mem Profiling & Manifests\n(benchmark_results.txt)"]
-    end
-
-    subgraph Acc["2. Mathematical Accuracy & Oracles (Items 9-15)"]
-        A1["Scoring & Subspace Oracles\n(internal/scoring/oracle_test.go)"]
-        A2["Steering Kernel Golden Vectors\n(internal/steer/oracle_test.go)"]
-        A3["NaN/Inf & Covariance Invariants\n(internal/math, extract, analysis)"]
-        A4["CKA Identity/Orthogonality/Scale\n(internal/analysis/cka_accuracy_test.go)"]
-        A5["MoE Softmax & Hallucination Calibration\n(internal/engine, hallucination)"]
-    end
-
-    subgraph Scope["3. Testing Scope & Concurrency (Items 16-18)"]
-        T1["72 Fuzz Targets Across 25 Packages\n(cmd/*, internal/*)"]
-        T2["90.3%-100% Core Package Coverage\n(go test -cover ./...)"]
-        T3["High-Concurrency -race Stress Suite\n(scheduler, longbow, telemetry, async)"]
-    end
-
-    subgraph Gates["4. CI & Release Quality Gates (Items 19-20)"]
-        G1["Pre-Commit Hook (scripts/verify.sh)\ngofmt + vet + lint + gosec + govulncheck"]
-        G2["CI Accuracy & Oracle Gates\n(.github/workflows/ci.yml)"]
-        G3["Tamper-Evident Release Evidence Bundle\n(dist/evidence/ + SHA256SUMS)"]
-    end
-
-    Perf --> Gates
-    Acc --> Gates
-    Scope --> Gates
-```
+**Acceptance criteria**: 15+ turn crescendo scenarios are detected with ≥95% recall at ≤1% FPR on held-out dialogues; angular drift never exceeds `15°` between re-anchors; `GCADApplyInPlace` remains `0 B/op`.
 
 ---
 
-## 2. Twenty v0.8 Performance, Accuracy & Quality Gate Items (Resolved)
+## Part 2 — DoRA Extended-Refusal Fine-Tuning (ExtendedRefusalFineTuner)
 
-### Performance
+**Goal**: Optional weight-hardening pass pairing inference-time MPOA steering with weight-decomposed low-rank adaptation on high-risk deployment checkpoints.
 
-1. **[x] Fix MoE expert activation offsets** (`internal/engine/moe.go`)
-   - `ExpertActivation` sums prior expert dimensions (`e.expertDims[0..expertIdx-1]`) and safely clamps slice bounds. Validated by `TestMoEEngine_ExpertActivationOffsets_Accuracy`.
-2. **[x] Add CPU profiling targets for hot paths** (`internal/scoring`, `internal/steer`, `internal/math`)
-   - Profiled `Score`, `ActAdd`, `Dot`, `Normalize`, and projection kernels via `make profile-cpu`; baselines stored in `benchmark_results.txt`.
-3. **[x] Add memory profiling targets** (`internal/memory`, `internal/scoring`, `internal/steer`)
-   - Added allocation benchmarks (`BenchmarkPool_GetPut`, `BenchmarkPool_ConcurrentGetPut`, `BenchmarkGCADApplyInPlace`, `BenchmarkAsyncScorer_PushActivationPooled`) and `make profile-mem`.
-4. **[x] Reduce allocation pressure in scoring pipeline** (`internal/scoring/scorer.go`, `internal/scoring/async.go`)
-   - Cached direction norms at registration, eliminated per-call map copies on `Scorer.Score`, added `sync.Pool` reuse for noisy activation vectors and `PushActivationPooled` in `AsyncScorer`.
-5. **[x] Optimize latent visualization SVD path** (`internal/analysis/latent_vis.go`)
-   - Added thread-safe FNV-1a SVD factor caching (`svdCache`) and contiguous matrix backing in `ProjectLatentSpace` ($35.1\times$ speedup on cached PCA projections: `2.53ms` $\to$ `72.1µs`).
-6. **[x] Improve KV-cache GCAD decay performance** (`internal/steer/kvcache.go`)
-   - Eliminated intermediate `delta` slice allocation in `GCADApply` and added zero-allocation `GCADApplyInPlace` (`0 B/op`, `0 allocs/op`, `18.2µs/op`).
-7. **[x] Parallelize concept-cone singular value computation** (`internal/analysis/cone.go`)
-   - Added bounded worker pools (`parallelFor` up to `GOMAXPROCS`) for direction extraction, pairwise cosine similarity matrices, and covariance accumulation; verified under `-race`.
-8. **[x] Add benchmark manifests for reproducibility** (`internal/compliance/benchmarks.go`)
-   - Implemented `BenchmarkManifest` recording OS, Arch, CPU count, Go version, ONNX Runtime version, model family, dataset SHA-256 hash, commit SHA, and timestamp.
+- [x] **ExtendedRefusalFineTuner type**: Implemented `ExtendedRefusalFineTuner` in `internal/steer/dora.go` orchestrating weight-hardening passes over deployment checkpoints.
+- [x] **DoRA decomposition**: Implemented weight-decomposed low-rank adaptation (`composeDoRAWeights`, `DoRALayerAdapter`) splitting row-wise magnitude `m_i = ||W_0[i]||_2` and directional matrix `V + (alpha/r) B A` on target refusal layers.
+- [x] **MPOA pairing**: Paired biprojected MPOA steering directions with the low-rank directional update and closed-loop KL scaling so hardened weights reproduce MPOA refusal suppression while preserving row norms.
+- [x] **Checkpoint gating**: Enforced high-risk deployment gating (`ErrCheckpointNotHighRisk`), dry-run verification (`DryRun`), and deterministic bit-exact weight rollback (`RollbackCheckpoint`).
+- [x] **Verification**: Added golden oracle (`TestOracleDoRAExtendedRefusal`), KL/norm/coherence accuracy invariants (`TestAccuracyDoRAKLAndNormInvariants`), and fuzz target (`FuzzDoRAExtendedRefusal`).
+- [x] **CLI integration**: Added `burnnotice finetune [checkpoint-json] --extended-refusal` command with `--output`, `--rank`, `--alpha`, `--max-kl`, `--dry-run`, and `--high-risk` flags in `cmd/burnnotice/main.go`.
+- [x] **Compliance**: Added `DoRAManifest` (rank, alpha, target layers, base/hardened checkpoint SHA-256, max KL, min coherence) to `ReleaseEvidenceBundle` (`internal/compliance/benchmarks.go`).
 
-### Accuracy
-
-9. **[x] Add golden/oracle tests for scoring** (`internal/scoring/oracle_test.go`)
-   - Deterministic fixtures (`TestOracleScorer_ExactCosineAndSigmoid`, `TestGoldenSubspaceScoring`, `TestDeterministicTemporalAggregator`, `TestOracleSanitizer_DeterministicPatterns`) validated with `go test -count=2` under `make oracle-gate`.
-10. **[x] Add golden tests for steering kernels** (`internal/steer/oracle_test.go`)
-    - Fixed input/output vectors for MPOA, biprojection, bias projection, interpolation, CAST, commitment, coherence, GCAD, and LoRA steering.
-11. **[x] Add numerical-stability property tests** (`internal/math`, `internal/extract`, `internal/analysis`)
-    - Validated `NaN`/`Inf`, zero-norm, and degenerate covariance resilience across `internal/math/projection_test.go`, `internal/extract/whitened_test.go`, and `internal/analysis/stability_test.go`.
-12. **[x] Validate steering thresholds and calibration** (`internal/policy`, `internal/analysis`)
-    - Added synthetic edge-case tests (`TestThresholdCalibration*`, `TestAccuracyKLBounds*`, `TestCalibration*`) in `internal/policy/calibration_accuracy_test.go` and `internal/analysis/kl_test.go`.
-13. **[x] Add CKA/cross-layer accuracy invariants** (`internal/analysis/crosslayer_test.go`, `internal/analysis/cka_accuracy_test.go`)
-    - Asserted CKA bounds in `[0, 1]`, identical-matrix `CKA(X, X) == 1.0`, isotropic scale invariance `CKA(X, aX) == 1.0`, orthogonal rotation invariance, and orthogonal-matrix `CKA == 0.0`.
-14. **[x] Add MoE routing accuracy tests** (`internal/engine/moe_test.go`)
-    - Verified softmax normalization (`sum == 1.0`), top-k selection ordering, NaN logit handling, and uniform `1/N` fallback in `TestMoEEngine_RoutingAccuracyInvariants`.
-15. **[x] Add hallucination detector calibration tests** (`internal/hallucination/calibration_test.go`)
-    - Tested SAE-energy rolling window thresholds, baseline calibration, and spike detection trajectories (`100.0%` statement coverage).
-
-### Testing Scope & Quality Gates
-
-16. **[x] Expand fuzz targets to all packages** (`cmd/*`, `internal/*`)
-    - 72 native Go `Fuzz*` targets across 25 packages.
-17. **[x] Increase unit-test coverage to 90%+ per core package**
-    - Raised all 26 core packages to 90.3%–100.0% statement coverage.
-18. **[x] Add race-focused tests for concurrent paths**
-    - High-concurrency `-race` stress tests for `Scheduler`, `LongbowClient`, `TelemetryReporter`, `AsyncScorer`, and `ConceptConeAnalyzer`.
-19. **[x] Enforce accuracy and oracle gates in CI** (`.github/workflows/ci.yml`, `Makefile`, `scripts/verify.sh`)
-    - `make accuracy-gate` and `make oracle-gate` run in CI and in the pre-commit hook.
-20. **[x] Add release evidence bundles** (`internal/compliance/benchmarks.go`, `scripts/release-evidence.sh`, `Makefile`)
-    - Tamper-evident `ReleaseEvidenceBundle` and `make release-evidence` outputting `dist/evidence/manifest.json`, gate logs, and `SHA256SUMS`.
+**Acceptance criteria**: Hardened checkpoint matches MPOA-steered behavior within KL ≤0.2 and coherence ≥baseline; no regression on benign capabilities (HarmBench-400 Pareto non-dominated).
 
 ---
 
-## 3. Completed Architectural Milestones Matrix
+## Part 3 — Cross-Architecture SAE Feature Alignment
 
-All core infrastructure, extraction, steering, analysis, and observability milestones are implemented and verified in source code:
+**Goal**: Extend `internal/sae/` beyond Gemma Scope to Llama-Scope and Qwen-SAE dictionaries with automated feature-absorption diagnostics.
 
-| Milestone | Key Implementations | Verification Details |
-|---|---|---|
-| **ONNX Inference Engine & Pure-Go Fallback** | `internal/engine/onnx.go`, `internal/onnxpb/` | Native ORT loading + pure-Go protobuf graph execution, activation hooks, Prometheus histograms |
-| **WASM Sandbox Backend** | `internal/wasm/backend.go` | Wazero runtime execution, float32 memory I/O, unit & fuzz tests |
-| **Longbow Arrow Flight & SQLite Failover** | `internal/longbow/client.go` | Arrow Flight RecordBatches, SlabArena, COW publication, automatic SQLite/in-memory failover |
-| **MoE Dynamic Router & Offset Slicing** | `internal/engine/moe.go` | Cumulative `expertDims` offset slicing, stabilized top-$k$ router logit softmax, ledger polling |
-| **Winsorized Ledoit-Wolf ZCA Whitened SVD** | `internal/extract/whitened.go`, `internal/math/` | Percentile Winsorization (0.5–99.5%), Ledoit-Wolf shrinkage, ZCA whitening, `--whitened-svd` CLI |
-| **Multi-Direction Subspace, INLP & RDO** | `internal/extract/pca.go`, `inlp.go`, `rdo.go` | Top-$k$ Thin SVD, iterative nullspace projection, SGD Refusal Direction Optimization (`--rdo`) |
-| **Oversight-Ablated Profiling** | `internal/profile/oversight.go`, `cmd/burnnotice/` | Monitored vs. deployed DIM extraction, pre-profiling orthogonal ablation (`--oversight-dataset`) |
-| **MPOA Biprojection & Gabliteration** | `internal/steer/steering.go`, `internal/math/projection.go` | Norm-preserving orthogonal/biprojected ablation, ridge-regularized projection $P_\alpha$ |
-| **CAST Conditional Steering Trees** | `internal/steer/cast.go` | Boolean (`OpAND`/`OpOR`/`OpNOT`) condition trees, step/sigmoid gating ($62.3\,\mu\text{s}$, $0\text{ B/op}$) |
-| **Continuous Gaussian SVD Interpolation** | `internal/steer/interpolate.go` | Smooth basis blending over `DirectionMix` $\in [0, k-1]$ |
-| **Llama, Qwen, Gemma & Mistral Support** | `internal/profile/architecture.go`, `internal/steer/bias.go`, `cot.go`, `commitment.go` | Auto-detection, Qwen QKV bias projection & `<think>` CoT state machine, Gemma unit-offset RMSNorm & prefill commitment window (`--commit-window`) |
-| **In-Place GCAD KV-Cache Defense** | `internal/steer/kvcache.go` | `KVCacheAccumulationTracker` ($\theta_{\max}=15^\circ$), `GCADApplyInPlace` ($18.2\,\mu\text{s}$, $0\text{ B/op}$) |
-| **Closed-Loop KL & Coherence Control** | `internal/analysis/kl.go`, `internal/steer/coherence.go` | Max-shifted `LogSoftmax`, forward/symmetric/batch KL, `AdjustAlphaForKL` feedback scaling |
-| **Post-Profiling Geometric Diagnostics** | `internal/analysis/alignment.go`, `cone.go`, `crosslayer.go`, `ouroboros.go` | Alignment Imprint (DPO/RLHF/CAI/SFT), parallel Concept Cone (`--cone-analysis`), CKA, Ouroboros refinement |
-| **Cached Thin-SVD Latent Visualizer** | `internal/analysis/latent_vis.go`, `internal/web/` | FNV-1a cached 2D PCA projection ($35.1\times$ speedup), 95% CI ellipses, token trajectories, dark-mode SVG |
-| **Externalities & Heretic Score** | `internal/analysis/externalities.go`, `heretic.go`, `separation.go` | `JailbreakRiskAssessor` ($\text{ASR}_{\text{steered}}/\text{ASR}_{\text{base}}$), HarmBench-400 Pareto frontier, cluster separation |
-| **Adversarial Robustness Shield** | `internal/profile/obfuscation.go`, `internal/steer/adversarial.go` | Non-linear `MLPProbe`, Mahalanobis OOD, 2% Gaussian noise, GCG sanitization, query-similarity gradient masking |
-| **OPA Latent-Aware Authorization** | `internal/policy/opa.go`, `internal/agent/mcp.go` | In-process OPA WASM (`wazero`) + SHA-256 bundle digests, OPA REST sidecar, and compound MCP/CoT/agent rules |
-| **Native GPU Serving Plugins** | `plugins/cuda_kernels.cu`, `plugins/metal/`, `plugins/vllm/`, `plugins/tensorrt/` | CUDA warp-reduction kernels, Apple Silicon Metal MSL shaders, vLLM PyBind11 & TensorRT-LLM plugins |
-| **Zero-Knowledge Telemetry & Observability** | `internal/telemetry/`, `internal/metrics/`, `docs/telemetry.md` | 50+ Prometheus metrics, OTLP/HTTP exporter, `burnnotice aggregate` CLI |
+- [x] **SAE loader generalization**: Refactored `internal/sae/loader.go` to support Gemma Scope (`LoadGemmaScope`), Llama-Scope (`LoadLlamaScope`), Qwen-SAE (`LoadQwenSAE`), and auto-detected dictionaries (`LoadDictionary`) via the `SAEDictionary` interface.
+- [x] **Architecture detection**: Added `DetectSAEArchitecture` and `MapSAEToModelFamily` in `internal/sae/loader.go` and `DefaultSAEFamily` in `internal/profile/architecture.go`.
+- [x] **Feature-absorption diagnostics**: Implemented `AnalyzeFeatureAbsorption` (`internal/sae/alignment.go`) measuring primary decoder alignment, encoder firing recall, child-feature capture ratio, polysemanticity entropy, active coverage, dead feature ratio, L0 sparsity, and reconstruction `R^2`.
+- [x] **Cross-architecture alignment**: Implemented `AlignSAEDictionaries` (`internal/sae/alignment.go`) aligning SAE features across architectures via Linear CKA and Procrustes-style structural cosine matching.
+- [x] **Hallucination integration**: Added `FamilyEnergyScale` and `IngestFamilyFeatures` in `internal/hallucination/energy.go` to normalize SAE-energy rolling windows across Gemma Scope, Llama-Scope, and Qwen-SAE.
+- [x] **Tests & fuzz**: Added loader, absorption, and CKA alignment tests (`internal/sae/alignment_test.go`) and `FuzzSAEFeatureAbsorptionAndAlignment` (`internal/sae/fuzz_test.go`).
+- [x] **Docs**: Updated `docs/architecture.md` SAE & threat model sections.
+
+**Acceptance criteria**: Llama-Scope and Qwen-SAE dictionaries load and score equivalently to Gemma Scope; absorption diagnostics report per-feature metrics; no regressions in hallucination detection.
 
 ---
 
-## 4. Quality Gate Commands
+## Part 4 — Performance & Memory Optimization
+
+**Goal**: Sustain microsecond-scale hot paths and reduce allocation pressure across scoring, steering, and analysis.
+
+- [x] **MoE cumulative offset slicing** (`internal/engine/moe.go`): maintained clamped `ExpertActivation` slicing and top-k routing benchmarks.
+- [x] **Pooled scoring & ring buffer** (`internal/scoring/scorer.go`, `internal/scoring/async.go`): cached direction norms, `sync.Pool` reuse, `PushActivationPooled`.
+- [x] **FNV-1a cached thin-SVD projection** (`internal/analysis/latent_vis.go`): retained `svdCache` (`35.1x` cached speedup).
+- [x] **Zero-alloc in-place GCAD decay** (`internal/steer/kvcache.go`): kept `GCADApplyInPlace` at `0 B/op`, `0 allocs/op`.
+- [x] **Worker-pool concept cone SVD** (`internal/analysis/cone.go`): bounded `parallelFor` up to `GOMAXPROCS`.
+- [x] **CPU/mem profiling & manifests** (`benchmark_results.txt`, `internal/compliance/benchmarks.go`): reproducible baselines.
+- [x] **New**: Added `BenchmarkCrescendoDetector_StepTurn` and `BenchmarkExtendedRefusalFineTuner_HardenLayer` in `internal/steer/bench_test.go`.
+
+**Acceptance criteria**: No regression vs. stored baselines; all hot paths remain ≤65µs where applicable.
+
+---
+
+## Part 5 — Mathematical Accuracy & Oracles
+
+**Goal**: Keep deterministic oracles and numerical invariants authoritative.
+
+- [x] **Scoring & subspace oracles** (`internal/scoring/oracle_test.go`): exact cosine/sigmoid, golden subspace, temporal aggregator.
+- [x] **Steering kernel golden vectors** (`internal/steer/oracle_test.go`): MPOA, biprojection, bias, interpolation, CAST, commitment, coherence, GCAD, LoRA.
+- [x] **NaN/Inf & covariance invariants** (`internal/math`, `internal/extract`, `internal/analysis`).
+- [x] **CKA identity/orthogonality/scale** (`internal/analysis/cka_accuracy_test.go`).
+- [x] **MoE softmax & hallucination calibration** (`internal/engine`, `internal/hallucination`).
+- [x] **New oracles**: Added `TestOracleCrescendoReAnchoring`, `TestOracleDoRAExtendedRefusal`, and `TestOracleSAEFeatureAbsorptionAndAlignment` alongside `TestAccuracyCrescendoRecallAndDriftBound`, `TestAccuracyDoRAKLAndNormInvariants`, and `TestAccuracySAECrossArchCKAAndAbsorptionInvariants`.
+
+**Acceptance criteria**: `make accuracy-gate` and `make oracle-gate` green; `go test -count=2` deterministic.
+
+---
+
+## Part 6 — Testing Scope & Concurrency
+
+**Goal**: Maintain and extend fuzz, coverage, and race guarantees.
+
+- [x] **Fuzz targets**: 76 native Go `Fuzz*` targets across all 25 fuzz-enabled packages, including `FuzzCrescendoReAnchoring`, `FuzzDoRAExtendedRefusal`, and `FuzzSAEFeatureAbsorptionAndAlignment`.
+- [x] **Coverage**: 90%+ statement coverage across all 26 core packages.
+- [x] **Race stress**: `-race` suites for scheduler, longbow, telemetry, async, concept cone, `CrescendoDetector`, and `ExtendedRefusalFineTuner`.
+- [x] **Property tests**: Multi-turn crescendo recall/FPR and drift bounds; DoRA KL ceiling and row-norm invariance; SAE absorption and CKA bounds in `[0, 1]`.
+
+**Acceptance criteria**: `go test -race ./...` clean; coverage gates enforced in CI.
+
+---
+
+## Part 7 — CI & Release Quality Gates
+
+**Goal**: Keep verification and release evidence tamper-evident and automated.
+
+- [x] **Pre-commit hook** (`scripts/verify.sh`): gofmt + vet + lint + gosec + govulncheck + unit + race + fuzz + accuracy + oracle gates.
+- [x] **CI gates** (`.github/workflows/ci.yml`): accuracy + oracle + profiling + fuzz + release evidence gates.
+- [x] **Release evidence bundle** (`internal/compliance/benchmarks.go`, `scripts/release-evidence.sh`, `Makefile`): OS/CPU/Go/ORT versions, dataset SHA-256, commit SHAs, `DoRAManifest`, and `SAEManifest`.
+- [x] **New**: Integrated crescendo, DoRA, and SAE oracle/accuracy/fuzz tests into `scripts/verify.sh` and CI gates.
+
+**Acceptance criteria**: CI green on every commit; `make release-evidence` produces `dist/evidence/`.
+
+---
+
+## Part 8 — Architecture Compatibility & Model Families
+
+**Goal**: Preserve calibrated support across Llama, Qwen, Gemma, Mistral, MoE and extend SAE families.
+
+- [x] **Family detection & calibration** (`internal/profile/architecture.go`, `internal/steer/bias.go`, `cot.go`, `commitment.go`).
+- [x] **MoE offset partitioning & softmax top-k routing** (`internal/engine/moe.go`).
+- [x] **SAE family mapping** (Gemma Scope, Llama-Scope, Qwen-SAE) via `DefaultSAEFamily` in `internal/profile/architecture.go` and `MapSAEToModelFamily` in `internal/sae/loader.go`.
+- [x] **Quantization transfer** (`internal/steer/quantization.go`): INT8/FP8 direction mapping and variance scale calibration.
+- [x] **Oversight-ablated profiling** (`internal/profile/oversight.go`): alignment-faking resistance.
+
+**Acceptance criteria**: All supported families pass profiling + steering smoke tests.
+
+---
+
+## Part 9 — Adversarial Threat Model & Defenses
+
+**Goal**: Maintain explicit defenses against obfuscated activations, steering externalities, alignment faking, multi-turn KV contamination, topic confusion, ouroboros compensation.
+
+- [x] **Obfuscated activations**: MLPProbe, Mahalanobis OOD, Gaussian noise, GCG sanitization, query-similarity masking (`internal/profile/obfuscation.go`, `internal/steer/adversarial.go`).
+- [x] **Steering externalities**: JailbreakRiskAssessor, HereticScoreEvaluator Pareto (`internal/analysis/externalities.go`, `heretic.go`).
+- [x] **Alignment faking**: OversightAblator two-phase extraction (`internal/profile/oversight.go`).
+- [x] **Multi-turn KV contamination**: GCAD + `CrescendoDetector` periodic full-prefix re-anchoring (`internal/steer/kvcache.go`, `internal/steer/crescendo.go`).
+- [x] **Topic confusion**: SemanticGater, CAST boolean trees, ROC F1 calibration.
+- [x] **Ouroboros compensation**: bounded multi-pass refinement (`internal/analysis/ouroboros.go`).
+- [x] **Weight-level refusal hardening**: `ExtendedRefusalFineTuner` DoRA + MPOA pairing (`internal/steer/dora.go`).
+
+**Acceptance criteria**: Threat-model table in `docs/architecture.md` updated with residual limitations.
+
+---
+
+## Part 10 — Observability, Deployment & Documentation
+
+**Goal**: Keep telemetry, deployment topology, and docs aligned with new capabilities.
+
+- [x] **Telemetry**: 55+ Prometheus metrics + OTLP/HTTP (`internal/metrics/metrics.go`), including `CrescendoReAnchorsTotal`, `CrescendoEscalationsTotal`, `DoRAHardeningPassesTotal`, `SAEFeatureAbsorptionRate`, and `SAECrossArchAlignmentCKA`.
+- [x] **Dashboard**: SSE score updates and latent-space SVG visualization (`internal/web/`, `internal/analysis/latent_vis.go`).
+- [x] **Deployment**: Helm chart (`helm/burnnotice/`), GPU/CPU clusters, Longbow mesh.
+- [x] **Documentation**: Updated `docs/roadmap.md` and `docs/architecture.md`.
+- [x] **Quality gate commands**: Verified `scripts/verify.sh` and `Makefile` targets.
+
+**Acceptance criteria**: Docs reflect all 10 parts; metrics exposed and scraped; deployment manifests valid.
+
+---
+
+## Quality Gate Commands
 
 ```bash
-# Full pre-commit verification suite (formatting, vet, lint, gosec, govulncheck, unit, race, fuzz, accuracy, oracle)
 bash scripts/verify.sh 1x
-
-# Linting & static analysis
 make lint
 make fmt-check
 make vet
-make vet-cross-platform
-
-# Security scanning
 make security
-make sec-gosec
-make sec-vulncheck
-
-# CPU & memory hot-path profiling
-make profile-cpu
-make profile-mem
-
-# Mathematical accuracy, golden oracles & release evidence bundle
 make accuracy-gate
 make oracle-gate
 make quality-gate
 make release-evidence
-
-# Unit, race, coverage & fuzz suites
 make test
 make test-race
 make test-coverage
-make test-bench
 make test-fuzz
 ```
 
 ---
 
-## 5. Future Research Horizons (v0.9+)
+## Feature Coverage Checklist (from improvement plan)
 
-While all v0.8 engineering, accuracy, and verification milestones are complete, the following research extensions are tracked for future releases:
-
-1. **Hardware-Isolated Confidential Probing (TEE)**: Execute `MLPProbe` and whitened Mahalanobis scoring inside NVIDIA H100 Confidential Computing enclaves so white-box attackers cannot inspect probe weights for EOT gradient optimization.
-2. **Multi-Turn Crescendo Context Re-Anchoring**: Combine exponential GCAD KV-cache decay with periodic full-prefix subspace re-scoring to detect slow 15+ turn crescendo escalations without saturating the $15^\circ$ angular drift budget.
-3. **DoRA Extended-Refusal Fine-Tuning (`ExtendedRefusalFineTuner`)**: Optional weight-hardening pass pairing inference-time MPOA steering with weight-decomposed low-rank adaptation on high-risk deployment checkpoints.
-4. **Cross-Architecture SAE Feature Alignment**: Extend `internal/sae/` beyond Gemma Scope to Llama-Scope and Qwen-SAE dictionaries with automated feature-absorption diagnostics.
+- [x] Multi-Turn Crescendo Context Re-Anchoring: Combine exponential GCAD KV-cache decay with periodic full-prefix subspace re-scoring to detect slow 15+ turn crescendo escalations without saturating the 15° angular drift budget.
+- [x] DoRA Extended-Refusal Fine-Tuning (ExtendedRefusalFineTuner): Optional weight-hardening pass pairing inference-time MPOA steering with weight-decomposed low-rank adaptation on high-risk deployment checkpoints.
+- [x] Cross-Architecture SAE Feature Alignment: Extend internal/sae/ beyond Gemma Scope to Llama-Scope and Qwen-SAE dictionaries with automated feature-absorption diagnostics.

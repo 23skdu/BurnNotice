@@ -10,9 +10,31 @@ import (
 	"math"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"os"
 )
+
+// SAEFamily identifies the architecture-specific Sparse Autoencoder dictionary format.
+type SAEFamily string
+
+const (
+	SAEGemmaScope SAEFamily = "gemma-scope"
+	SAELlamaScope SAEFamily = "llama-scope"
+	SAEQwenSAE    SAEFamily = "qwen-sae"
+	SAEGeneric    SAEFamily = "generic"
+)
+
+// SAEDictionary defines the common interface across Gemma Scope, Llama-Scope, and Qwen-SAE dictionaries.
+type SAEDictionary interface {
+	Family() SAEFamily
+	Weights() *SAEWeights
+	Encode(activation []float64) ([]float64, error)
+	Decode(features []float64) ([]float64, error)
+	TopKFeatures(features []float64, k int) ([]int, []float64)
+	Attribution(features []float64) map[int]float64
+	ReconstructionError(activation []float64) (float64, error)
+}
 
 // SAEWeights holds sparse autoencoder weight matrices.
 type SAEWeights struct {
@@ -20,14 +42,30 @@ type SAEWeights struct {
 	DecoderWeights [][]float64 `json:"decoder_weights"`
 	EncoderBias    []float64   `json:"encoder_bias"`
 	DecoderBias    []float64   `json:"decoder_bias"`
+	PreBias        []float64   `json:"pre_bias,omitempty"`       // Optional pre-encoder centering bias (Llama-Scope / Qwen-SAE)
+	JumpThreshold  []float64   `json:"jump_threshold,omitempty"` // Optional JumpReLU threshold per feature
 	FeatureCount   int         `json:"feature_count"`
 	InputDim       int         `json:"input_dim"`
 	LayerIndex     int         `json:"layer_index"`
+	Family         SAEFamily   `json:"family,omitempty"`
 }
 
 // SAELoader loads and manages SAE weights.
 type SAELoader struct {
 	weights *SAEWeights
+}
+
+// Family returns the detected or configured SAEFamily for the loaded dictionary.
+func (l *SAELoader) Family() SAEFamily {
+	if l.weights == nil || l.weights.Family == "" {
+		return SAEGeneric
+	}
+	return l.weights.Family
+}
+
+// Weights returns the underlying SAEWeights.
+func (l *SAELoader) Weights() *SAEWeights {
+	return l.weights
 }
 
 // Load reads SAE weights from a JSON file.
@@ -66,7 +104,7 @@ func (l *SAELoader) LoadFromMemory(w *SAEWeights) error {
 	return nil
 }
 
-// Encode runs the SAE encoder: ReLU(W_enc * x + b_enc).
+// Encode runs the SAE encoder: ReLU(W_enc * (x - b_pre) + b_enc) with optional JumpReLU threshold.
 func (l *SAELoader) Encode(activation []float64) ([]float64, error) {
 	if l.weights == nil {
 		return nil, fmt.Errorf("SAE weights not loaded")
@@ -75,14 +113,27 @@ func (l *SAELoader) Encode(activation []float64) ([]float64, error) {
 		return nil, fmt.Errorf("activation dim %d != input dim %d", len(activation), l.weights.InputDim)
 	}
 
+	hasPreBias := len(l.weights.PreBias) == l.weights.InputDim
+	hasJump := len(l.weights.JumpThreshold) == l.weights.FeatureCount
+
 	features := make([]float64, l.weights.FeatureCount)
 	for i := 0; i < l.weights.FeatureCount; i++ {
 		var sum float64
 		for j := 0; j < l.weights.InputDim; j++ {
-			sum += l.weights.EncoderWeights[i][j] * activation[j]
+			x := activation[j]
+			if hasPreBias {
+				x -= l.weights.PreBias[j]
+			}
+			sum += l.weights.EncoderWeights[i][j] * x
 		}
-		sum += l.weights.EncoderBias[i]
-		features[i] = math.Max(0, sum) // ReLU
+		if i < len(l.weights.EncoderBias) {
+			sum += l.weights.EncoderBias[i]
+		}
+		val := math.Max(0, sum) // ReLU
+		if hasJump && val <= l.weights.JumpThreshold[i] {
+			val = 0
+		}
+		features[i] = val
 	}
 	return features, nil
 }
@@ -147,44 +198,143 @@ func (l *SAELoader) Attribution(features []float64) map[int]float64 {
 	return result
 }
 
-// GemmaScopeConfig holds metadata for Gemma Scope SAEs.
+// GemmaScopeConfig holds metadata for Gemma Scope, Llama-Scope, and Qwen-SAE dictionaries.
 type GemmaScopeConfig struct {
 	ModelID       string  `json:"model_id"`
+	SAEFamily     string  `json:"sae_family,omitempty"`
+	Architecture  string  `json:"architecture,omitempty"`
+	HookPoint     string  `json:"hook_point,omitempty"`
 	LayerIndex    int     `json:"layer_index"`
 	HiddenDim     int     `json:"hidden_dim"`
 	FeatureDim    int     `json:"feature_dim"`
 	L1Coefficient float64 `json:"l1_coefficient"`
 }
 
+// DetectSAEArchitecture detects the SAE dictionary family from model ID, config JSON, or tensor names.
+func DetectSAEArchitecture(modelID string, configJSON []byte, tensorNames []string) SAEFamily {
+	if len(configJSON) > 0 {
+		var cfg GemmaScopeConfig
+		if err := json.Unmarshal(configJSON, &cfg); err == nil {
+			combined := strings.ToLower(cfg.SAEFamily + " " + cfg.ModelID + " " + cfg.Architecture + " " + cfg.HookPoint)
+			if strings.Contains(combined, "llama") {
+				return SAELlamaScope
+			}
+			if strings.Contains(combined, "qwen") || strings.Contains(combined, "qwq") {
+				return SAEQwenSAE
+			}
+			if strings.Contains(combined, "gemma") {
+				return SAEGemmaScope
+			}
+		}
+	}
+
+	idLower := strings.ToLower(modelID)
+	if strings.Contains(idLower, "llama") {
+		return SAELlamaScope
+	}
+	if strings.Contains(idLower, "qwen") || strings.Contains(idLower, "qwq") {
+		return SAEQwenSAE
+	}
+	if strings.Contains(idLower, "gemma") {
+		return SAEGemmaScope
+	}
+
+	for _, tName := range tensorNames {
+		switch tName {
+		case "encoder.weight", "decoder.weight", "b_pre":
+			return SAELlamaScope
+		case "w_enc", "w_dec", "pre_bias":
+			return SAEQwenSAE
+		case "W_enc", "W_dec", "threshold":
+			return SAEGemmaScope
+		}
+	}
+
+	return SAEGeneric
+}
+
+// MapSAEToModelFamily maps an SAEFamily to the canonical model family identifier.
+func MapSAEToModelFamily(family SAEFamily) string {
+	switch family {
+	case SAEGemmaScope:
+		return "gemma"
+	case SAELlamaScope:
+		return "llama"
+	case SAEQwenSAE:
+		return "qwen"
+	default:
+		return "unknown"
+	}
+}
+
 // LoadGemmaScope loads SAE weights from Gemma Scope format (NPZ + config JSON).
-// The npzPath points to a .npz file (ZIP of .npy arrays) containing:
-//   - "encoder_weights" or "W_enc" (feature_dim × hidden_dim)
-//   - "encoder_bias" or "b_enc" (feature_dim,)
-//   - "decoder_weights" or "W_dec" (hidden_dim × feature_dim)
-//   - "decoder_bias" or "b_dec" (hidden_dim,)
-//
-// The optional configPath can point to a JSON file with Gemma Scope metadata.
 func (l *SAELoader) LoadGemmaScope(npzPath, configPath string) error {
-	// #nosec G304 -- CLI tool accepts user-provided SAE paths
-	w := &SAEWeights{}
+	return l.loadScopedDictionary(npzPath, configPath, SAEGemmaScope)
+}
+
+// LoadLlamaScope loads SAE weights from Llama-Scope format (NPZ or JSON + optional config JSON).
+func (l *SAELoader) LoadLlamaScope(path, configPath string) error {
+	return l.loadScopedDictionary(path, configPath, SAELlamaScope)
+}
+
+// LoadQwenSAE loads SAE weights from Qwen-SAE format (NPZ or JSON + optional config JSON).
+func (l *SAELoader) LoadQwenSAE(path, configPath string) error {
+	return l.loadScopedDictionary(path, configPath, SAEQwenSAE)
+}
+
+// LoadDictionary auto-detects the SAE dictionary family (Gemma Scope, Llama-Scope, Qwen-SAE, or generic JSON)
+// and loads the weights into the SAELoader.
+func (l *SAELoader) LoadDictionary(path, configPath string) error {
+	var cfgBytes []byte
+	if configPath != "" {
+		// #nosec G304 -- CLI tool accepts user-provided SAE paths
+		data, err := os.ReadFile(configPath)
+		if err != nil {
+			return fmt.Errorf("read sae config: %w", err)
+		}
+		cfgBytes = data
+	}
+	fam := DetectSAEArchitecture(filepath.Base(path), cfgBytes, nil)
+	return l.loadScopedDictionary(path, configPath, fam)
+}
+
+func (l *SAELoader) loadScopedDictionary(path, configPath string, defaultFamily SAEFamily) error {
+	w := &SAEWeights{Family: defaultFamily}
+	var cfgBytes []byte
 
 	if configPath != "" {
 		// #nosec G304 -- CLI tool accepts user-provided SAE paths
 		data, err := os.ReadFile(configPath)
 		if err != nil {
-			return fmt.Errorf("read gemma scope config: %w", err)
+			return fmt.Errorf("read sae config: %w", err)
 		}
+		cfgBytes = data
 		var cfg GemmaScopeConfig
 		if err := json.Unmarshal(data, &cfg); err != nil {
-			return fmt.Errorf("parse gemma scope config: %w", err)
+			return fmt.Errorf("parse sae config: %w", err)
 		}
 		w.FeatureCount = cfg.FeatureDim
 		w.InputDim = cfg.HiddenDim
 		w.LayerIndex = cfg.LayerIndex
 	}
 
+	if strings.HasSuffix(strings.ToLower(path), ".json") {
+		if err := l.Load(path); err != nil {
+			return err
+		}
+		if l.weights.Family == "" {
+			detected := DetectSAEArchitecture(filepath.Base(path), cfgBytes, nil)
+			if detected != SAEGeneric {
+				l.weights.Family = detected
+			} else {
+				l.weights.Family = defaultFamily
+			}
+		}
+		return nil
+	}
+
 	// #nosec G304 -- CLI tool accepts user-provided NPZ paths
-	npzData, err := os.ReadFile(npzPath)
+	npzData, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("read npz file: %w", err)
 	}
@@ -195,6 +345,7 @@ func (l *SAELoader) LoadGemmaScope(npzPath, configPath string) error {
 	}
 
 	npyFiles := make(map[string][]byte)
+	tensorNames := make([]string, 0, len(reader.File))
 	for _, f := range reader.File {
 		rc, err := f.Open()
 		if err != nil {
@@ -205,53 +356,63 @@ func (l *SAELoader) LoadGemmaScope(npzPath, configPath string) error {
 		if err != nil {
 			continue
 		}
-		name := filepath.Base(f.Name)
-		name = name[:len(name)-len(".npy")]
+		name := strings.TrimSuffix(filepath.Base(f.Name), ".npy")
 		npyFiles[name] = data
+		tensorNames = append(tensorNames, name)
 	}
 
-	if encW, ok := npyFiles["encoder_weights"]; ok {
-		w.EncoderWeights, err = parseNpyMatrix(encW)
-	} else if encW, ok := npyFiles["W_enc"]; ok {
-		w.EncoderWeights, err = parseNpyMatrix(encW)
-	} else {
-		return fmt.Errorf("npz missing encoder_weights or W_enc")
+	if defaultFamily == SAEGeneric {
+		w.Family = DetectSAEArchitecture(filepath.Base(path), cfgBytes, tensorNames)
+		if w.Family == SAEGeneric {
+			w.Family = SAEGemmaScope
+		}
 	}
+
+	encW, ok := firstPresentTensor(npyFiles, "encoder_weights", "W_enc", "encoder.weight", "w_enc")
+	if !ok {
+		return fmt.Errorf("npz missing encoder_weights, W_enc, encoder.weight, or w_enc")
+	}
+	w.EncoderWeights, err = parseNpyMatrix(encW)
 	if err != nil {
 		return fmt.Errorf("parse encoder_weights: %w", err)
 	}
 
-	if decW, ok := npyFiles["decoder_weights"]; ok {
-		w.DecoderWeights, err = parseNpyMatrixTransposed(decW)
-	} else if decW, ok := npyFiles["W_dec"]; ok {
-		w.DecoderWeights, err = parseNpyMatrixTransposed(decW)
-	} else {
-		return fmt.Errorf("npz missing decoder_weights or W_dec")
+	decW, ok := firstPresentTensor(npyFiles, "decoder_weights", "W_dec", "decoder.weight", "w_dec")
+	if !ok {
+		return fmt.Errorf("npz missing decoder_weights, W_dec, decoder.weight, or w_dec")
 	}
+	w.DecoderWeights, err = parseNpyMatrixTransposed(decW)
 	if err != nil {
 		return fmt.Errorf("parse decoder_weights: %w", err)
 	}
 
-	if encB, ok := npyFiles["encoder_bias"]; ok {
-		w.EncoderBias, err = parseNpyVector(encB)
-	} else if encB, ok := npyFiles["b_enc"]; ok {
-		w.EncoderBias, err = parseNpyVector(encB)
-	} else {
-		return fmt.Errorf("npz missing encoder_bias or b_enc")
+	encB, ok := firstPresentTensor(npyFiles, "encoder_bias", "b_enc", "encoder.bias")
+	if !ok {
+		return fmt.Errorf("npz missing encoder_bias, b_enc, or encoder.bias")
 	}
+	w.EncoderBias, err = parseNpyVector(encB)
 	if err != nil {
 		return fmt.Errorf("parse encoder_bias: %w", err)
 	}
 
-	if decB, ok := npyFiles["decoder_bias"]; ok {
-		w.DecoderBias, err = parseNpyVector(decB)
-	} else if decB, ok := npyFiles["b_dec"]; ok {
-		w.DecoderBias, err = parseNpyVector(decB)
-	} else {
-		return fmt.Errorf("npz missing decoder_bias or b_dec")
+	decB, ok := firstPresentTensor(npyFiles, "decoder_bias", "b_dec", "decoder.bias")
+	if !ok {
+		return fmt.Errorf("npz missing decoder_bias, b_dec, or decoder.bias")
 	}
+	w.DecoderBias, err = parseNpyVector(decB)
 	if err != nil {
 		return fmt.Errorf("parse decoder_bias: %w", err)
+	}
+
+	if preB, hasPre := firstPresentTensor(npyFiles, "pre_bias", "b_pre"); hasPre {
+		if parsedPre, pErr := parseNpyVector(preB); pErr == nil {
+			w.PreBias = parsedPre
+		}
+	}
+	if jumpT, hasJump := firstPresentTensor(npyFiles, "threshold", "jump_threshold"); hasJump {
+		if parsedJump, jErr := parseNpyVector(jumpT); jErr == nil {
+			w.JumpThreshold = parsedJump
+		}
 	}
 
 	if w.FeatureCount == 0 {
@@ -263,6 +424,15 @@ func (l *SAELoader) LoadGemmaScope(npzPath, configPath string) error {
 
 	l.weights = w
 	return nil
+}
+
+func firstPresentTensor(files map[string][]byte, keys ...string) ([]byte, bool) {
+	for _, k := range keys {
+		if data, ok := files[k]; ok {
+			return data, true
+		}
+	}
+	return nil, false
 }
 
 // parseNpyMatrix reads a 2D float32 matrix from .npy format and returns it as [][]float64.

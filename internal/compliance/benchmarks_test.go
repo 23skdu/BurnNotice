@@ -207,6 +207,24 @@ func TestReleaseEvidenceBundle_RoundTripAndTamperOracle(t *testing.T) {
 		t.Fatalf("NewReleaseEvidenceBundle failed: %v", err)
 	}
 
+	if err := bundle.AttachManifests(&DoRAManifest{
+		ModelID:                "qwen2.5-7b",
+		Rank:                   4,
+		Alpha:                  4.0,
+		TargetLayers:           []int{14, 15, 16},
+		BaseCheckpointHash:     "base123",
+		HardenedCheckpointHash: "hard456",
+		MaxMeasuredKL:          0.08,
+		MinCoherenceRatio:      0.96,
+	}, &SAEManifest{
+		Families:            []string{"gemma-scope", "llama-scope", "qwen-sae"},
+		AbsorptionRate:      0.12,
+		MeanPolysemanticity: 0.24,
+		CrossArchLinearCKA:  0.93,
+	}); err != nil {
+		t.Fatalf("AttachManifests failed: %v", err)
+	}
+
 	if !bundle.AllGatesPassed() {
 		t.Error("expected AllGatesPassed() to be true")
 	}

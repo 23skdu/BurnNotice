@@ -114,6 +114,26 @@ type BenchmarkManifest struct {
 	CapabilityResults  []CapabilityBenchmark `json:"capability_results,omitempty"`
 }
 
+// DoRAManifest records DoRA extended-refusal fine-tuning metadata for release evidence bundles.
+type DoRAManifest struct {
+	ModelID                string  `json:"model_id"`
+	Rank                   int     `json:"rank"`
+	Alpha                  float64 `json:"alpha"`
+	TargetLayers           []int   `json:"target_layers"`
+	BaseCheckpointHash     string  `json:"base_checkpoint_sha256"`
+	HardenedCheckpointHash string  `json:"hardened_checkpoint_sha256"`
+	MaxMeasuredKL          float64 `json:"max_measured_kl"`
+	MinCoherenceRatio      float64 `json:"min_coherence_ratio"`
+}
+
+// SAEManifest records cross-architecture SAE alignment and absorption diagnostics for release evidence bundles.
+type SAEManifest struct {
+	Families            []string `json:"families"`
+	AbsorptionRate      float64  `json:"absorption_rate"`
+	MeanPolysemanticity float64  `json:"mean_polysemanticity"`
+	CrossArchLinearCKA  float64  `json:"cross_arch_linear_cka"`
+}
+
 // ReleaseGateStatus represents a quality/safety gate status for a release.
 type ReleaseGateStatus struct {
 	GateName string `json:"gate_name"`
@@ -127,6 +147,8 @@ type ReleaseEvidenceBundle struct {
 	CommitSHA        string              `json:"commit_sha"`
 	GeneratedAt      time.Time           `json:"generated_at"`
 	Manifest         BenchmarkManifest   `json:"manifest"`
+	DoRAManifest     *DoRAManifest       `json:"dora_manifest,omitempty"`
+	SAEManifest      *SAEManifest        `json:"sae_manifest,omitempty"`
 	ComplianceReport *Report             `json:"compliance_report,omitempty"`
 	GateStatus       []ReleaseGateStatus `json:"gate_status"`
 	BundleDigest     string              `json:"bundle_digest"`
@@ -244,6 +266,18 @@ func NewReleaseEvidenceBundle(version, commitSHA string, manifest BenchmarkManif
 	}
 	bundle.BundleDigest = digest
 	return bundle, nil
+}
+
+// AttachManifests attaches optional DoRA and SAE manifests to the ReleaseEvidenceBundle and refreshes its SHA-256 digest.
+func (b *ReleaseEvidenceBundle) AttachManifests(dora *DoRAManifest, sae *SAEManifest) error {
+	b.DoRAManifest = dora
+	b.SAEManifest = sae
+	digest, err := b.computeDigest()
+	if err != nil {
+		return err
+	}
+	b.BundleDigest = digest
+	return nil
 }
 
 func (b *ReleaseEvidenceBundle) computeDigest() (string, error) {
