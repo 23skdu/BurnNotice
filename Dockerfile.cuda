@@ -1,6 +1,6 @@
 # Builder stays on bookworm (glibc 2.36) so the CGO binaries run on the
 # Ubuntu 24.04 (glibc 2.39) CUDA runtime image; trixie ships glibc 2.41.
-FROM golang:1.27.3-bookworm AS builder
+FROM golang:1.27.4-bookworm AS builder
 
 RUN apt-get update && apt-get install -y git make protobuf-compiler libprotobuf-dev gcc g++ && rm -rf /var/lib/apt/lists/*
 

@@ -211,11 +211,11 @@ Table~\ref{tab:results} reports controlled evaluation metrics across supported o
 
 \subsection{Hot-Path Microbenchmarks and Memory Allocation Profile}
 
-To eliminate unsubstantiated performance claims, all hot-path kernels are benchmarked under reproducible hardware manifests (\texttt{internal/compliance/benchmarks.go}, \texttt{benchmark\_results.txt}). Table~\ref{tab:microbench} lists measured latencies and heap allocations on a 12th Gen Intel Core i7-12650H (16 threads, Linux amd64, Go 1.27.2) for $d = 4096$ activation vectors.
+To eliminate unsubstantiated performance claims, all hot-path kernels are benchmarked under reproducible hardware manifests (\texttt{internal/compliance/benchmarks.go}, \texttt{benchmark\_results.txt}). Table~\ref{tab:microbench} lists measured latencies and heap allocations on a 12th Gen Intel Core i7-12650H (16 threads, Linux amd64, Go 1.27.4) for $d = 4096$ activation vectors.
 
 \begin{table}[h]
     \centering
-    \caption{Measured hot-path kernel benchmarks ($d = 4096$, Go 1.27.2, \texttt{-benchmem}).}
+    \caption{Measured hot-path kernel benchmarks ($d = 4096$, Go 1.27.4, \texttt{-benchmem}).}
     \label{tab:microbench}
     \resizebox{\textwidth}{!}{%
     \begin{tabular}{llrrr}

@@ -1,4 +1,4 @@
-FROM golang:1.27.3-trixie AS builder
+FROM golang:1.27.4-trixie AS builder
 
 RUN apt-get update && apt-get install -y git make protobuf-compiler libprotobuf-dev gcc g++ && rm -rf /var/lib/apt/lists/*
 
