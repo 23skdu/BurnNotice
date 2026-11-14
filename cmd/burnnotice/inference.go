@@ -19,6 +19,10 @@ type ONNXModel struct {
 }
 
 func LoadONNXModel(path string) (*ONNXModel, error) {
+	return LoadONNXModelWithTokenizer(path, "word")
+}
+
+func LoadONNXModelWithTokenizer(path, tokenizerKind string) (*ONNXModel, error) {
 	hiddenDim := 4096
 
 	cfgCandidate := filepath.Clean(filepath.Join(filepath.Dir(path), "config.json"))
@@ -44,9 +48,14 @@ func LoadONNXModel(path string) (*ONNXModel, error) {
 		return nil, fmt.Errorf("load ONNX model: %w", err)
 	}
 
+	var tok tokenizer.Tokenizer = tokenizer.NewWordHashTokenizer()
+	if tokenizerKind == "byte" {
+		tok = tokenizer.NewByteTokenizer()
+	}
+
 	return &ONNXModel{
 		eng:    eng,
-		tok:    tokenizer.NewWordHashTokenizer(),
+		tok:    tok,
 		dim:    cfg.HiddenDim,
 		family: family,
 	}, nil

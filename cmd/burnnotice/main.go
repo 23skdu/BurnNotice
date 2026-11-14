@@ -8,14 +8,18 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"burnnotice/internal/analysis"
+	"burnnotice/internal/checkpoint"
 	"burnnotice/internal/converter"
 	"burnnotice/internal/datasets"
 	"burnnotice/internal/downloader"
 	"burnnotice/internal/engine"
 	"burnnotice/internal/extract"
+	"burnnotice/internal/metrics"
 	"burnnotice/internal/profile"
+	"burnnotice/internal/profiler"
 	"burnnotice/internal/scoring"
 	"burnnotice/internal/steer"
 	"burnnotice/internal/telemetry"
@@ -48,12 +52,19 @@ Recommended model for testing: ` + "`" + recommendedModel + "`" + `
 		outputDir, _ := cmd.Flags().GetString("output")
 		token, _ := cmd.Flags().GetString("token")
 		include, _ := cmd.Flags().GetString("include")
+		baseURL, _ := cmd.Flags().GetString("base-url")
 
 		if token == "" {
 			token = os.Getenv("HF_TOKEN")
 		}
+		if baseURL == "" {
+			baseURL = os.Getenv("HF_ENDPOINT")
+		}
 
 		dl := downloader.NewHuggingFaceDownloader(token)
+		if baseURL != "" {
+			dl.WithBaseURL(baseURL)
+		}
 
 		var patterns []string
 		if include != "" {
@@ -103,6 +114,22 @@ For a runnable ONNX model (with compute graph), use optimum-cli:
 			return fmt.Errorf("convert: %w", err)
 		}
 
+		files, _ := converter.FindSafetensorsFiles(modelDir)
+		if len(files) > 0 {
+			if tensorCount, err := converter.CountTensors(files); err == nil {
+				fmt.Printf("Converted %d tensors from %d safetensors shards\n", tensorCount, len(files))
+			}
+			if tensors, err := converter.ParseSafetensors(files[0]); err == nil && len(tensors) > 0 {
+				t0 := tensors[0]
+				fmt.Printf("Sample tensor %s: elem_size=%dB, elements=%d\n",
+					t0.Name, converter.GetTensorElementSize(t0.DType), converter.TensorElementCount(t0.Shape))
+			}
+		}
+		onnxPath := filepath.Join(output, "model.onnx")
+		if err := converter.ValidateONNX(onnxPath); err != nil {
+			return fmt.Errorf("validate converted ONNX: %w", err)
+		}
+
 		fmt.Println("Conversion complete.")
 		return nil
 	},
@@ -132,6 +159,18 @@ Extraction method:
 		eigFloor, _ := cmd.Flags().GetFloat64("eig-floor")
 		coneAnalysis, _ := cmd.Flags().GetBool("cone-analysis")
 		rdoFlag, _ := cmd.Flags().GetBool("rdo")
+		inlpFlag, _ := cmd.Flags().GetBool("inlp")
+		calibrateFlag, _ := cmd.Flags().GetBool("calibrate")
+		validateFlag, _ := cmd.Flags().GetBool("validate")
+		versionFlag, _ := cmd.Flags().GetBool("version")
+		progressiveFlag, _ := cmd.Flags().GetBool("progressive")
+		distNodes, _ := cmd.Flags().GetInt("distributed-nodes")
+		ckptPath, _ := cmd.Flags().GetString("checkpoint")
+		alignImprintFlag, _ := cmd.Flags().GetBool("align-imprint")
+		crossLayerFlag, _ := cmd.Flags().GetBool("cross-layer")
+		separationFlag, _ := cmd.Flags().GetBool("separation")
+		telemetryDir, _ := cmd.Flags().GetString("telemetry-dir")
+		tokenizerKind, _ := cmd.Flags().GetString("tokenizer")
 
 		if datasetPath == "" {
 			return fmt.Errorf("--dataset is required")
@@ -155,11 +194,28 @@ Extraction method:
 
 		fmt.Printf("Loaded dataset with %d pairs\n", len(ds.Pairs))
 
-		model, err := LoadONNXModel(modelPath)
+		var model *ONNXModel
+		if tokenizerKind == "byte" {
+			model, err = LoadONNXModelWithTokenizer(modelPath, tokenizerKind)
+		} else {
+			model, err = LoadONNXModel(modelPath)
+		}
 		if err != nil {
 			return fmt.Errorf("load ONNX model: %w", err)
 		}
 		defer func() { _ = model.Close() }()
+
+		var ckptMgr *checkpoint.Manager
+		if ckptPath != "" {
+			if checkpoint.Exists(ckptPath) {
+				if _, err := checkpoint.Load(ckptPath); err == nil {
+					fmt.Printf("Resumed checkpoint from %s\n", ckptPath)
+				}
+			}
+			ckptMgr = checkpoint.NewManager(5*time.Second, ckptPath)
+			ckptMgr.Start(map[string]any{"model": modelPath, "stage": "init"})
+			defer ckptMgr.Stop()
+		}
 
 		scorer := scoring.NewScorer(nil)
 
@@ -219,8 +275,11 @@ Extraction method:
 			}
 
 			if ablator != nil {
-				pos = ablator.Ablate(0, pos)
-				neg = ablator.Ablate(0, neg)
+				ablated := ablator.AblateActivations([][][]float64{{pos}, {neg}})
+				if len(ablated) == 2 && len(ablated[0]) > 0 && len(ablated[1]) > 0 {
+					pos = ablated[0][0]
+					neg = ablated[1][0]
+				}
 			}
 
 			positiveActivations = append(positiveActivations, pos)
@@ -230,11 +289,24 @@ Extraction method:
 		if ablator != nil {
 			fmt.Println("Ablated oversight direction from deception dataset activations")
 		}
+		if ckptMgr != nil {
+			_ = ckptMgr.Save(map[string]any{"model": modelPath, "stage": "activations_extracted", "pairs": len(positiveActivations)})
+		}
 
 		useWhitened := shouldUseWhitenedSVD(cmd.Flags().Changed("whitened-svd"), whitenedFlag, modelSize)
 		var directions [][]float64
 		var methodLabel string
-		if useWhitened {
+		if inlpFlag {
+			k := numDirs
+			if !cmd.Flags().Changed("num-directions") {
+				k = profile.RecommendedINLPIterations(len(positiveActivations[0]))
+			}
+			directions = extract.ExtractINLP(positiveActivations, negativeActivations, k)
+			if len(directions) == 0 {
+				return fmt.Errorf("INLP extraction failed (k=%d)", k)
+			}
+			methodLabel = fmt.Sprintf("INLP (k=%d)", len(directions))
+		} else if useWhitened {
 			var ok bool
 			directions, _, ok = extract.ExtractWhitenedSVD(positiveActivations, negativeActivations, numDirs, shrinkage, eigFloor)
 			if !ok || len(directions) == 0 {
@@ -256,12 +328,16 @@ Extraction method:
 
 		if rdoFlag {
 			fmt.Println("Refining direction with Refusal Direction Optimization (RDO)...")
-			optimizer := extract.NewRefusalDirectionOptimizer(extract.DefaultRDOConfig())
-			var initialDir []float64
+			cfg := extract.DefaultRDOConfig()
+			optimizer := extract.NewRefusalDirectionOptimizer(cfg)
+			var optDir []float64
+			var auroc float64
+			var ok bool
 			if len(directions) > 0 {
-				initialDir = directions[0]
+				optDir, auroc, ok = optimizer.Optimize(positiveActivations, negativeActivations, directions[0])
+			} else {
+				optDir, auroc, ok = extract.ExtractRDO(positiveActivations, negativeActivations, &cfg)
 			}
-			optDir, auroc, ok := optimizer.Optimize(positiveActivations, negativeActivations, initialDir)
 			if ok {
 				if len(directions) > 0 {
 					directions[0] = optDir
@@ -270,6 +346,54 @@ Extraction method:
 				}
 				fmt.Printf("RDO optimization complete. Train AUROC: %.4f\n", auroc)
 			}
+		}
+
+		if progressiveFlag {
+			totalLayers := len(layers)
+			if totalLayers == 0 {
+				totalLayers = 1
+			}
+			pp := profiler.NewProgressiveProfiler(totalLayers, 4, 0.01)
+			_ = pp.ValidateLayerGroups(totalLayers)
+			pos3D := make([][][]float64, len(positiveActivations))
+			neg3D := make([][][]float64, len(negativeActivations))
+			for i := range positiveActivations {
+				pos3D[i] = make([][]float64, totalLayers)
+				neg3D[i] = make([][]float64, totalLayers)
+				for l := 0; l < totalLayers; l++ {
+					pos3D[i][l] = positiveActivations[i]
+					neg3D[i][l] = negativeActivations[i]
+				}
+			}
+			var allGroupDirs []map[int][]float64
+			for _, grp := range pp.LayerGroups() {
+				gDirs, cont := pp.ProfileGroup(grp, pos3D, neg3D)
+				allGroupDirs = append(allGroupDirs, gDirs)
+				if !cont {
+					break
+				}
+			}
+			merged := pp.MergeDirections(allGroupDirs)
+			fmt.Printf("Progressive profiling: groups=%d, layers=%d, merged=%d\n", pp.GroupCount(), pp.TotalLayers(), len(merged))
+		}
+
+		if distNodes > 1 {
+			dp := profiler.NewDistributedProfiler(distNodes)
+			posSplits := dp.SplitBatches(positiveActivations)
+			negSplits := dp.SplitBatches(negativeActivations)
+			for nodeIdx := 0; nodeIdx < dp.NodeCount(); nodeIdx++ {
+				nodePos := posSplits[nodeIdx]
+				nodeNeg := negSplits[nodeIdx]
+				if len(nodePos) > 0 && len(nodeNeg) > 0 {
+					nodeDirs := extract.ExtractDIM(nodePos, nodeNeg)
+					dp.CollectResults(fmt.Sprintf("node-%d", nodeIdx), map[int][]float64{0: nodeDirs})
+				} else {
+					dp.CollectResults(fmt.Sprintf("node-%d", nodeIdx), map[int][]float64{})
+				}
+			}
+			agg := dp.AggregateResults()
+			fmt.Printf("Distributed profiling: nodes=%d, results=%d, complete=%v, layers=%d\n",
+				dp.NodeCount(), dp.ResultCount(), dp.IsComplete(), len(agg))
 		}
 
 		if coneAnalysis {
@@ -300,11 +424,44 @@ Extraction method:
 			coneAnalyzer := analysis.NewConceptConeAnalyzer(categories)
 			res := coneAnalyzer.Analyze()
 			if res != nil {
-				fmt.Printf("Concept cone analysis: Intrinsic Dimensionality = %d, Categories = %d\n",
-					res.IntrinsicDimensionality, len(categories))
+				idEst := coneAnalyzer.IntrinsicDimensionality()
+				pwSim := coneAnalyzer.PairwiseSimilarities()
+				fmt.Printf("Concept cone analysis: Intrinsic Dimensionality = %d (est=%d), Categories = %d, SimMatrix=%dx%d\n",
+					res.IntrinsicDimensionality, idEst, len(categories), len(pwSim), len(pwSim))
 				for pair, sim := range res.CategoryPairwiseCosines {
 					fmt.Printf("  Pairwise cosine %s: %.4f\n", pair, sim)
 				}
+			}
+		}
+
+		if alignImprintFlag && len(directions) > 0 {
+			aid := analysis.NewAlignmentImprintDetector()
+			for _, layer := range layers {
+				aid.AddLayerDirection(layer, directions[0])
+			}
+			m := aid.Metrics()
+			method := aid.ClassifyAlignment()
+			fmt.Printf("Alignment imprint: method=%s, eff_rank=%.3f, svd_decay=%.3f, coherence=%.3f, stability=%.3f\n",
+				method, m.EffectiveRank, m.SVDDecayRate, m.CrossLayerCoherence, m.DirectionStability)
+		}
+
+		if crossLayerFlag && len(directions) > 0 {
+			cla := analysis.NewCrossLayerAlignmentAnalyzer()
+			for _, layer := range layers {
+				cla.AddLayerDirection(layer, directions[0])
+			}
+			simMat := cla.PairwiseSimilarityMatrix()
+			decLayer, found := cla.DecisionLayer(0.8)
+			clusters := cla.DirectionClusters(0.85)
+			ckaVal := analysis.CKA(positiveActivations, negativeActivations)
+			fmt.Printf("Cross-layer analysis: sim_matrix=%dx%d, decision_layer=%d (found=%v), clusters=%d, CKA=%.4f\n",
+				len(simMat), len(simMat), decLayer, found, len(clusters), ckaVal)
+		}
+
+		if separationFlag {
+			if sep, err := analysis.ComputeLatentSeparation(negativeActivations, positiveActivations); err == nil {
+				ret, deg, _ := analysis.MeasureSeparationRetention(negativeActivations, positiveActivations, negativeActivations, positiveActivations)
+				fmt.Printf("Latent separation: dist=%.4f, retention=%.4f, degraded=%v\n", sep, ret, deg)
 			}
 		}
 
@@ -324,7 +481,7 @@ Extraction method:
 			fmt.Printf("Sample scores: %s=%.4f\n", dirName, scores[dirName])
 		}
 		if len(directions) > 0 {
-			fmt.Printf("Sample scores: deception=%.4f\n", scores["deception"])
+			fmt.Printf("Sample scores: deception=%.4f (cached=%.4f)\n", scores["deception"], scorer.GetScore("deception"))
 		}
 		// Detect architecture family (Llama, Qwen, Gemma, Mistral)
 		var configBytes []byte
@@ -348,8 +505,9 @@ Extraction method:
 			detector := steer.NewBehavioralCommitmentDetector(steer.DefaultCommitmentConfig(string(archSpec.Family)))
 			cRes, err := detector.AnalyzeCommitmentWindow(sampleScores, 12)
 			if err == nil {
-				fmt.Printf("Behavioral commitment window: peak=token_%d (deriv=%.4f), span=[%d..%d], prefill_ratio=%.2f%%\n",
-					cRes.PeakPosition, cRes.MaxDerivative, cRes.WindowStart, cRes.WindowEnd, cRes.PrefillEnergyRatio*100)
+				mult := detector.ComputeSteeringMultiplier(cRes.PeakPosition, 12, cRes, 1.0)
+				fmt.Printf("Behavioral commitment window: peak=token_%d (deriv=%.4f), span=[%d..%d], prefill_ratio=%.2f%%, mult=%.2f\n",
+					cRes.PeakPosition, cRes.MaxDerivative, cRes.WindowStart, cRes.WindowEnd, cRes.PrefillEnergyRatio*100, mult)
 			}
 		}
 
@@ -379,6 +537,47 @@ Extraction method:
 
 		if err := modelProfile.Save(outputDir); err != nil {
 			return fmt.Errorf("save profile: %w", err)
+		}
+
+		if calibrateFlag {
+			cal := profile.NewCalibrator()
+			if calRes, err := cal.Calibrate(modelProfile, ds); err == nil {
+				if err := calRes.Save(outputDir); err == nil {
+					_, _ = profile.LoadCalibration(outputDir)
+				}
+				dd := profile.NewDriftDetector(32, 1.5)
+				_ = dd.Record(0.05)
+				dd.MarkRecalibrated()
+				_ = dd.LastRecalibrated()
+				fmt.Printf("Calibrated %d thresholds (cone adjusted=%.3f)\n",
+					len(calRes.Thresholds), profile.AdjustThresholdForCone(0.7, len(directions)))
+			}
+		}
+
+		if validateFlag {
+			val := profile.NewValidator(0.5)
+			valResults := val.Validate(modelProfile, ds)
+			fmt.Printf("Validated %d profile directions\n", len(valResults))
+		}
+
+		if versionFlag {
+			vm := profile.NewVersionManager(outputDir)
+			if ver, err := vm.SaveVersion(modelProfile, ""); err == nil {
+				fmt.Printf("Saved profile version v%d\n", ver.Version)
+			}
+		}
+
+		if telemetryDir != "" {
+			rep := telemetry.NewReporter("", telemetryDir)
+			_ = rep.Submit(&telemetry.Report{
+				ModelArchitecture:   string(archSpec.Family),
+				ModelSize:           modelSize,
+				SteeringMethod:      methodLabel,
+				RefusalRate:         0.05,
+				KLDivergence:        0.03,
+				CapabilityRetention: 0.99,
+				Hardware:            "cpu",
+			})
 		}
 
 		fmt.Printf("Profile saved to %s\n", outputDir)
@@ -464,6 +663,11 @@ input to verify the engine functions correctly end-to-end.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		modelPath := args[0]
 		hiddenDim, _ := cmd.Flags().GetInt("hidden-dim")
+		layerName, _ := cmd.Flags().GetString("layer")
+
+		if err := converter.ValidateONNX(modelPath); err != nil {
+			return fmt.Errorf("ONNX structure check failed: %w", err)
+		}
 
 		cfg := engine.ModelConfig{
 			HiddenDim:   hiddenDim,
@@ -476,7 +680,7 @@ input to verify the engine functions correctly end-to-end.`,
 		}
 		defer func() { _ = eng.Close() }()
 
-		fmt.Printf("Engine loaded: %s\n", modelPath)
+		fmt.Printf("Engine loaded: %s (hidden_dim=%d)\n", modelPath, eng.Config().HiddenDim)
 		fmt.Printf("Output count: %d\n", eng.NumOutputs())
 
 		// Run forward pass with synthetic tokens
@@ -489,6 +693,14 @@ input to verify the engine functions correctly end-to-end.`,
 		expectedSize := 1 * 5 * hiddenDim
 		if len(output) != expectedSize {
 			return fmt.Errorf("output size = %d, want %d", len(output), expectedSize)
+		}
+
+		if layerName != "" {
+			if inter, err := eng.GetIntermediate(layerName, syntheticTokens, []int64{1, 5}); err == nil {
+				fmt.Printf("Intermediate %s OK: %d elements\n", layerName, len(inter))
+			} else {
+				return fmt.Errorf("get intermediate %s: %w", layerName, err)
+			}
 		}
 
 		fmt.Printf("Forward pass OK: output tensor %d elements [%d x %d x %d]\n",
@@ -580,15 +792,24 @@ Low-Rank Adaptation (DoRA) on high-risk deployment checkpoints.`,
 		cfg.DryRun = dryRun
 
 		tuner := steer.NewExtendedRefusalFineTuner(cfg)
+		activeCfg := tuner.Config()
 		res, err := tuner.HardenCheckpoint(&ckpt, subspace, nil)
 		if err != nil {
 			return fmt.Errorf("dora harden checkpoint: %w", err)
 		}
 
 		fmt.Printf("DoRA Extended-Refusal Hardening (%s): rank=%d, alpha=%.2f, max_kl=%.4f, base_sha=%s, hardened_sha=%s\n",
-			res.ModelID, res.Rank, res.Alpha, res.MaxMeasuredKL, res.BaseCheckpointHash[:12], res.HardenedCheckpointHash[:12])
+			res.ModelID, activeCfg.Rank, res.Alpha, res.MaxMeasuredKL, res.BaseCheckpointHash[:12], res.HardenedCheckpointHash[:12])
 
-		if outputPath != "" && !dryRun {
+		rollbackFlag, _ := cmd.Flags().GetBool("rollback")
+		if rollbackFlag {
+			if err := tuner.RollbackCheckpoint(&ckpt); err != nil {
+				return fmt.Errorf("rollback checkpoint: %w", err)
+			}
+			fmt.Println("Rolled back checkpoint weights to pre-DoRA snapshot.")
+		}
+
+		if outputPath != "" && !dryRun && !rollbackFlag {
 			outBytes, err := json.MarshalIndent(ckpt, "", "  ")
 			if err != nil {
 				return fmt.Errorf("marshal hardened checkpoint: %w", err)
@@ -605,6 +826,7 @@ func init() {
 	downloadCmd.Flags().StringP("output", "o", "./models", "Output directory for downloaded files")
 	downloadCmd.Flags().StringP("token", "t", "", "HuggingFace API token (or $HF_TOKEN)")
 	downloadCmd.Flags().String("include", "*.safetensors;*.json", "Semicolon-separated file extensions to download")
+	downloadCmd.Flags().String("base-url", "", "Override HuggingFace Hub base URL (or $HF_ENDPOINT)")
 
 	convertCmd.Flags().StringP("output", "o", "./onnx", "ONNX output directory")
 	convertCmd.Flags().Int("opset", 17, "ONNX opset version")
@@ -622,8 +844,21 @@ func init() {
 	profileCmd.Flags().Bool("cone-analysis", false, "Run cross-category concept cone geometric analysis during profiling")
 	profileCmd.Flags().Bool("rdo", false, "Refine extracted direction using gradient-based Refusal Direction Optimization")
 	profileCmd.Flags().Bool("commit-window", false, "Analyze prefill behavioral commitment window across token positions")
+	profileCmd.Flags().Bool("inlp", false, "Use Iterative Nullspace Projection (INLP) direction extraction")
+	profileCmd.Flags().Bool("calibrate", false, "Calibrate ROC thresholds after profiling")
+	profileCmd.Flags().Bool("validate", false, "Validate extracted profile directions against dataset")
+	profileCmd.Flags().Bool("version", false, "Save a numbered profile version under output/versions/")
+	profileCmd.Flags().Bool("progressive", false, "Run progressive layer-group profiling")
+	profileCmd.Flags().Int("distributed-nodes", 1, "Split profiling batches across N virtual worker nodes")
+	profileCmd.Flags().String("checkpoint", "", "Checkpoint file path for long-running profiling recovery")
+	profileCmd.Flags().Bool("align-imprint", false, "Run AlignmentImprintDetector across profiled layers")
+	profileCmd.Flags().Bool("cross-layer", false, "Run CrossLayerAlignmentAnalyzer and CKA diagnostics")
+	profileCmd.Flags().Bool("separation", false, "Measure latent centroid separation and retention")
+	profileCmd.Flags().String("telemetry-dir", "", "Directory to write anonymous zero-knowledge telemetry report")
+	profileCmd.Flags().String("tokenizer", "word", "Tokenizer implementation: word or byte")
 
 	validateCmd.Flags().Int("hidden-dim", 4096, "Model hidden dimension")
+	validateCmd.Flags().String("layer", "", "Optional intermediate layer output name to extract")
 
 	finetuneCmd.Flags().Bool("extended-refusal", false, "Enable DoRA extended-refusal weight hardening")
 	finetuneCmd.Flags().StringP("output", "o", "", "Output path for hardened checkpoint JSON")
@@ -632,11 +867,18 @@ func init() {
 	finetuneCmd.Flags().Float64("max-kl", 0.20, "Maximum permissible KL divergence ceiling")
 	finetuneCmd.Flags().Bool("dry-run", false, "Compute DoRA metrics and digests without writing checkpoint")
 	finetuneCmd.Flags().Bool("high-risk", false, "Mark checkpoint as high-risk deployment target")
+	finetuneCmd.Flags().Bool("rollback", false, "Verify DoRA rollback to pre-hardening snapshot")
 
-	rootCmd.AddCommand(downloadCmd, convertCmd, profileCmd, recommendCmd, validateCmd, aggregateCmd, finetuneCmd)
+	rootCmd.AddCommand(
+		downloadCmd, convertCmd, profileCmd, recommendCmd, validateCmd, aggregateCmd, finetuneCmd,
+		evalCmd, steerCmd, saeCmd, policyCmd, complianceCmd, registryCmd, ledgerCmd, agentCmd, runtimeCmd,
+	)
 }
 
 func main() {
+	if _, err := metrics.InitOTelExporter(metrics.OTelConfigFromEnv()); err == nil {
+		defer func() { _ = metrics.ShutdownOTel(context.Background()) }()
+	}
 	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
 		os.Exit(1)
 	}

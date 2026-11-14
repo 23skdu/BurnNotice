@@ -309,7 +309,7 @@ func (e *encoder) encodeStruct(rv reflect.Value) error {
 		omitEmpty := false
 		if idx := indexOfComma(tag); idx >= 0 {
 			name = tag[:idx]
-			omitEmpty = tag[idx:] == ",omitempty"
+			omitEmpty = hasOmitEmpty(tag)
 		}
 		if name == "" {
 			name = f.Name
@@ -356,7 +356,7 @@ func hasOmitEmpty(tag string) bool {
 	}
 	// Check for ",omitempty" suffix
 	for i := 0; i < len(tag); i++ {
-		if tag[i] == ',' && i+9 <= len(tag) && tag[i:i+10] == ",omitempty" {
+		if tag[i] == ',' && i+10 <= len(tag) && tag[i:i+10] == ",omitempty" {
 			return true
 		}
 	}

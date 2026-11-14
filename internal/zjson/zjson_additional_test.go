@@ -35,11 +35,28 @@ func TestZJSON_HasOmitEmpty(t *testing.T) {
 	if !hasOmitEmpty("name,omitempty") {
 		t.Error("expected true for name,omitempty")
 	}
+	if !hasOmitEmpty("name,omitempty,string") {
+		t.Error("expected true for name,omitempty,string")
+	}
+	if hasOmitEmpty("name,omitempt") {
+		t.Error("expected false for truncated omitempty tag")
+	}
 	if hasOmitEmpty("name") {
 		t.Error("expected false for name")
 	}
 	if hasOmitEmpty("") {
 		t.Error("expected false for empty tag")
+	}
+
+	type MultiTag struct {
+		A string `json:"a,omitempty,string"`
+	}
+	res, err := Marshal(MultiTag{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(res) != "{}" {
+		t.Errorf("expected {} for omitted MultiTag, got %s", string(res))
 	}
 }
 
@@ -130,5 +147,27 @@ func TestZJSON_Token_ParseValue(t *testing.T) {
 	input := []byte(`{"a": [true, false, null, 12.34, "str", {}]}`)
 	if err := Unmarshal(input, &v); err != nil {
 		t.Fatalf("failed to parse complex input: %v", err)
+	}
+}
+
+func TestZJSON_IntMapKeys(t *testing.T) {
+	var m map[int]float64
+	if err := Unmarshal([]byte(`{"0":0.8,"12":0.25}`), &m); err != nil {
+		t.Fatalf("Unmarshal int map failed: %v", err)
+	}
+	if m[0] != 0.8 || m[12] != 0.25 {
+		t.Fatalf("unexpected decoded map: %v", m)
+	}
+
+	var um map[uint]string
+	if err := Unmarshal([]byte(`{"7":"ok"}`), &um); err != nil {
+		t.Fatalf("Unmarshal uint map failed: %v", err)
+	}
+	if um[7] != "ok" {
+		t.Fatalf("unexpected decoded uint map: %v", um)
+	}
+
+	if err := Unmarshal([]byte(`{"bad":1}`), &m); err == nil {
+		t.Fatal("expected error for non-numeric int map key")
 	}
 }

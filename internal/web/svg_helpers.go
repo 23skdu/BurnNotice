@@ -62,8 +62,8 @@ func sampleCircuitGraph() string {
 	return svg
 }
 
-// sampleLatentSpaceSVG generates a fine-grained 2D manifold visualization of the model's semantic latent space.
-func sampleLatentSpaceSVG(modelID string) string {
+// sampleLatentSpacePoints builds representative semantic manifold points across categories and layers.
+func sampleLatentSpacePoints() []analysis.LatentPoint {
 	points := make([]analysis.LatentPoint, 0, 64)
 
 	// Truthful cluster & trajectory across 8 layers
@@ -135,6 +135,13 @@ func sampleLatentSpaceSVG(modelID string) string {
 			ProjectedY: 0.5 + 0.35*math.Cos(fi*0.8),
 		})
 	}
+
+	return points
+}
+
+// sampleLatentSpaceSVG generates a fine-grained 2D manifold visualization of the model's semantic latent space.
+func sampleLatentSpaceSVG(modelID string) string {
+	points := sampleLatentSpacePoints()
 
 	proj, err := analysis.ProjectLatentSpace(points, nil, nil)
 	if err != nil {

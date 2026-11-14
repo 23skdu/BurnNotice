@@ -274,7 +274,9 @@ func (d *decoder) decodeObjectToMap(rv reflect.Value) error {
 
 		// Parse value
 		keyVal := reflect.New(keyType).Elem()
-		keyVal.SetString(keyStr)
+		if err := setMapKey(keyVal, keyStr); err != nil {
+			return err
+		}
 
 		elemVal := reflect.New(elemType).Elem()
 		if err := d.decodeValue(elemVal); err != nil {
@@ -314,7 +316,9 @@ func (d *decoder) decodeEscapedKey(rv reflect.Value, keyStart int, keyType, elem
 	d.pos++
 
 	keyVal := reflect.New(keyType).Elem()
-	keyVal.SetString(keyStr)
+	if err := setMapKey(keyVal, keyStr); err != nil {
+		return err
+	}
 
 	elemVal := reflect.New(elemType).Elem()
 	if err := d.decodeValue(elemVal); err != nil {
@@ -337,6 +341,30 @@ func (d *decoder) decodeEscapedKey(rv reflect.Value, keyStart int, keyType, elem
 	d.pos++
 
 	return nil
+}
+
+func setMapKey(keyVal reflect.Value, keyStr string) error {
+	switch keyVal.Kind() {
+	case reflect.String:
+		keyVal.SetString(keyStr)
+		return nil
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		n, err := strconv.ParseInt(keyStr, 10, keyVal.Type().Bits())
+		if err != nil {
+			return fmt.Errorf("zjson: invalid integer map key %q: %w", keyStr, err)
+		}
+		keyVal.SetInt(n)
+		return nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		n, err := strconv.ParseUint(keyStr, 10, keyVal.Type().Bits())
+		if err != nil {
+			return fmt.Errorf("zjson: invalid unsigned map key %q: %w", keyStr, err)
+		}
+		keyVal.SetUint(n)
+		return nil
+	default:
+		return fmt.Errorf("zjson: unsupported map key type %s", keyVal.Type())
+	}
 }
 
 // decodeObjectToStruct decodes a JSON object into a struct.

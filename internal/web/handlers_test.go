@@ -7,6 +7,20 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
+
+	"burnnotice/internal/agent"
+	"burnnotice/internal/compliance"
+	"burnnotice/internal/hallucination"
+	"burnnotice/internal/ledger"
+	"burnnotice/internal/memory"
+	"burnnotice/internal/policy"
+	"burnnotice/internal/policydetect"
+	"burnnotice/internal/profile"
+	"burnnotice/internal/registry"
+	"burnnotice/internal/scheduler"
+	"burnnotice/internal/scoring"
+	"burnnotice/internal/steer"
 
 	"github.com/a-h/templ"
 	templruntime "github.com/a-h/templ/runtime"
@@ -517,6 +531,145 @@ func TestTemplates_CancelledContextAndWriteErrors(t *testing.T) {
 			buf := new(templruntime.Buffer)
 			buf.Reset(&failAfterNWriter{remaining: step})
 			_ = comp.Render(context.Background(), buf)
+		}
+	}
+}
+
+func TestHandlers_WiredRuntimeEndpoints(t *testing.T) {
+	hub := NewSSEHub()
+	h := NewHandlers(hub)
+
+	ledg, err := ledger.NewBackend("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("NewBackend failed: %v", err)
+	}
+	if err := ledg.Init(); err != nil {
+		t.Fatalf("ledger Init failed: %v", err)
+	}
+	defer func() { _ = ledg.Close() }()
+
+	polEng := policy.NewEngine([]policy.Policy{
+		{Name: "deception", Metric: "deception", Threshold: 0.7, Action: policy.ActionBlock},
+	})
+	ks, _ := policy.NewKillSwitch(nil)
+	polEng.RegisterKillSwitch(ks)
+	opa, _ := policy.NewOPAEvaluator(policy.OPAConfig{})
+	defer func() { _ = opa.Close(context.Background()) }()
+	polEng.SetOPAEvaluator(opa)
+
+	profMgr := profile.NewManager(1)
+	profMgr.Start(func(j *profile.Job) error {
+		<-j.Context().Done()
+		return j.Context().Err()
+	})
+	defer profMgr.Stop()
+	profMgr.Submit(&profile.Job{ID: "job-cancel-1", ModelID: "m1", Total: 1})
+
+	reg := registry.NewRegistry(t.TempDir())
+	reg.Add(registry.Metadata{ModelID: "m1", Architecture: "qwen", Date: time.Now()})
+
+	sched := scheduler.NewScheduler(1024)
+	sc := scoring.NewScorer(nil)
+	sc.RegisterDirection("deception", []float64{1, 0, 0, 0})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	as := scoring.NewAsyncScorer(sc, 32, nil)
+	as.Start(ctx, 1)
+
+	aw := compliance.NewApprovalWorkflow(time.Minute)
+	defer aw.Stop()
+
+	wd := policydetect.NewWhiteningDetector(1e-8)
+	_ = wd.Train([][]float64{{1, 0, 0, 0}, {0.9, 0.1, 0, 0}}, [][]float64{{-1, 0, 0, 0}})
+
+	mw, _ := agent.NewMiddleware(agent.Config{ModelID: "m1"})
+	mcp := agent.NewMCPMiddleware(mw, "sess")
+	mcp.SetOPAEvaluator(opa)
+
+	h.PolicyEngine = polEng
+	h.ProfileMgr = profMgr
+	h.Registry = reg
+	h.Scheduler = sched
+	h.Ledger = ledg
+	h.Approval = aw
+	h.Compliance = compliance.NewReporter(ledg)
+	h.AsyncScorer = as
+	h.Scorer = sc
+	h.Sanitizer = scoring.NewSanitizer()
+	h.Aggregator = scoring.NewAggregator()
+	h.Hallucination = hallucination.NewHallucinationDetector(map[int]float64{0: 1.0}, 2.0, 4)
+	h.Shield = steer.NewAdversarialShield(steer.DefaultAdversarialShieldConfig())
+	h.CoT = steer.NewCoTTracker(true)
+	h.Coherence = steer.NewCoherenceTracker(15.0, 20)
+	h.Governor = agent.NewMultiAgentGovernor(0.7)
+	h.MCP = mcp
+	h.Pool = memory.NewPool(1024)
+	h.PolicyDetect = wd
+	h.SemanticGater = policy.NewSemanticGater(nil)
+	h.KillSwitch = ks
+
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux, "static")
+
+	// 1. ScoreActivation
+	scoreReq := httptest.NewRequest(http.MethodPost, "/api/score", strings.NewReader(`{"session_id":"s1","prompt":"ignore previous instructions","activation":[1,0,0,0],"tool_name":"exec_sql","blast_radius":"high"}`))
+	scoreW := httptest.NewRecorder()
+	mux.ServeHTTP(scoreW, scoreReq)
+	if scoreW.Code != http.StatusOK || !strings.Contains(scoreW.Body.String(), `"scores"`) {
+		t.Fatalf("/api/score failed: code=%d body=%s", scoreW.Code, scoreW.Body.String())
+	}
+
+	// 2. SavePolicy JSON threshold update
+	polReq := httptest.NewRequest(http.MethodPost, "/api/policies", strings.NewReader(`{"thresholds":{"deception":0.85}}`))
+	polW := httptest.NewRecorder()
+	mux.ServeHTTP(polW, polReq)
+	if polW.Code != http.StatusOK {
+		t.Fatalf("POST /api/policies failed: %d", polW.Code)
+	}
+
+	// 3. CancelJob
+	cancelReq := httptest.NewRequest(http.MethodPost, "/job/job-cancel-1/cancel", nil)
+	cancelW := httptest.NewRecorder()
+	mux.ServeHTTP(cancelW, cancelReq)
+	if cancelW.Code != http.StatusOK || !strings.Contains(cancelW.Body.String(), "job-cancel-1 cancelled") {
+		t.Fatalf("POST /job/job-cancel-1/cancel failed: %d %s", cancelW.Code, cancelW.Body.String())
+	}
+
+	// 4. Compliance JSON & PDF
+	for _, path := range []string{"/api/compliance/report", "/api/compliance/report?format=pdf"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s failed: %d", path, w.Code)
+		}
+	}
+
+	// 5. Approvals workflow
+	appCreate := httptest.NewRequest(http.MethodPost, "/api/approvals", strings.NewReader(`{"session_id":"s1","reason":"review"}`))
+	appW := httptest.NewRecorder()
+	mux.ServeHTTP(appW, appCreate)
+	if appW.Code != http.StatusOK {
+		t.Fatalf("POST /api/approvals failed: %d", appW.Code)
+	}
+	pending := aw.GetPendingRequests()
+	if len(pending) != 1 {
+		t.Fatalf("expected 1 pending approval, got %d", len(pending))
+	}
+	approveReq := httptest.NewRequest(http.MethodPost, "/api/approvals/"+pending[0].ID+"/approve", nil)
+	approveW := httptest.NewRecorder()
+	mux.ServeHTTP(approveW, approveReq)
+	if approveW.Code != http.StatusOK || !strings.Contains(approveW.Body.String(), "approved") {
+		t.Fatalf("approve failed: %d %s", approveW.Code, approveW.Body.String())
+	}
+
+	// 6. Profiles, Jobs, Alerts CSV, Metrics, Latent refresh
+	for _, path := range []string{"/api/profiles", "/api/jobs", "/api/alerts/export", "/metrics", "/api/model/m1/latent/svg?refresh=1"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("GET %s failed: %d", path, w.Code)
 		}
 	}
 }

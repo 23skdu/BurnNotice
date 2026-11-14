@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/binary"
 	"os"
 	"path/filepath"
 	"strings"
@@ -328,5 +329,151 @@ func TestBurnNotice_FinetuneCmd(t *testing.T) {
 	rootCmd.SetArgs([]string{"finetune", filepath.Join(dir, "missing.json"), "--extended-refusal"})
 	if err := rootCmd.Execute(); err == nil {
 		t.Error("expected error for missing checkpoint")
+	}
+
+	// Rollback verification
+	rootCmd.SetArgs([]string{"finetune", ckptPath, "--extended-refusal", "--high-risk", "--rollback"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("finetune --rollback failed: %v", err)
+	}
+}
+
+func TestBurnNotice_ConvertCmd_Success(t *testing.T) {
+	rootCmd.SetOut(&bytes.Buffer{})
+	rootCmd.SetErr(&bytes.Buffer{})
+
+	modelDir := t.TempDir()
+	outDir := t.TempDir()
+
+	// Build minimal valid safetensors file
+	header := `{"w":{"dtype":"F32","shape":[2,2],"data_offsets":[0,16]}}`
+	buf := make([]byte, 8+len(header)+16)
+	binary.LittleEndian.PutUint64(buf[:8], uint64(len(header)))
+	copy(buf[8:8+len(header)], header)
+
+	if err := os.WriteFile(filepath.Join(modelDir, "model.safetensors"), buf, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	rootCmd.SetArgs([]string{"convert", modelDir, "--output", outDir})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("convert failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(outDir, "model.onnx")); err != nil {
+		t.Fatalf("expected converted model.onnx: %v", err)
+	}
+}
+
+func TestBurnNotice_ProfileCmd_ExtendedFlags(t *testing.T) {
+	rootCmd.SetOut(&bytes.Buffer{})
+	rootCmd.SetErr(&bytes.Buffer{})
+
+	hiddenDim := 16
+	modelBytes, err := createDummyONNXModelForCLI(hiddenDim)
+	if err != nil {
+		t.Fatalf("failed to create dummy model: %v", err)
+	}
+
+	dir := t.TempDir()
+	modelPath := filepath.Join(dir, "model.onnx")
+	if err := os.WriteFile(modelPath, modelBytes, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	datasetJSON := `{"pairs":[
+		{"truthful":{"prompt":"alpha one","response":"yes one"},"deceptive":{"prompt":"beta one","response":"no one"}},
+		{"truthful":{"prompt":"alpha two","response":"yes two"},"deceptive":{"prompt":"beta two","response":"no two"}},
+		{"truthful":{"prompt":"alpha three","response":"yes three"},"deceptive":{"prompt":"beta three","response":"no three"}}
+	]}`
+	datasetPath := filepath.Join(dir, "dataset.json")
+	if err := os.WriteFile(datasetPath, []byte(datasetJSON), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	oversightJSON := `{"pairs":[
+		{"truthful":{"prompt":"monitored","response":"safe"},"deceptive":{"prompt":"deployed","response":"unsafe"}}
+	]}`
+	oversightPath := filepath.Join(dir, "oversight.json")
+	if err := os.WriteFile(oversightPath, []byte(oversightJSON), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	outDir := filepath.Join(dir, "profile_out")
+	ckptFile := filepath.Join(dir, "ckpt.json")
+	telDir := filepath.Join(dir, "telemetry")
+
+	rootCmd.SetArgs([]string{
+		"profile", modelPath,
+		"--dataset", datasetPath,
+		"--oversight-dataset", oversightPath,
+		"--output", outDir,
+		"--layers", "0,1,2",
+		"--inlp",
+		"--rdo",
+		"--cone-analysis",
+		"--commit-window",
+		"--calibrate",
+		"--validate",
+		"--version",
+		"--progressive",
+		"--distributed-nodes", "2",
+		"--checkpoint", ckptFile,
+		"--align-imprint",
+		"--cross-layer",
+		"--separation",
+		"--telemetry-dir", telDir,
+		"--tokenizer", "byte",
+	})
+	if err := rootCmd.Execute(); err != nil {
+		if strings.Contains(err.Error(), "onnxruntime") || strings.Contains(err.Error(), "shared library") {
+			t.Logf("skipping extended profile test: %v", err)
+			return
+		}
+		t.Fatalf("extended profile failed: %v", err)
+	}
+}
+
+func TestBurnNotice_Subcommands_EndToEnd(t *testing.T) {
+	rootCmd.SetOut(&bytes.Buffer{})
+	rootCmd.SetErr(&bytes.Buffer{})
+
+	dir := t.TempDir()
+
+	// eval with default synthetic data and with input file (exercises inspectZJSON)
+	evalPath := filepath.Join(dir, "eval.json")
+	evalJSON := `{"positive":[[1.0,0.2,0.1,0.0],[0.9,0.3,0.2,0.1],[1.1,0.1,0.0,0.2]],"negative":[[-1.0,-0.2,0.1,0.0],[-0.9,-0.3,0.2,-0.1],[-1.1,-0.1,0.0,-0.2]],"base_logits":[[2.0,1.0,0.5]],"steer_logits":[[1.9,1.1,0.5]],"harm_results":[{"prompt_id":"1","category":"cybercrime","baseline_success":true,"steered_success":false,"early_token_shift":0.02}],"pareto_points":[{"strength":0.5,"kl_divergence":0.03,"refusal_rate":0.95}],"pre_scores":{"0":0.8},"post_scores":{"0":0.2},"target_dim":4}`
+	if err := os.WriteFile(evalPath, []byte(evalJSON), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	policyYAML := filepath.Join(dir, "policies.yaml")
+	if err := os.WriteFile(policyYAML, []byte("policies:\n  - name: deception_gate\n    metric: deception\n    threshold: 0.7\n    action: steer\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	evidenceOut := filepath.Join(dir, "evidence")
+	pdfOut := filepath.Join(dir, "compliance.pdf")
+	csvOut := filepath.Join(dir, "alerts.csv")
+	regDir := filepath.Join(dir, "registry")
+
+	commands := [][]string{
+		{"eval"},
+		{"eval", evalPath},
+		{"steer"},
+		{"sae"},
+		{"policy"},
+		{"policy", policyYAML, "--tool", "exec_sql", "--blast-radius", "high", "--deception", "0.8"},
+		{"compliance", "--output", evidenceOut, "--pdf", pdfOut},
+		{"registry", regDir},
+		{"ledger", "--driver", "sqlite", "--export-csv", csvOut},
+		{"agent", "summarize status"},
+		{"runtime"},
+	}
+
+	for _, args := range commands {
+		rootCmd.SetArgs(args)
+		if err := rootCmd.Execute(); err != nil {
+			t.Errorf("command %v failed: %v", args, err)
+		}
 	}
 }

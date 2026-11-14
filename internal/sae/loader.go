@@ -153,7 +153,9 @@ func (l *SAELoader) Decode(features []float64) ([]float64, error) {
 		for j := 0; j < l.weights.FeatureCount; j++ {
 			sum += l.weights.DecoderWeights[j][i] * features[j]
 		}
-		sum += l.weights.DecoderBias[i]
+		if i < len(l.weights.DecoderBias) {
+			sum += l.weights.DecoderBias[i]
+		}
 		reconstructed[i] = sum
 	}
 	return reconstructed, nil
