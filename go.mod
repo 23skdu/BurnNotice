@@ -4,7 +4,7 @@ go 1.27.4
 
 require (
 	github.com/23skdu/longbow v0.2.1-rc3.0.20261106033529-8c74c7d8ee00
-	github.com/a-h/templ v0.3.1100
+	github.com/a-h/templ v0.3.1118
 	github.com/apache/arrow-go/v18 v18.8.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/spf13/cobra v1.10.2
