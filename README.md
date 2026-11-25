@@ -259,3 +259,7 @@ BurnNotice's core algorithms are mathematically audited and verified:
 * **Ridge-Regularized Projection**: Applies dynamic regularization to nullspace projection, preventing excessive token-level KL divergence on benign prompts.
 * **Continuous Direction Interpolation**: Gaussian-weighted kernel blending prevents discontinuous behavioral shifts across concept directions.
 * **Defensive Concurrency**: Verified with Go's race detector to ensure 100% thread safety across the web dashboard, async scoring ring buffers, and policy evaluation engine.
+
+## License
+
+This project is released into the public domain under the [Unlicense](https://unlicense.org). See [LICENSE](LICENSE) for details.
