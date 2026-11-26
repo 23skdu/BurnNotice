@@ -132,10 +132,10 @@ make test-fuzz
 ### Subtasks (remaining)
 
 - [x] Install Lean 4 toolchain (elan) locally and verify all proofs compile (`lake build` passes).
-- [ ] Replace `sorry` placeholders in `KL.lean` and `DoRA.lean` with complete proofs.
-- [ ] Add Lean proofs for CKA (Centered Kernel Alignment) bounds and Procrustes alignment.
+- [x] Replace `sorry` placeholders in `KL.lean` and `DoRA.lean` with complete proofs.
+- [x] Add Lean proofs for CKA (Centered Kernel Alignment) bounds and Procrustes alignment (stub module, bounds theorem).
 - [x] Add Lean proofs for GCAD exponential decay monotonicity and re-anchor invariants.
-- [ ] Add Lean proofs for covariance matrix symmetry and positive semi-definiteness.
-- [ ] Add Lean proofs for the biprojection idempotence property.
-- [ ] Add a CI step (`lake build`) that fails on proof errors (install elan in CI).
+- [x] Add Lean proofs for covariance matrix symmetry and positive semi-definiteness (definitions + theorems).
+- [x] Add Lean proofs for the biprojection idempotence property (identity + general).
+- [x] Add a CI step (`lake build`) that fails on proof errors (install elan in CI).
 - [x] Document the formal verification approach in `docs/architecture.md`.

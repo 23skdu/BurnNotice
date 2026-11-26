@@ -16,14 +16,18 @@ noncomputable def thetaMax : ℝ := 15 * Real.pi / 180
 
 /-- thetaMax is positive. -/
 theorem thetaMax_pos : 0 < thetaMax := by
-  sorry
+  unfold thetaMax
+  apply div_pos
+  · apply mul_pos
+    · norm_num
+    · exact Real.pi_pos
+  · norm_num
 
 /-- Drift is bounded by thetaMax. -/
 theorem drift_bounded (drift : ℝ) (h : drift ≤ thetaMax) : drift ≤ thetaMax := h
 
-/-- Re-anchoring resets drift to zero. -/
-theorem reanchor_resets (drift_after : ℝ) (h : drift_after = 0) :
-    drift_after ≤ thetaMax := by
+/-- Re-anchor resets drift to 0. -/
+theorem reanchor_resets (drift : ℝ) (h : drift = 0) : drift ≤ thetaMax := by
   rw [h]
   exact le_of_lt thetaMax_pos
 

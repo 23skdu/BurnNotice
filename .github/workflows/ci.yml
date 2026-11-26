@@ -67,3 +67,26 @@ jobs:
             benchmark_results.txt
           if-no-files-found: warn
 
+  lean-verification:
+    name: Lean 4 Formal Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install elan
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Install Lean toolchain
+        run: |
+          cd lean
+          elan toolchain install "$(cat lean-toolchain)"
+          lake update
+
+      - name: Build proofs
+        run: |
+          cd lean
+          lake build
+
