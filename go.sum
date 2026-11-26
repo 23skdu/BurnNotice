@@ -1,5 +1,7 @@
 cloud.google.com/go/compute/metadata v0.10.0 h1:pyKMUQSwchgkIBBJGdILqQbs/BNJXqwSA7Ej6LAvvtY=
 cloud.google.com/go/compute/metadata v0.10.0/go.mod h1:rGFHRrIif570kSibjFTMbt6/4/tzgJWFGI/HVol4GIk=
+github.com/23skdu/longbow v0.2.7-0.20261125071058-55506f81782b h1:enRqAGWrJfoO4h11tI5LUb0boWtXdbvAZzghhmIjzZI=
+github.com/23skdu/longbow v0.2.7-0.20261125071058-55506f81782b/go.mod h1:8OYwoaR3unl0mLUoGaVPrmiv5cfqt8eB4Zq9ZsElYqU=
 github.com/a-h/templ v0.3.1118 h1:rZv90g1xVb7ieNz4j5WK6yQePZfsg7j7fVvP8qVmeJI=
 github.com/a-h/templ v0.3.1118/go.mod h1:ttKggixbDULrwkJzfEO5fa4IPGTKiRt3qP09zjPuCS4=
 github.com/andybalholm/brotli v1.3.0 h1:IdkhjSe/+34U+fP7FSR2Q6Poj1hnHUa2GoWmzXJd6qY=

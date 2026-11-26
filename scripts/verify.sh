@@ -62,6 +62,9 @@ fi
 echo "==> unit tests"
 go test ./...
 
+echo "==> coverage gate"
+bash scripts/coverage-gate.sh /tmp/burnnotice-coverage-gate.out
+
 echo "==> race tests"
 go test -race ./...
 

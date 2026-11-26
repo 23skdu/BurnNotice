@@ -208,6 +208,11 @@ test-coverage: ## Generate coverage profile and HTML report
 	$(GO) tool cover -html=$(COVER_FILE) -o $(COVER_HTML)
 	@echo -e "$(COLOR_GREEN)Coverage report: $(COVER_HTML)$(COLOR_RESET)"
 
+test-coverage-gate: ## Enforce per-package statement coverage floors
+	@echo -e "$(COLOR_CYAN)Running coverage gate...$(COLOR_RESET)"
+	@bash scripts/coverage-gate.sh /tmp/burnnotice-coverage-gate.out
+	@echo -e "$(COLOR_GREEN)Coverage gate passed.$(COLOR_RESET)"
+
 test-bench: ## Run Go benchmarks with allocation reporting
 	$(GO) test -bench=. -benchmem ./...
 

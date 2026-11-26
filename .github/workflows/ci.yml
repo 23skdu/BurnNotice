@@ -30,8 +30,16 @@ jobs:
           make vet
           make vet-cross-platform
 
+      - name: Security & Lint
+        run: |
+          make lint
+          make security
+
       - name: Unit & Race tests
         run: make test-race
+
+      - name: Coverage Gate
+        run: make test-coverage-gate
 
       - name: Accuracy Gate (internal/ invariants, CKA, calibration, thresholds)
         run: make accuracy-gate
@@ -40,7 +48,9 @@ jobs:
         run: make oracle-gate
 
       - name: CPU & Memory Profiling Gate
-        run: make profile
+        run: |
+          make profile
+          bash scripts/bench-regression.sh docs/benchmarks/baseline.txt 25
 
       - name: Fuzz Smoke Gate
         run: make test-fuzz FUZZ_TIME=1

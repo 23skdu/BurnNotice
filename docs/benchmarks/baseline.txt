@@ -1,0 +1,35 @@
+# BurnNotice performance baseline
+# Generated: 2026-11-26T19:18:18Z
+# Go: go version go1.27.4 linux/amd64
+# CPU: model name	: 12th Gen Intel(R) Core(TM) i7-12650H
+# Commit: 9b79966
+# Benchtime: 5s
+
+BenchmarkScorer_Score-16                        	  822350	      7589 ns/op	     256 B/op	       2 allocs/op
+BenchmarkScorer_ScoreWithNoise-16               	  120240	     49371 ns/op	     256 B/op	       2 allocs/op
+BenchmarkScorer_SubspaceScore-16                	 3269143	      1814 ns/op	       0 B/op	       0 allocs/op
+BenchmarkAsyncScorer_PushActivation-16          	 2962698	      2189 ns/op	     255 B/op	       1 allocs/op
+BenchmarkAsyncScorer_PushActivationPooled-16    	 2208933	      2920 ns/op	     308 B/op	       2 allocs/op
+BenchmarkNormalize-16                           	  462498	     12761 ns/op	   32768 B/op	       1 allocs/op
+BenchmarkDot-16                                 	 6883154	       889.7 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSigmoid-16                             	1000000000	         5.578 ns/op	       0 B/op	       0 allocs/op
+ok  	burnnotice/internal/scoring	61.605s
+BenchmarkActAdd-16                                   	 1000000	      5234 ns/op	   32768 B/op	       1 allocs/op
+BenchmarkAngular-16                                  	  192271	     32295 ns/op	   98304 B/op	       3 allocs/op
+BenchmarkAblate-16                                   	  639163	      9965 ns/op	   32768 B/op	       1 allocs/op
+BenchmarkNormPreservingAblation-16                   	  315630	     19264 ns/op	   65536 B/op	       2 allocs/op
+BenchmarkBiprojectedAblation-16                      	  204045	     29523 ns/op	   65537 B/op	       2 allocs/op
+BenchmarkGCADApply-16                                	  763273	      7741 ns/op	   32768 B/op	       1 allocs/op
+BenchmarkGCADApplyInPlace-16                         	 1227787	      4855 ns/op	       0 B/op	       0 allocs/op
+BenchmarkKVCacheAccumulationTracker_RecordTurn-16    	  557326	     11437 ns/op	     358 B/op	       0 allocs/op
+BenchmarkDispatcher_Apply-16                         	  262819	     32167 ns/op	   49153 B/op	       1 allocs/op
+BenchmarkSelectiveSteerer_ComputeSteering-16         	  766148	      7776 ns/op	       0 B/op	       0 allocs/op
+BenchmarkLoRASteerer_ApplyLoRA-16                    	      24	 250967863 ns/op	268632073 B/op	    8194 allocs/op
+BenchmarkCrescendoDetector_StepTurn-16               	  343094	     19012 ns/op	    8785 B/op	       2 allocs/op
+BenchmarkExtendedRefusalFineTuner_HardenLayer-16     	   87490	     59834 ns/op	   51513 B/op	     162 allocs/op
+BenchmarkCASTLatency-16                              	  887068	      6989 ns/op	       0 B/op	       0 allocs/op
+ok  	burnnotice/internal/steer	86.928s
+BenchmarkRidgeRegularizedProjection-16    	   64996	     94545 ns/op	   33216 B/op	      11 allocs/op
+BenchmarkWinsorize-16                     	  308616	     19819 ns/op	   98304 B/op	       3 allocs/op
+BenchmarkShrinkageCovariance-16           	   27237	    218305 ns/op	   86912 B/op	     164 allocs/op
+ok  	burnnotice/internal/math	21.571s

@@ -240,21 +240,34 @@ func (d *decoder) decodeObjectToMap(rv reflect.Value) error {
 		}
 
 		// Parse key
-		keyStart := d.pos
 		if d.src[d.pos] != '"' {
 			return &SyntaxError{Offset: d.pos, Msg: "expected string key"}
 		}
 		d.pos++
 		keyRawStart := d.pos
 
-		// Fast key parsing (no escapes expected in keys)
+		// Fast key parsing, handling escape sequences inline.
+		hasEscape := false
 		for d.pos < len(d.src) {
 			if d.src[d.pos] == '"' {
 				break
 			}
 			if d.src[d.pos] == '\\' {
-				// Slow path for escaped keys
-				return d.decodeEscapedKey(rv, keyStart, keyType, elemType)
+				hasEscape = true
+				d.pos++ // skip backslash
+				if d.pos >= len(d.src) {
+					return &SyntaxError{Offset: d.pos, Msg: "unterminated string key"}
+				}
+				if d.src[d.pos] == 'u' {
+					d.pos++ // skip 'u'
+					if d.pos+4 > len(d.src) {
+						return &SyntaxError{Offset: d.pos, Msg: "invalid unicode escape"}
+					}
+					d.pos += 4 // skip 4 hex digits
+				} else {
+					d.pos++ // skip escaped char
+				}
+				continue
 			}
 			d.pos++
 		}
@@ -263,7 +276,16 @@ func (d *decoder) decodeObjectToMap(rv reflect.Value) error {
 			return &SyntaxError{Offset: d.pos, Msg: "unterminated string key"}
 		}
 
-		keyStr := Mem2Str(d.src[keyRawStart:d.pos])
+		rawKey := d.src[keyRawStart:d.pos]
+		var keyStr string
+		if hasEscape {
+			buf := GetBuf()
+			defer PutBuf(buf, DefaultConfig.MaxBufferSize)
+			n := Unescape(*buf, rawKey)
+			keyStr = string((*buf)[:n])
+		} else {
+			keyStr = Mem2Str(rawKey)
+		}
 		d.pos++ // skip closing quote
 
 		d.skipWhitespace()
@@ -298,49 +320,6 @@ func (d *decoder) decodeObjectToMap(rv reflect.Value) error {
 		}
 		d.pos++
 	}
-}
-
-// decodeEscapedKey handles the slow path for keys with escape sequences.
-func (d *decoder) decodeEscapedKey(rv reflect.Value, keyStart int, keyType, elemType reflect.Type) error {
-	// Reset and re-parse with escape handling
-	d.pos = keyStart
-	var keyStr string
-	if err := d.decodeString(reflect.ValueOf(&keyStr).Elem()); err != nil {
-		return err
-	}
-
-	d.skipWhitespace()
-	if d.pos >= len(d.src) || d.src[d.pos] != ':' {
-		return &SyntaxError{Offset: d.pos, Msg: "expected ':'"}
-	}
-	d.pos++
-
-	keyVal := reflect.New(keyType).Elem()
-	if err := setMapKey(keyVal, keyStr); err != nil {
-		return err
-	}
-
-	elemVal := reflect.New(elemType).Elem()
-	if err := d.decodeValue(elemVal); err != nil {
-		return err
-	}
-
-	rv.SetMapIndex(keyVal, elemVal)
-
-	d.skipWhitespace()
-	if d.pos >= len(d.src) {
-		return &SyntaxError{Offset: d.pos, Msg: "unterminated object"}
-	}
-	if d.src[d.pos] == '}' {
-		d.pos++
-		return nil
-	}
-	if d.src[d.pos] != ',' {
-		return &SyntaxError{Offset: d.pos, Msg: "expected ',' or '}'"}
-	}
-	d.pos++
-
-	return nil
 }
 
 func setMapKey(keyVal reflect.Value, keyStr string) error {
@@ -414,13 +393,27 @@ func (d *decoder) decodeObjectToStruct(rv reflect.Value) error {
 		d.pos++
 		keyRawStart := d.pos
 
+		hasEscape := false
 		for d.pos < len(d.src) {
 			if d.src[d.pos] == '"' {
 				break
 			}
 			if d.src[d.pos] == '\\' {
-				// Slow path for escaped keys
-				return d.decodeEscapedStructKey(rv, fieldIndex)
+				hasEscape = true
+				d.pos++ // skip backslash
+				if d.pos >= len(d.src) {
+					return &SyntaxError{Offset: d.pos, Msg: "unterminated string key"}
+				}
+				if d.src[d.pos] == 'u' {
+					d.pos++
+					if d.pos+4 > len(d.src) {
+						return &SyntaxError{Offset: d.pos, Msg: "invalid unicode escape"}
+					}
+					d.pos += 4
+				} else {
+					d.pos++
+				}
+				continue
 			}
 			d.pos++
 		}
@@ -429,7 +422,16 @@ func (d *decoder) decodeObjectToStruct(rv reflect.Value) error {
 			return &SyntaxError{Offset: d.pos, Msg: "unterminated string key"}
 		}
 
-		keyStr := Mem2Str(d.src[keyRawStart:d.pos])
+		rawKey := d.src[keyRawStart:d.pos]
+		var keyStr string
+		if hasEscape {
+			buf := GetBuf()
+			defer PutBuf(buf, DefaultConfig.MaxBufferSize)
+			n := Unescape(*buf, rawKey)
+			keyStr = string((*buf)[:n])
+		} else {
+			keyStr = Mem2Str(rawKey)
+		}
 		d.pos++ // skip closing quote
 
 		d.skipWhitespace()
@@ -466,53 +468,6 @@ func (d *decoder) decodeObjectToStruct(rv reflect.Value) error {
 	}
 }
 
-// decodeEscapedStructKey handles escaped keys in struct decoding.
-func (d *decoder) decodeEscapedStructKey(rv reflect.Value, fieldIndex map[string]int) error {
-	// Reset and re-parse
-	start := d.pos
-	for d.pos > 0 && d.src[d.pos-1] != '"' {
-		d.pos--
-	}
-	d.pos-- // back to opening quote
-
-	var keyStr string
-	if err := d.decodeString(reflect.ValueOf(&keyStr).Elem()); err != nil {
-		return err
-	}
-
-	d.skipWhitespace()
-	if d.pos >= len(d.src) || d.src[d.pos] != ':' {
-		return &SyntaxError{Offset: d.pos, Msg: "expected ':'"}
-	}
-	d.pos++
-
-	if idx, ok := fieldIndex[keyStr]; ok {
-		fieldVal := rv.Field(idx)
-		if err := d.decodeValue(fieldVal); err != nil {
-			return err
-		}
-	} else {
-		if err := d.skipValue(); err != nil {
-			return err
-		}
-	}
-
-	d.skipWhitespace()
-	if d.pos >= len(d.src) {
-		return &SyntaxError{Offset: d.pos, Msg: "unterminated object"}
-	}
-	if d.src[d.pos] == '}' {
-		d.pos++
-		return nil
-	}
-	if d.src[d.pos] != ',' {
-		return &SyntaxError{Offset: d.pos, Msg: "expected ',' or '}'"}
-	}
-	d.pos++
-	_ = start
-	return nil
-}
-
 // decodeObjectToInterface decodes a JSON object into map[string]any.
 func (d *decoder) decodeObjectToInterface(rv reflect.Value) error {
 	result := make(map[string]any)
@@ -547,12 +502,27 @@ func (d *decoder) decodeObjectToMapAny(result map[string]any) error {
 		d.pos++
 		keyRawStart := d.pos
 
+		hasEscape := false
 		for d.pos < len(d.src) {
 			if d.src[d.pos] == '"' {
 				break
 			}
 			if d.src[d.pos] == '\\' {
-				return d.decodeEscapedMapAnyKey(result)
+				hasEscape = true
+				d.pos++
+				if d.pos >= len(d.src) {
+					return &SyntaxError{Offset: d.pos, Msg: "unterminated string key"}
+				}
+				if d.src[d.pos] == 'u' {
+					d.pos++
+					if d.pos+4 > len(d.src) {
+						return &SyntaxError{Offset: d.pos, Msg: "invalid unicode escape"}
+					}
+					d.pos += 4
+				} else {
+					d.pos++
+				}
+				continue
 			}
 			d.pos++
 		}
@@ -561,7 +531,16 @@ func (d *decoder) decodeObjectToMapAny(result map[string]any) error {
 			return &SyntaxError{Offset: d.pos, Msg: "unterminated string key"}
 		}
 
-		keyStr := Mem2Str(d.src[keyRawStart:d.pos])
+		rawKey := d.src[keyRawStart:d.pos]
+		var keyStr string
+		if hasEscape {
+			buf := GetBuf()
+			defer PutBuf(buf, DefaultConfig.MaxBufferSize)
+			n := Unescape(*buf, rawKey)
+			keyStr = string((*buf)[:n])
+		} else {
+			keyStr = Mem2Str(rawKey)
+		}
 		d.pos++
 
 		d.skipWhitespace()
@@ -590,46 +569,6 @@ func (d *decoder) decodeObjectToMapAny(result map[string]any) error {
 		}
 		d.pos++
 	}
-}
-
-// decodeEscapedMapAnyKey handles escaped keys in map[string]any decoding.
-func (d *decoder) decodeEscapedMapAnyKey(result map[string]any) error {
-	// Reset and re-parse
-	for d.pos > 0 && d.src[d.pos-1] != '"' {
-		d.pos--
-	}
-	d.pos--
-
-	var keyStr string
-	if err := d.decodeString(reflect.ValueOf(&keyStr).Elem()); err != nil {
-		return err
-	}
-
-	d.skipWhitespace()
-	if d.pos >= len(d.src) || d.src[d.pos] != ':' {
-		return &SyntaxError{Offset: d.pos, Msg: "expected ':'"}
-	}
-	d.pos++
-
-	var val any
-	if err := d.decodeValueAny(&val); err != nil {
-		return err
-	}
-	result[keyStr] = val
-
-	d.skipWhitespace()
-	if d.pos >= len(d.src) {
-		return &SyntaxError{Offset: d.pos, Msg: "unterminated object"}
-	}
-	if d.src[d.pos] == '}' {
-		d.pos++
-		return nil
-	}
-	if d.src[d.pos] != ',' {
-		return &SyntaxError{Offset: d.pos, Msg: "expected ',' or '}'"}
-	}
-	d.pos++
-	return nil
 }
 
 // decodeArray decodes a JSON array into the given reflect.Value.

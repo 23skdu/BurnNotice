@@ -3,7 +3,7 @@ module burnnotice
 go 1.27.4
 
 require (
-	github.com/23skdu/longbow v0.2.1-rc3.0.20261106033529-8c74c7d8ee00
+	github.com/23skdu/longbow v0.2.7-0.20261125071058-55506f81782b
 	github.com/a-h/templ v0.3.1118
 	github.com/apache/arrow-go/v18 v18.9.0
 	github.com/prometheus/client_golang v1.25.0
@@ -68,7 +68,3 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 )
-
-replace github.com/23skdu/longbow => ../longbow
-
-replace github.com/emlgo/eml => ../emlgo

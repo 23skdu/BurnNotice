@@ -134,7 +134,7 @@ func ValidateONNX(path string) error {
 		return fmt.Errorf("ONNX file not found: %s", path)
 	}
 
-	/* #nosec G304 */
+	/* #nosec G304 -- path is a user-provided CLI artifact to validate */
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("read ONNX file: %w", err)
