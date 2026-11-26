@@ -229,7 +229,7 @@ func (ft *ExtendedRefusalFineTuner) HardenLayer(
 		rawScale = ft.cfg.Strength
 	}
 
-	hardened, baselineKL, mpoaKL, coherence, suppression := evaluateAndScaleDoRA(
+	hardened, baselineKL, mpoaKL, coherence, suppression, finalScale := evaluateAndScaleDoRA(
 		weights, magnitude, B, A, orthoBasis[:rank], bUnit, rawScale, ft.cfg,
 	)
 
@@ -238,7 +238,7 @@ func (ft *ExtendedRefusalFineTuner) HardenLayer(
 		OutDim:             outDim,
 		InDim:              inDim,
 		Rank:               rank,
-		EffectiveScale:     rawScale,
+		EffectiveScale:     finalScale,
 		Magnitude:          magnitude,
 		B:                  B,
 		A:                  A,
@@ -267,17 +267,31 @@ func evaluateAndScaleDoRA(
 	bUnit []float64,
 	initialScale float64,
 	cfg DoRAConfig,
-) (hardened [][]float64, baselineKL, mpoaKL, coherence, suppression float64) {
+) (hardened [][]float64, baselineKL, mpoaKL, coherence, suppression, finalScale float64) {
 	scale := initialScale
 	for attempt := 0; attempt < 6; attempt++ {
 		hardened = composeDoRAWeights(weights, magnitude, B, A, scale)
 		baselineKL, mpoaKL, coherence, suppression = computeDoRAPairingMetrics(weights, hardened, basis, bUnit, scale, cfg.RegAlpha)
 		if baselineKL <= cfg.MaxKLDivergence {
-			break
+			return hardened, baselineKL, mpoaKL, coherence, suppression, scale
 		}
 		scale = AdjustAlphaForKL(scale, baselineKL, cfg.MaxKLDivergence) * 0.90
 	}
-	return hardened, baselineKL, mpoaKL, coherence, suppression
+	// Geometric fallback: AdjustAlphaForKL floors each proportional step at 5% of
+	// the current scale, so the loop above can stall above the KL ceiling on
+	// ill-conditioned weight matrices. Halving the scale guarantees convergence
+	// because scale -> 0 reproduces W_0 exactly (baseline KL = 0).
+	for baselineKL > cfg.MaxKLDivergence && scale > 1e-12 {
+		scale *= 0.5
+		hardened = composeDoRAWeights(weights, magnitude, B, A, scale)
+		baselineKL, mpoaKL, coherence, suppression = computeDoRAPairingMetrics(weights, hardened, basis, bUnit, scale, cfg.RegAlpha)
+	}
+	if baselineKL > cfg.MaxKLDivergence {
+		scale = 0
+		hardened = composeDoRAWeights(weights, magnitude, B, A, scale)
+		baselineKL, mpoaKL, coherence, suppression = computeDoRAPairingMetrics(weights, hardened, basis, bUnit, scale, cfg.RegAlpha)
+	}
+	return hardened, baselineKL, mpoaKL, coherence, suppression, scale
 }
 
 // composeDoRAWeights computes W_DoRA[i] = m[i] * (W_0[i] + scale * sum_k B[i][k]*A[k]) / ||W_0[i] + scale * sum_k B[i][k]*A[k]||_2.

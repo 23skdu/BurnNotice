@@ -2,6 +2,7 @@ package converter
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 
@@ -97,7 +98,10 @@ func serializeONNXModel(tensors []Tensor, opts Options) ([]byte, error) {
 			RawData:  t.Data,
 		}
 		for i, d := range t.Shape {
-			/* #nosec G115 */
+			if d > math.MaxInt64 {
+				return nil, fmt.Errorf("tensor %q dimension %d exceeds int64 range", t.Name, d)
+			}
+			/* #nosec G115 -- bounds checked above */
 			tensorProto.Dims[i] = int64(d)
 		}
 		model.Graph.Initializer = append(model.Graph.Initializer, tensorProto)

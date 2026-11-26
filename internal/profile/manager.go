@@ -34,13 +34,16 @@ type Job struct {
 	Err       error
 	ctx       context.Context
 	cancel    context.CancelFunc
+	cancelled bool
 	mu        sync.Mutex
 }
 
-// Cancel stops the job.
+// Cancel stops the job. Cancellation is sticky: if the job's context has not
+// been created yet (job still queued), it will be created already cancelled.
 func (j *Job) Cancel() {
 	j.mu.Lock()
 	defer j.mu.Unlock()
+	j.cancelled = true
 	if j.cancel != nil {
 		j.cancel()
 	}
@@ -52,6 +55,9 @@ func (j *Job) Context() context.Context {
 	defer j.mu.Unlock()
 	if j.ctx == nil {
 		j.ctx, j.cancel = context.WithCancel(context.Background())
+		if j.cancelled {
+			j.cancel()
+		}
 	}
 	return j.ctx
 }

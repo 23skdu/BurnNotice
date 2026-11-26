@@ -80,7 +80,7 @@ func (s *Scorer) Score(activation []float64) map[string]float64 {
 			pooledPtr = &buf
 		}
 		for i, val := range activation {
-			/* #nosec G404 */
+			/* #nosec G404 -- non-cryptographic Gaussian perturbation for robustness scoring */
 			noise := rand.NormFloat64() * noiseScale
 			workingAct[i] = val + noise
 		}
@@ -100,7 +100,7 @@ func (s *Scorer) Score(activation []float64) map[string]float64 {
 
 	scores := make(map[string]float64, len(dirList))
 	for _, d := range dirList {
-		/* #nosec G404 */
+		/* #nosec G404 -- non-cryptographic probabilistic skip masking, not security-sensitive */
 		if skipRatio > 0 && rand.Float64() < skipRatio {
 			scores[d.name] = 0.5 // Masked baseline score
 			continue

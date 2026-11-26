@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -8,41 +9,18 @@ import (
 
 	"burnnotice/internal/metrics"
 	"burnnotice/internal/onnxpb"
-	"github.com/yalue/onnxruntime_go"
 	"google.golang.org/protobuf/proto"
 )
 
-var (
-	onnxEnvInit sync.Once
-	onnxEnvErr  error
-)
+// errORTUnavailable signals that the native ONNX Runtime backend cannot be used
+// (missing cgo support or failed environment initialization), so createSession
+// falls back to the pure-Go ONNX protobuf session.
+var errORTUnavailable = errors.New("onnxruntime unavailable")
 
 // onnxSession abstracts an active inference session (native ORT or pure-Go ONNX protobuf fallback).
 type onnxSession interface {
 	Run(input []int64, inShape []int64, output []float32, outShape []int64) error
 	Destroy() error
-}
-
-type ortSession struct {
-	s *onnxruntime_go.DynamicAdvancedSession
-}
-
-func (o *ortSession) Run(input []int64, inShape []int64, output []float32, outShape []int64) error {
-	inTensor, err := onnxruntime_go.NewTensor(inShape, input)
-	if err != nil {
-		return fmt.Errorf("create input tensor: %w", err)
-	}
-	defer func() { _ = inTensor.Destroy() }()
-	outTensor, err := onnxruntime_go.NewTensor(outShape, output)
-	if err != nil {
-		return fmt.Errorf("create output tensor: %w", err)
-	}
-	defer func() { _ = outTensor.Destroy() }()
-	return o.s.Run([]onnxruntime_go.ArbitraryTensor{inTensor}, []onnxruntime_go.ArbitraryTensor{outTensor})
-}
-
-func (o *ortSession) Destroy() error {
-	return o.s.Destroy()
 }
 
 type protoSession struct {
@@ -171,28 +149,14 @@ func NewONNXEngine(modelPath string, config ModelConfig) *ONNXEngine {
 }
 
 func (e *ONNXEngine) createSession(outputNames []string) (onnxSession, error) {
-	onnxEnvInit.Do(func() {
-		if !onnxruntime_go.IsInitialized() {
-			libPath := os.Getenv("ONNX_RUNTIME_LIB")
-			if libPath != "" {
-				onnxruntime_go.SetSharedLibraryPath(libPath)
-			}
-			onnxEnvErr = onnxruntime_go.InitializeEnvironment()
-		}
-	})
-	if onnxEnvErr == nil {
-		session, err := onnxruntime_go.NewDynamicAdvancedSession(
-			e.modelPath,
-			e.config.InputNames,
-			outputNames,
-			nil,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("create session: %w", err)
-		}
-		return &ortSession{s: session}, nil
+	session, err := newORTSession(e.modelPath, e.config.InputNames, outputNames)
+	if err == nil {
+		return session, nil
 	}
-	return newProtoSession(e.modelPath, outputNames)
+	if errors.Is(err, errORTUnavailable) {
+		return newProtoSession(e.modelPath, outputNames)
+	}
+	return nil, err
 }
 
 // Load initializes the ONNX Runtime environment and creates an inference session.

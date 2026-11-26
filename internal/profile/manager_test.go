@@ -118,6 +118,48 @@ func TestProfileManager_CancelJob(t *testing.T) {
 	_ = blocker
 }
 
+func TestProfileManager_CancelBeforeContextCreated(t *testing.T) {
+	job := &Job{ID: "early-cancel", ModelID: "m1"}
+
+	// Cancel while the job is still queued: the context does not exist yet.
+	job.Cancel()
+
+	ctx := job.Context()
+	select {
+	case <-ctx.Done():
+		// sticky cancellation applied at context creation
+	case <-time.After(time.Second):
+		t.Fatal("context created after Cancel() must already be cancelled")
+	}
+	if ctx.Err() != context.Canceled {
+		t.Errorf("ctx.Err() = %v, want context.Canceled", ctx.Err())
+	}
+}
+
+func TestProfileManager_CancelImmediatelyAfterSubmit(t *testing.T) {
+	pm := NewManager(1)
+
+	pm.Start(func(job *Job) error {
+		<-job.Context().Done()
+		return job.Context().Err()
+	})
+
+	job := &Job{ID: "cancel-race", ModelID: "m1", Total: 1}
+	pm.Submit(job)
+	job.Cancel() // no sleep: cancellation may beat the worker to Context()
+
+	done := make(chan struct{})
+	go func() {
+		pm.Stop()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stop() hung: cancellation lost when Cancel() races worker startup")
+	}
+}
+
 func TestProfileManager_JobContext(t *testing.T) {
 	job := &Job{ID: "ctx1", ModelID: "m1"}
 

@@ -6,7 +6,10 @@ package native
 #include "kernel.h"
 */
 import "C"
-import "unsafe"
+import (
+	"math"
+	"unsafe"
+)
 
 // GPUEngine handles direct execution of high-performance activation operations on GPU VRAM.
 type GPUEngine struct {
@@ -20,7 +23,8 @@ func NewGPUEngine(dim int) *GPUEngine {
 
 // CosineSimilarity parallelizes activation metric evaluations directly within GPU kernels.
 func (ge *GPUEngine) CosineSimilarity(activation []float32, directions []float32, numDirections int) []float32 {
-	if len(activation) != ge.Dimension || len(directions) != ge.Dimension*numDirections || numDirections <= 0 {
+	if ge.Dimension <= 0 || ge.Dimension > math.MaxInt32 || numDirections <= 0 || numDirections > math.MaxInt32 ||
+		len(activation) != ge.Dimension || len(directions) != ge.Dimension*numDirections {
 		return nil
 	}
 
@@ -42,7 +46,8 @@ func (ge *GPUEngine) CosineSimilarity(activation []float32, directions []float32
 
 // DynamicRotation rotates activation coordinates along Concept manifolds inside inline GPU shader contexts.
 func (ge *GPUEngine) DynamicRotation(activation []float32, direction []float32, theta float32) []float32 {
-	if len(activation) != ge.Dimension || len(direction) != ge.Dimension {
+	if ge.Dimension <= 0 || ge.Dimension > math.MaxInt32 ||
+		len(activation) != ge.Dimension || len(direction) != ge.Dimension {
 		return nil
 	}
 

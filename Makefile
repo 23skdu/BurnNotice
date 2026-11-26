@@ -312,7 +312,8 @@ install-hooks: makehooks ## Alias for makehooks
 install-commit-hook: makehooks ## Alias for makehooks
 
 ##@ Maintenance
-clean: ## Remove build artifacts, coverage, and profiling outputs
+clean: ## Remove build artifacts, coverage, profiling outputs, and Go/test caches
 	@echo -e "$(COLOR_YELLOW)Cleaning...$(COLOR_RESET)"
 	rm -rf $(BIN_DIR) $(DIST_DIR) coverage $(COVER_FILE) $(COVER_HTML) *.out perf-*.out
+	$(GO) clean -cache -testcache
 	@echo -e "$(COLOR_GREEN)Clean complete.$(COLOR_RESET)"

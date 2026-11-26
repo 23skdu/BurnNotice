@@ -168,11 +168,15 @@ func (c *Client) Ingest(ctx context.Context, activations [][]float32, ids []uint
 		return c.Ingest(ctx, activations, ids)
 	}
 
+	if c.dim <= 0 || c.dim > math.MaxInt32 {
+		return fmt.Errorf("embedding dimension %d out of range [1, %d] for Arrow int32 schema", c.dim, math.MaxInt32)
+	}
+
 	pool := memory.NewGoAllocator()
 	schema := arrow.NewSchema(
 		[]arrow.Field{
 			{Name: "id", Type: arrow.PrimitiveTypes.Uint64},
-			/* #nosec G115 */
+			/* #nosec G115 -- bounds checked above */
 			{Name: "embedding", Type: arrow.FixedSizeListOf(int32(c.dim), arrow.PrimitiveTypes.Float32)},
 		},
 		nil,

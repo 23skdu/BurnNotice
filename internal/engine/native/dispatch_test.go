@@ -76,3 +76,14 @@ func TestGPUEngine_DynamicRotation_EdgeCases(t *testing.T) {
 		t.Errorf("expected nil for mismatched direction dimension, got %v", res)
 	}
 }
+
+func TestGPUEngine_ZeroDimension(t *testing.T) {
+	ge := NewGPUEngine(0)
+
+	if res := ge.CosineSimilarity([]float32{}, []float32{}, 1); res != nil {
+		t.Errorf("expected nil for zero dimension, got %v", res)
+	}
+	if res := ge.DynamicRotation([]float32{}, []float32{}, 1.0); res != nil {
+		t.Errorf("expected nil for zero dimension rotation, got %v", res)
+	}
+}
