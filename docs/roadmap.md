@@ -1,93 +1,228 @@
-# BurnNotice Implementation Roadmap: Gap Resolution Plan
+# BurnNotice Implementation Roadmap: 10-Step Improvement Plan
 
-> **Status**: In Progress — Gap Resolution Phase
+> **Status**: In Progress — Improvement Phase
 > **Last Updated**: 2026-11-26
-> **Version**: 0.9.1
-> **Scope**: Resolve verification gaps discovered during the 2026-11-26 audit of the completed v0.8/v0.9 ten-part improvement plan.
+> **Version**: 0.9.2
+> **Scope**: Ten improvement steps identified through gap analysis of the completed v0.8/v0.9 improvement plan and formal verification work.
 
 ---
 
-## Completed Work (Verified & Removed)
+## Gap Analysis Summary (2026-11-26)
 
-The ten-part improvement plan (multi-turn crescendo re-anchoring, DoRA extended-refusal fine-tuning, cross-architecture SAE alignment, performance, accuracy, testing, CI/release, architecture compatibility, adversarial defenses, observability/deployment) was audited on 2026-11-26 and verified fully complete. Its checklist items have been removed from this roadmap. Audit evidence:
-
-| Part | Verified Scope | Evidence |
-| ---- | -------------- | -------- |
-| 1 | Crescendo context re-anchoring | `internal/steer/crescendo.go`, `kvcache.go`; oracle/accuracy/fuzz/race tests green; `GCADApplyInPlace` 0 B/op, 0 allocs/op (~3.1µs) |
-| 2 | DoRA extended-refusal fine-tuning | `internal/steer/dora.go`; `burnnotice finetune --extended-refusal` CLI with all documented flags; `DoRAManifest` in `ReleaseEvidenceBundle` |
-| 3 | Cross-architecture SAE alignment | `internal/sae/loader.go`, `alignment.go`; Gemma Scope / Llama-Scope / Qwen-SAE loaders, absorption diagnostics, CKA/Procrustes alignment; `FamilyEnergyScale` + `IngestFamilyFeatures` integration |
-| 4 | Performance & memory | Scoring hot paths ≤65µs (max observed 35.4µs); pooled scoring; cached thin-SVD; zero-alloc GCAD decay |
-| 5 | Mathematical accuracy & oracles | `make accuracy-gate` and `make oracle-gate` (`-count=2`) green |
-| 6 | Testing scope & concurrency | 76 native fuzz targets across 27 packages; `go test -race ./...` clean |
-| 7 | CI & release quality gates | `scripts/verify.sh` pre-commit gate; `.github/workflows/ci.yml` accuracy/oracle/profiling/fuzz/evidence gates; `make release-evidence` produces `dist/evidence/` |
-| 8 | Architecture compatibility | Family detection/calibration, MoE top-k routing, INT8/FP8 quantization transfer, oversight-ablated profiling |
-| 9 | Adversarial threat model & defenses | Obfuscation probes, steering externalities, alignment-faking, KV contamination, topic confusion, ouroboros compensation, DoRA weight hardening; threat-model table in `docs/architecture.md` |
-| 10 | Observability & deployment | 55 Prometheus metrics + OTLP/HTTP; SSE dashboard + latent-space SVG; `helm lint` clean; scrape config in `helm/burnnotice/values.yaml` |
-
-Defects found and **fixed during the audit** (verified green, no open items):
-
-- **DoRA KL-ceiling enforcement**: `evaluateAndScaleDoRA` could return weights violating `MaxKLDivergence` after 6 proportional scaling attempts (fuzz-discovered). Added a guaranteed geometric fallback and made `EffectiveScale` report the applied scale (`internal/steer/dora.go`); failing input retained as a regression seed in `internal/steer/testdata/fuzz/FuzzDoRAExtendedRefusal/`.
-- **Cross-platform builds**: `make vet-cross-platform` (`CGO_ENABLED=0`) failed because `internal/engine/native` and the ORT bindings were cgo-only. Added a pure-Go kernel fallback (`dispatch_fallback.go`), split ORT behind build tags (`onnx_ort.go` / `onnx_noort.go`) with the existing protobuf-session fallback, and bounds-checked kernel dimensions. All four cross-vet targets now pass.
-- **gosec suppression hygiene**: added explicit bounds checks where `#nosec G115` was unjustified (longbow Arrow schema dimension, ONNX tensor dimensions, native kernel dimensions) and documented the non-cryptographic `G404` sites in `internal/scoring/scorer.go`. gosec reports 0 issues across 112 files.
-- **Job cancellation race**: `profile.Job.Cancel()` silently dropped cancellations issued before the worker lazily created the job context, hanging `Manager.Stop()` and `TestHandlers_WiredRuntimeEndpoints` on fresh (uncached) runs. Cancellation is now sticky (`internal/profile/manager.go`) with deterministic regression tests; cached test results had masked the hang.
+| # | Area | Current State | Gap |
+|---|------|---------------|-----|
+| 1 | Lean proof completeness | 2 `sorry` remain (KL, DoRA now done); CKA/Covariance/Biprojection are stubs | Substantive proofs needed for CKA bounds, covariance PSD construction, biprojection idempotence |
+| 2 | Test coverage | Internal packages 90-95%; cmd/burnnotice 85.8% | Push internal packages to 95%+; improve cmd coverage |
+| 3 | E2E testing | 8 Playwright spec files exist | Never verified running; may have stale selectors or broken flows |
+| 4 | Performance regression | 50% timing tolerance, 10% memory tolerance | Tolerance too loose to catch real regressions; noisy single-run methodology |
+| 5 | Documentation accuracy | Fuzz count says 72 (actual 76); metrics says 50+ (actual 55) | Minor inaccuracies in README/testing.md |
+| 6 | Security hygiene | 56 `#nosec` annotations, some with minimal justification | Reduce suppressions by fixing underlying patterns where possible |
+| 7 | Observability | 55 metrics; no per-layer latency breakdown | Missing granular profiling metrics for steering operations |
+| 8 | Error handling | CLI errors are basic; some paths lack recovery | Improve error messages, add retry logic, better user feedback |
+| 9 | Cross-platform | Metal/CUDA kernels exist but untested in CI | No CI coverage for GPU kernel compilation |
+| 10 | Code quality | 76 fuzz targets; some packages have thin fuzz coverage | Expand fuzz targets for edge cases in scoring, steering, and analysis |
 
 ---
 
-## Gap Analysis (2026-11-26)
+## Step 1 — Complete Lean Proof Placeholders
 
-| # | Gap | Evidence | Impact |
-| - | --- | -------- | ------ |
-| G1 | Statement coverage below the claimed 90% floor | Per-package coverage (generated code excluded): `internal/converter` 82.4%, `internal/registry` 84.6%, `internal/zjson` 85.0%, `cmd/burnnotice` 86.8%, `internal/downloader` 87.2%, `internal/web` 87.0%; repo total 86.6% | Part 6 claim "90%+ across all 26 core packages" was not satisfied; untested error paths in six packages |
-| G2 | No coverage gate in CI | `.github/workflows/ci.yml` has no coverage step or threshold | Part 6 acceptance criterion "coverage gates enforced in CI" unmet; coverage can regress silently |
-| G3 | Performance baselines not reproducible from the repo | `benchmark_results.txt` is gitignored and absent from the checkout; CI uploads it as an artifact but nothing committed exists to compare against | Part 4 acceptance criterion "no regression vs. stored baselines" cannot be evaluated |
-| G4 | Module graph not portable | `go.mod` contains `replace github.com/23skdu/longbow => ../longbow`; CI has no sibling checkout; the local sibling is 268 commits ahead of the pinned pseudo-version `v0.2.1-rc3.0.20261106033529-8c74c7d8ee00` | Fresh clones and CI cannot resolve the module; CI build gates are broken for anyone without the sibling repo |
-| G5 | Security/lint scanning only runs locally | gosec, govulncheck, and golangci-lint run in `scripts/verify.sh` (pre-commit) but not in `ci.yml` | Gates are bypassable with `git commit --no-verify`; no server-side enforcement |
+**Goal**: Eliminate all `sorry` placeholders and strengthen stub proofs into substantive theorems.
+
+- [x] `KL.lean`: Complete Gibbs' inequality proof via `log(x) ≤ x - 1`.
+- [x] `DoRA.lean`: Complete row-norm preservation via scaling lemma.
+- [ ] `CKA.lean`: Prove CKA ∈ [0,1] from Cauchy-Schwarz and centering properties (not just restate hypothesis).
+- [ ] `Covariance.lean`: Prove covariance matrix is symmetric and PSD from definition (not just restate).
+- [ ] `Biprojection.lean`: Prove biprojection idempotence from orthogonal projection properties.
+- [ ] `Softmax.lean`: Complete hdenom positivity proof (sum of exponentials > 0).
+- [ ] Add proofs for GCAD exponential decay monotonicity (already partially done, tighten).
+- [ ] Add proofs for CKA (Centered Kernel Alignment) tightness: CKA = 1 iff linearly dependent.
+- [ ] Add proofs for Procrustes alignment optimality.
+- [ ] Verify `lake build` passes with zero `sorry` and zero warnings.
+
+**Acceptance criteria**: `lake build` reports 0 `sorry` warnings; all theorems are substantive (not tautological).
 
 ---
 
-## Step 1 — Restore ≥90% Coverage in Lagging Packages (resolves G1)
+## Step 2 — Push Test Coverage to 95%+
 
-- [x] `internal/converter` (82.4% -> 96.1%): added ONNX serialization/validation/parse error-path and bounds-check tests (`internal/converter/onnx_test.go`).
-- [x] `internal/registry` (84.6% -> 100.0%): added Scan/Get/Delete edge-case tests including corrupt profiles, unreadable dirs, and missing profile dirs (`internal/registry/scan_test.go`).
-- [x] `internal/zjson` (85.0% -> 90.0%): added AST/decode/encode/token coverage tests; fixed a real bug where escaped keys dropped subsequent keys (`internal/zjson/coverage_test.go`, `coverage_extra_test.go`, `token_cov_test.go`).
-- [~] `cmd/burnnotice` (86.8% -> 85.8% excluding `main.go`): remaining gap is concentrated in untestable `main()` (0%) and scattered CLI error branches; Step 2 sets a dedicated 85% floor for `cmd/*` (excluding `main.go`) instead of the 90% internal floor.
-- [x] `internal/downloader` (87.2% -> 91.0%): added resume/range, 404, auth, and mkdir-failure tests (`internal/downloader/coverage_test.go`).
-- [x] `internal/web` (87.0% -> 90.0%): added nil-dependency, write-error, and dependency-set handler tests (`internal/web/coverage_test.go`).
-- [x] Re-run `go test -coverprofile`; every internal package is now >=90% (generated `internal/onnxpb` and `templates` exempt; `cmd/*` uses an 85% floor).
+**Goal**: Raise internal package coverage from ~90-94% to 95%+ by covering remaining error branches.
 
-## Step 2 — Enforce Coverage Gates in CI (resolves G2)
+- [ ] `internal/steer` (93.9%): cover error paths in MPOA, biprojection, GCAD decay, and crescendo detector.
+- [ ] `internal/analysis` (93.1%): cover CKA computation, concept cone SVD, and ouroboros edge cases.
+- [ ] `internal/scoring` (92.8%): cover async scorer error paths, pooled buffer reuse, and noise injection.
+- [ ] `internal/sae` (92.4%): cover loader error paths, absorption diagnostics edge cases.
+- [ ] `internal/engine` (91.8%): cover MoE routing edge cases, ONNX session fallback.
+- [ ] `internal/extract` (92.3%): cover transfer learning and direction extraction error paths.
+- [ ] `internal/agent` (91.8%): cover middleware, governor, and MCP integration error paths.
+- [ ] `internal/wasm` (92.1%): cover WASM policy evaluation error paths.
+- [ ] `internal/longbow` (91.8%): cover fallback mode, query, and search error paths.
+- [ ] `internal/policy` (90.1%): cover OPA evaluation, semantic gating, and kill switch error paths.
+- [ ] `internal/profiler` (90.4%): cover manager edge cases, job cancellation, and oversight profiling.
+- [ ] `internal/web` (91.7%): cover remaining handler error paths and SSE edge cases.
+- [ ] `internal/zjson` (90.0%): cover token parser edge cases and encode error paths.
+- [ ] `cmd/burnnotice` (85.8%): cover CLI command error branches and flag validation.
+- [ ] Raise coverage gate thresholds to 95% for internal packages.
 
-- [x] Add a `make test-coverage-gate` target computing per-package statement coverage with a >=90% floor for `internal/*`, an 89% floor for `internal/web` (unreachable JSON-marshal fallback branches), and an 85% floor for `cmd/*` (excluding generated packages `internal/onnxpb`, `templates`, and untestable `main.go`), enforcing the G1 resolution (`scripts/coverage-gate.sh`).
-- [x] Wire the coverage gate into `scripts/verify.sh`.
-- [x] Add a coverage step to `.github/workflows/ci.yml` and upload the coverage profile as an artifact.
-- [x] Document the gate and exemptions in `docs/testing.md`.
+**Acceptance criteria**: All internal packages ≥95%; cmd/burnnotice ≥90%; coverage gate updated.
 
-## Step 3 — Commit Reproducible Performance Baselines (resolves G3)
+---
 
-- [x] Generate fresh baselines via `make profile` on reference hardware; store a committed copy (`docs/benchmarks/baseline.txt`) annotated with CPU model, Go version, and commit SHA.
-- [x] Update `.gitignore` and the Makefile `profile-cpu`/`profile-mem` targets so the committed baseline path is tracked while local scratch outputs remain ignored.
-- [x] Add `scripts/bench-regression.sh` comparing a current benchmark run against the committed baseline with a documented tolerance (default 50% ns/op; hard-fails on allocation regressions).
-- [x] Wire the regression check into the CI profiling gate.
+## Step 3 — E2E Test Verification and Repair
 
-## Step 4 — Make the Module Graph Portable (resolves G4)
+**Goal**: Run Playwright E2E tests, fix broken selectors/flows, and add coverage for new features.
 
-- [x] Decide strategy: publish/tag `23skdu/longbow` at the commit BurnNotice requires (and use the published `23skdu/emlgo` module), dropping the local `replace` directives.
-- [x] Bump `go.mod` requirement to `github.com/23skdu/longbow v0.2.7-0.20261125071058-55506f81782b`, remove both `replace` directives, run `go mod tidy` (adds `github.com/23skdu/emlgo v0.9.0`).
-- [x] Verify `go build ./...` and `go test ./internal/longbow ./internal/engine/...` resolve entirely from the module cache (no `../longbow` or `../emlgo`).
-- [x] Verify a fresh `git clone` into a clean directory builds without sibling repos (run in CI after merge).
+- [ ] Install Playwright browsers and dependencies (`npm ci` in `e2e/`).
+- [ ] Run `npx playwright test` and identify failures.
+- [ ] Fix broken selectors in `dashboard.spec.ts` (SSE updates, latent space SVG).
+- [ ] Fix broken selectors in `profiler.spec.ts` (job submission, cancellation).
+- [ ] Fix broken selectors in `monitor.spec.ts` (real-time score updates).
+- [ ] Fix broken selectors in `alerts.spec.ts` (CSV export, alert filtering).
+- [ ] Fix broken selectors in `policies.spec.ts` (threshold updates, OPA rules).
+- [ ] Fix broken selectors in `visualizations.spec.ts` (SVG rendering, heatmap).
+- [ ] Fix broken selectors in `navigation.spec.ts` (routing, deep links).
+- [ ] Fix broken selectors in `model-profile.spec.ts` (profile detail, latent space).
+- [ ] Add E2E tests for DoRA fine-tuning CLI output.
+- [ ] Add E2E tests for crescendo detection dashboard indicators.
+- [ ] Add E2E tests for SAE feature absorption visualization.
+- [ ] Add E2E test step to CI workflow (with browser caching).
+- [ ] Document E2E test setup in `docs/testing.md`.
 
-## Step 5 — Run Security & Lint Gates in CI (resolves G5)
+**Acceptance criteria**: All 8+ spec files pass; E2E gate in CI; no flaky tests.
 
-- [x] Add a `golangci-lint` step to `.github/workflows/ci.yml` (via `make lint` in the Security & Lint job).
-- [x] Add a `gosec` step that fails on any reported issue; keep `#nosec` suppressions justified and bounds-checked (via `make security`).
-- [x] Add a `govulncheck` step against the Go vulnerability database (via `make security`).
-- [x] Confirm the full CI workflow is green end-to-end on a pull request (all steps validated locally: `make lint`, `make security`, `make vet-cross-platform`, `make test-coverage-gate`, `make profile` + `scripts/bench-regression.sh`, `make test-race`, `make accuracy-gate`, `make oracle-gate`, `make release-evidence`; YAML validated).
+---
 
-## Step 6 — Sustained Fuzz Hardening (post-fix verification)
+## Step 4 — Performance Regression Tightening
 
-- [x] Run extended fuzz campaigns (5 min/target) on `FuzzDoRAExtendedRefusal`, `FuzzCrescendoReAnchoring`, and `FuzzSAEFeatureAbsorptionAndAlignment` — all passed (0 failures; ~6.6M executions on DoRA).
-- [x] Retain the DoRA KL-ceiling regression seed (`internal/steer/testdata/fuzz/FuzzDoRAExtendedRefusal/2e473a76537f3881`) and commit any newly discovered failing seeds as regressions (none found).
-- [x] Fix any invariant violations surfaced and re-run the accuracy/oracle gates (no violations found).
+**Goal**: Reduce false positives/negatives in benchmark regression detection.
+
+- [ ] Run benchmarks 3x and take median instead of single run.
+- [ ] Reduce timing tolerance from 50% to 15% using median of 3 runs.
+- [ ] Add allocation count regression as hard gate (already done, verify).
+- [ ] Add memory (B/op) regression as hard gate with 10% tolerance.
+- [ ] Pin CPU governor to performance mode in CI for stable benchmarks.
+- [ ] Add benchmark result comparison to PR comments (GitHub Actions).
+- [ ] Document rebaseline procedure in `docs/testing.md`.
+- [ ] Add `make bench-regression` target.
+- [ ] Verify no false positives over 5 consecutive runs.
+
+**Acceptance criteria**: Bench-regression passes consistently; tolerance tightened to 15%.
+
+---
+
+## Step 5 — Documentation Accuracy
+
+**Goal**: Fix all documentation inaccuracies and keep docs in sync with code.
+
+- [ ] Update README.md fuzz count: 72 → 76 targets, 25 → 27 packages.
+- [ ] Update README.md metrics count: 50+ → 55+.
+- [ ] Update testing.md mermaid diagram fuzz count.
+- [ ] Update testing.md coverage claims to reflect actual per-package numbers.
+- [ ] Add `docs/formalproof.md` reference to README documentation table (done).
+- [ ] Verify all file paths referenced in docs exist.
+- [ ] Verify all CLI flags documented match `cmd/burnnotice/main.go`.
+- [ ] Verify all metrics documented match `internal/metrics/metrics.go`.
+- [ ] Add changelog entry for v0.9.2 improvements.
+- [ ] Run markdownlint on all docs and fix violations.
+
+**Acceptance criteria**: All documentation accurate; markdownlint clean (except pre-existing).
+
+---
+
+## Step 6 — Security Hardening
+
+**Goal**: Reduce `#nosec` suppressions by fixing underlying patterns.
+
+- [ ] Audit all 56 `#nosec` annotations for necessity.
+- [ ] Replace `math/rand` with `math/rand/v2` in scoring (already v2, verify usage).
+- [ ] Add input validation for G115 conversion sites (longbow, converter, native).
+- [ ] Add path traversal checks for G304 file read sites.
+- [ ] Add integer overflow checks for G115 tensor dimension conversions.
+- [ ] Reduce G103 (unsafe) suppressions by using safe alternatives where possible.
+- [ ] Add `#nosec` justification comments where suppression is truly necessary.
+- [ ] Run gosec with `--confidence=high` and fix all high-confidence issues.
+- [ ] Add security-focused fuzz targets for file I/O and path handling.
+- [ ] Document security model in `docs/architecture.md`.
+
+**Acceptance criteria**: gosec reports 0 issues; nosec count reduced by ≥25%.
+
+---
+
+## Step 7 — Observability Enhancement
+
+**Goal**: Add granular profiling metrics for steering and scoring operations.
+
+- [ ] Add per-layer scoring latency histogram (`burnnotice_scoring_layer_duration_seconds`).
+- [ ] Add per-layer steering intervention latency histogram.
+- [ ] Add GCAD decay computation latency metric.
+- [ ] Add crescendo detector step latency metric.
+- [ ] Add DoRA hardening pass duration metric.
+- [ ] Add SAE feature extraction latency metric.
+- [ ] Add KV-cache re-anchor latency metric.
+- [ ] Add metric for number of active SSE connections (already exists, verify).
+- [ ] Add metric for profile manager queue depth.
+- [ ] Update Grafana dashboard with new metrics.
+- [ ] Update `docs/metrics.md` with new metric descriptions.
+
+**Acceptance criteria**: 65+ metrics; Grafana dashboard updated.
+
+---
+
+## Step 8 — Error Handling and Resilience
+
+**Goal**: Improve CLI error messages, add retry logic, and better user feedback.
+
+- [ ] Add retry logic with exponential backoff for network operations (downloader).
+- [ ] Add retry logic for ONNX Runtime initialization failures.
+- [ ] Improve CLI error messages with actionable suggestions.
+- [ ] Add `--verbose` flag for detailed error output.
+- [ ] Add graceful degradation when OPA sidecar is unavailable.
+- [ ] Add graceful degradation when Longbow mesh is unreachable.
+- [ ] Add timeout configuration for all network operations.
+- [ ] Add circuit breaker for repeated failures.
+- [ ] Add structured error types with error codes.
+- [ ] Add error recovery documentation in `docs/cli.md`.
+
+**Acceptance criteria**: All network operations have retry + timeout; error messages are actionable.
+
+---
+
+## Step 9 — Cross-Platform GPU Support
+
+**Goal**: Improve Metal/CUDA kernel compilation and testing in CI.
+
+- [ ] Add macOS (Metal) build target to CI (GitHub Actions macOS runner).
+- [ ] Add CUDA kernel compilation check (nvcc) in CI (with GPU runner or mock).
+- [ ] Add Metal shader compilation check (xcrun) in CI.
+- [ ] Add cross-platform test matrix (linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64).
+- [ ] Add GPU kernel unit tests (CPU fallback verification).
+- [ ] Document GPU setup requirements in `docs/architecture.md`.
+- [ ] Add Docker image for CUDA (already exists, verify).
+- [ ] Add Docker image for Metal (already exists, verify).
+- [ ] Test WASM execution on all supported platforms.
+- [ ] Add platform-specific performance baselines.
+
+**Acceptance criteria**: CI tests all 5 platform targets; GPU kernels compile on all platforms.
+
+---
+
+## Step 10 — Code Quality and Fuzz Expansion
+
+**Goal**: Expand fuzz targets and improve code quality.
+
+- [ ] Add fuzz targets for `internal/scoring` (scorer, async scorer, normalizer).
+- [ ] Add fuzz targets for `internal/steer` (biprojection, CAST, commitment, coherence).
+- [ ] Add fuzz targets for `internal/analysis` (CKA, concept cone, latent vis).
+- [ ] Add fuzz targets for `internal/engine` (MoE routing, ONNX parsing).
+- [ ] Add fuzz targets for `internal/hallucination` (energy, family features).
+- [ ] Add property-based tests for cosine similarity bounds.
+- [ ] Add property-based tests for DoRA KL ceiling.
+- [ ] Add property-based tests for SAE metric ranges.
+- [ ] Add property-based tests for angular drift bound.
+- [ ] Run `go test -shuffle=on` in CI to catch order-dependent tests.
+- [ ] Run `golangci-lint` with additional linters (gocyclo, gocognit, funlen).
+- [ ] Add code complexity thresholds to CI.
+
+**Acceptance criteria**: 90+ fuzz targets; complexity thresholds enforced.
 
 ---
 
@@ -107,35 +242,8 @@ make release-evidence
 make test
 make test-race
 make test-coverage
+make test-coverage-gate
 make test-fuzz
+make bench-regression
+cd lean && lake build
 ```
-
----
-
-## Step 7 — Formal Verification via Lean (Correctness & Purity)
-
-**Goal**: Machine-check the mathematical correctness and functional purity of BurnNotice's core algorithms using Lean 4, providing a higher assurance level than unit/oracle tests.
-
-- [x] Create Lean 4 project under `lean/` (`lean-toolchain`, `lakefile.lean`).
-- [x] `lean/BurnNotice/Basic.lean`: foundational real-arithmetic and norm lemmas.
-- [x] `lean/BurnNotice/Cosine.lean`: cosine similarity bounded in [-1, 1] (corresponds to `scorer.go`, `native/kernel.cpp`).
-- [x] `lean/BurnNotice/Sigmoid.lean`: sigmoid maps R to (0, 1) (scoring, CAST).
-- [x] `lean/BurnNotice/Softmax.lean`: softmax outputs sum to 1 (MoE routing, Dora).
-- [x] `lean/BurnNotice/KL.lean`: KL divergence non-negativity (Gibbs' inequality) (Dora).
-- [x] `lean/BurnNotice/DoRA.lean`: DoRA row-norm preservation (dora.go `composeDoRAWeights`).
-- [x] `lean/BurnNotice/Drift.lean`: angular drift bounded by 15 deg (kvcache.go, crescendo.go).
-- [x] `lean/BurnNotice/SAE.lean`: SAE metrics in [0, 1] (alignment.go).
-- [x] `lean/BurnNotice/MoE.lean`: MoE routing weights sum to 1 and non-negative (moe.go).
-- [x] `lean/BurnNotice/Purity.lean`: functional purity and referential transparency of core computations.
-- [x] `lean/BurnNotice/Main.lean`: master correctness and purity theorems aggregating all proofs.
-
-### Subtasks (remaining)
-
-- [x] Install Lean 4 toolchain (elan) locally and verify all proofs compile (`lake build` passes).
-- [x] Replace `sorry` placeholders in `KL.lean` and `DoRA.lean` with complete proofs.
-- [x] Add Lean proofs for CKA (Centered Kernel Alignment) bounds and Procrustes alignment (stub module, bounds theorem).
-- [x] Add Lean proofs for GCAD exponential decay monotonicity and re-anchor invariants.
-- [x] Add Lean proofs for covariance matrix symmetry and positive semi-definiteness (definitions + theorems).
-- [x] Add Lean proofs for the biprojection idempotence property (identity + general).
-- [x] Add a CI step (`lake build`) that fails on proof errors (install elan in CI).
-- [x] Document the formal verification approach in `docs/architecture.md`.
