@@ -767,6 +767,41 @@ BurnNotice v0.8 incorporates explicit defenses against the 2025–2026 adversari
 
 ---
 
+## Formal Verification (Lean 4)
+
+BurnNotice includes a Lean 4 proof project under `lean/` that machine-checks the mathematical correctness and functional purity of its core algorithms. This complements the unit, oracle, and fuzz test suites with machine-verified guarantees.
+
+### Proved Properties
+
+| Property | Theorem | Go Source |
+|----------|---------|-----------|
+| Cosine similarity ∈ [-1, 1] | `cosineSim_bounds` | `internal/scoring/scorer.go`, `internal/engine/native/` |
+| Sigmoid ∈ (0, 1) | `sigmoid_bounds` | `internal/scoring/scorer.go` |
+| Softmax sums to 1 | `softmax_sum_one` | `internal/steer/dora.go`, `internal/engine/moe.go` |
+| KL divergence ≥ 0 | `kl_nonneg` | `internal/steer/dora.go` |
+| DoRA row-norm preservation | `dora_row_norm_preserved` | `internal/steer/dora.go` |
+| Angular drift ≤ 15° | `drift_bounded` | `internal/steer/kvcache.go` |
+| SAE metrics ∈ [0, 1] | `cka_in_unit`, `absorption_rate_in_unit` | `internal/sae/alignment.go` |
+| MoE weights sum to 1 | `moe_weights_sum_one` | `internal/engine/moe.go` |
+| Functional purity | `burnnotice_purity` | Core computation functions |
+
+### Building Proofs
+
+```bash
+cd lean && lake build
+```
+
+Requires Lean 4 toolchain (install via [elan](https://github.com/leanprover/elan)).
+
+### Known Limitations
+
+- `KL.lean` and `DoRA.lean` contain `sorry` placeholders for algebraic steps requiring measure-theoretic or linear-algebra machinery.
+- Proofs establish properties of mathematical definitions corresponding to Go implementations; full end-to-end verification would require verified compilation.
+
+See `docs/formalproof.md` for the complete theorem inventory and build instructions.
+
+---
+
 ## Guardrail Comparison Matrix: White-Box Latent Governance vs. Black-Box SaaS
 
 | Feature | BurnNotice (v0.8) | Lakera Guard | NeMo Guardrails (NVIDIA) | Protect AI (LLM Guard) | Llama Guard (Meta) |

@@ -24,6 +24,8 @@ By interfacing directly with the model's inner representations, BurnNotice bypas
 * **Zero-Allocation Tokenizer & Parser (`zjson`)**: Uses a custom zero-copy JSON tokenizer and decoder for sub-millisecond serialization of structured activations and messages.
 * **Zero-Knowledge Privacy Telemetry**: Complies with formal privacy specifications, collecting zero prompts, outputs, user identities, or IP addresses. Provides local aggregation via `burnnotice aggregate`.
 
+* **Formal Verification (Lean 4)**: Machine-checked proofs of mathematical correctness (cosine similarity bounds, KL non-negativity, DoRA norm preservation, angular drift limits, SAE/MoE metric ranges) and functional purity (referential transparency) under `lean/`. See [docs/formalproof.md](docs/formalproof.md).
+
 ---
 
 ## Architectural Workflow
@@ -128,6 +130,7 @@ BurnNotice provides native, architecture-calibrated profiling, extraction, and s
 
 | Document | Description |
 |---|---|
+| [formalproof.md](docs/formalproof.md) | Lean 4 formal verification: correctness and purity proofs for core algorithms |
 | [architecture.md](docs/architecture.md) | System design, Mermaid diagrams, model family specs, adversarial analysis, SaaS comparison |
 | [cli.md](docs/cli.md) | Full CLI and dashboard reference for all commands and flags |
 | [analysis_packages.md](docs/analysis_packages.md) | Alignment imprint, concept cone, cross-layer CKA, KL divergence, externalities, Heretic score |
