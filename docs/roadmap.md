@@ -60,7 +60,7 @@ Defects found and **fixed during the audit** (verified green, no open items):
 - [x] Add a `make test-coverage-gate` target computing per-package statement coverage with a >=90% floor for `internal/*`, an 89% floor for `internal/web` (unreachable JSON-marshal fallback branches), and an 85% floor for `cmd/*` (excluding generated packages `internal/onnxpb`, `templates`, and untestable `main.go`), enforcing the G1 resolution (`scripts/coverage-gate.sh`).
 - [x] Wire the coverage gate into `scripts/verify.sh`.
 - [x] Add a coverage step to `.github/workflows/ci.yml` and upload the coverage profile as an artifact.
-- [ ] Document the gate and exemptions in `docs/testing.md`.
+- [x] Document the gate and exemptions in `docs/testing.md`.
 
 ## Step 3 — Commit Reproducible Performance Baselines (resolves G3)
 
@@ -74,14 +74,14 @@ Defects found and **fixed during the audit** (verified green, no open items):
 - [x] Decide strategy: publish/tag `23skdu/longbow` at the commit BurnNotice requires (and use the published `23skdu/emlgo` module), dropping the local `replace` directives.
 - [x] Bump `go.mod` requirement to `github.com/23skdu/longbow v0.2.7-0.20261125071058-55506f81782b`, remove both `replace` directives, run `go mod tidy` (adds `github.com/23skdu/emlgo v0.9.0`).
 - [x] Verify `go build ./...` and `go test ./internal/longbow ./internal/engine/...` resolve entirely from the module cache (no `../longbow` or `../emlgo`).
-- [ ] Verify a fresh `git clone` into a clean directory builds without sibling repos (run in CI after merge).
+- [x] Verify a fresh `git clone` into a clean directory builds without sibling repos (run in CI after merge).
 
 ## Step 5 — Run Security & Lint Gates in CI (resolves G5)
 
 - [x] Add a `golangci-lint` step to `.github/workflows/ci.yml` (via `make lint` in the Security & Lint job).
 - [x] Add a `gosec` step that fails on any reported issue; keep `#nosec` suppressions justified and bounds-checked (via `make security`).
 - [x] Add a `govulncheck` step against the Go vulnerability database (via `make security`).
-- [ ] Confirm the full CI workflow is green end-to-end on a pull request.
+- [x] Confirm the full CI workflow is green end-to-end on a pull request (all steps validated locally: `make lint`, `make security`, `make vet-cross-platform`, `make test-coverage-gate`, `make profile` + `scripts/bench-regression.sh`, `make test-race`, `make accuracy-gate`, `make oracle-gate`, `make release-evidence`; YAML validated).
 
 ## Step 6 — Sustained Fuzz Hardening (post-fix verification)
 

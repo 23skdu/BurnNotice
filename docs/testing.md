@@ -18,9 +18,9 @@ flowchart LR
     end
 
     subgraph Dynamic["Unit, Race & Fuzz Matrix"]
-        UNIT["Unit Suite\n(90%-100% Core Coverage)"]
+        UNIT["Unit Suite\n(>=90% internal, >=85% cmd)"]
         RACE["Concurrent Race Detector\n(go test -race ./...)"]
-        FUZZ["72 Native Fuzz Targets\n(25 Packages)"]
+        FUZZ["76 Native Fuzz Targets\n(27 Packages)"]
     end
 
     subgraph Invariants["Mathematical & Release Gates"]
@@ -139,3 +139,31 @@ BurnNotice enforces zero lint and security findings across the entire repository
 - `make lint` (`golangci-lint run ./...` -> **0 issues**)
 - `make sec-gosec` (`gosec ./...` -> **0 issues**)
 - `make sec-vulncheck` (`govulncheck ./...` -> **0 vulnerabilities**)
+
+
+---
+
+## Coverage Gate
+
+BurnNotice enforces per-package statement coverage via `make test-coverage-gate` (implemented in `scripts/coverage-gate.sh`). The gate runs `go test -coverprofile` across all packages and fails if any package falls below its floor.
+
+| Package group | Floor | Notes |
+| --- | --- | --- |
+| `internal/*` | 90% | All core packages |
+| `internal/web` | 89% | Unreachable JSON-marshal fallback branches |
+| `cmd/*` | 85% | Excludes untestable `main()` (0%) and scattered CLI error branches |
+| `internal/onnxpb`, `templates` | exempt | Generated code |
+
+Generated files (`*_templ.go`, `*.pb.go`) are excluded from the calculation. The gate is wired into `scripts/verify.sh` and `.github/workflows/ci.yml`.
+
+### Re-running
+
+```bash
+make test-coverage-gate
+```
+
+To regenerate the coverage profile without enforcing:
+
+```bash
+make test-coverage   # writes coverage.out + coverage.html
+```
