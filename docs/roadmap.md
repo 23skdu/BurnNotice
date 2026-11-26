@@ -134,7 +134,7 @@ make test-fuzz
 - [x] Install Lean 4 toolchain (elan) locally and verify all proofs compile (`lake build` passes).
 - [ ] Replace `sorry` placeholders in `KL.lean` and `DoRA.lean` with complete proofs.
 - [ ] Add Lean proofs for CKA (Centered Kernel Alignment) bounds and Procrustes alignment.
-- [ ] Add Lean proofs for GCAD exponential decay monotonicity and re-anchor invariants.
+- [x] Add Lean proofs for GCAD exponential decay monotonicity and re-anchor invariants.
 - [ ] Add Lean proofs for covariance matrix symmetry and positive semi-definiteness.
 - [ ] Add Lean proofs for the biprojection idempotence property.
 - [ ] Add a CI step (`lake build`) that fails on proof errors (install elan in CI).

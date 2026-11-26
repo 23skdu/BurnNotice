@@ -26,7 +26,7 @@ noncomputable def composeDoRARow {n : ℕ} (w : Fin n → ℝ) (magnitude : ℝ)
   else
     w
 
-/-- DoRA preserves the row norm. -/
+/-- DoRA preserves the row norm: ‖composeDoRARow w m δ s‖ = |m|. -/
 theorem dora_row_norm_preserved {n : ℕ} (w : Fin n → ℝ) (magnitude : ℝ)
     (delta : Fin n → ℝ) (scale : ℝ)
     (hm : 0 ≤ magnitude)

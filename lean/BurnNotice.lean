@@ -8,4 +8,8 @@ import BurnNotice.Drift
 import BurnNotice.SAE
 import BurnNotice.MoE
 import BurnNotice.Purity
+import BurnNotice.CKA
+import BurnNotice.GCAD
+import BurnNotice.Covariance
+import BurnNotice.Biprojection
 import BurnNotice.Main

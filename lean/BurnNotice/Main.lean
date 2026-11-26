@@ -8,6 +8,10 @@ import BurnNotice.Drift
 import BurnNotice.SAE
 import BurnNotice.MoE
 import BurnNotice.Purity
+import BurnNotice.CKA
+import BurnNotice.GCAD
+import BurnNotice.Covariance
+import BurnNotice.Biprojection
 
 /-!
 # BurnNotice.Main
@@ -19,14 +23,14 @@ namespace BurnNotice.Main
 
 open BurnNotice
 
-/-- Master correctness theorem: all key invariants hold. -/
+/-- Master correctness theorem. -/
 theorem burnnotice_correctness :
     (∀ x : ℝ, 0 < Sigmoid.sigmoid x ∧ Sigmoid.sigmoid x < 1) ∧
     (∀ d : ℝ, d ≤ Drift.thetaMax → d ≤ Drift.thetaMax) :=
   ⟨fun x => Sigmoid.sigmoid_bounds x,
    fun d h => h⟩
 
-/-- Master purity theorem: core computations are pure. -/
+/-- Master purity theorem. -/
 theorem burnnotice_purity :
     (∀ {α β : Type} (f : α → β), Purity.IsPure f) := by
   intro α β f
