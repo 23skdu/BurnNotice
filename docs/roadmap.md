@@ -109,3 +109,33 @@ make test-race
 make test-coverage
 make test-fuzz
 ```
+
+---
+
+## Step 7 — Formal Verification via Lean (Correctness & Purity)
+
+**Goal**: Machine-check the mathematical correctness and functional purity of BurnNotice's core algorithms using Lean 4, providing a higher assurance level than unit/oracle tests.
+
+- [x] Create Lean 4 project under `lean/` (`lean-toolchain`, `lakefile.lean`).
+- [x] `lean/BurnNotice/Basic.lean`: foundational real-arithmetic and norm lemmas.
+- [x] `lean/BurnNotice/Cosine.lean`: cosine similarity bounded in [-1, 1] (corresponds to `scorer.go`, `native/kernel.cpp`).
+- [x] `lean/BurnNotice/Sigmoid.lean`: sigmoid maps R to (0, 1) (scoring, CAST).
+- [x] `lean/BurnNotice/Softmax.lean`: softmax outputs sum to 1 (MoE routing, Dora).
+- [x] `lean/BurnNotice/KL.lean`: KL divergence non-negativity (Gibbs' inequality) (Dora).
+- [x] `lean/BurnNotice/DoRA.lean`: DoRA row-norm preservation (dora.go `composeDoRAWeights`).
+- [x] `lean/BurnNotice/Drift.lean`: angular drift bounded by 15 deg (kvcache.go, crescendo.go).
+- [x] `lean/BurnNotice/SAE.lean`: SAE metrics in [0, 1] (alignment.go).
+- [x] `lean/BurnNotice/MoE.lean`: MoE routing weights sum to 1 and non-negative (moe.go).
+- [x] `lean/BurnNotice/Purity.lean`: functional purity and referential transparency of core computations.
+- [x] `lean/BurnNotice/Main.lean`: master correctness and purity theorems aggregating all proofs.
+
+### Subtasks (remaining)
+
+- [ ] Install Lean 4 toolchain (elan) in CI and verify all proofs compile (`lake build`).
+- [ ] Replace `sorry` placeholders in `KL.lean` and `DoRA.lean` with complete proofs.
+- [ ] Add Lean proofs for CKA (Centered Kernel Alignment) bounds and Procrustes alignment.
+- [ ] Add Lean proofs for GCAD exponential decay monotonicity and re-anchor invariants.
+- [ ] Add Lean proofs for covariance matrix symmetry and positive semi-definiteness.
+- [ ] Add Lean proofs for the biprojection idempotence property.
+- [ ] Add a CI step (`lake build`) that fails on proof errors.
+- [ ] Document the formal verification approach in `docs/architecture.md`.
