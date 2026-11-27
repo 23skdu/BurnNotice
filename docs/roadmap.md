@@ -260,20 +260,20 @@
 
 **Goal**: Expand fuzz targets and improve code quality.
 
-- [ ] Add fuzz targets for `internal/scoring` (scorer, async scorer, normalizer, vecDot, vecNorm).
-- [ ] Add fuzz targets for `internal/steer` (biprojection, CAST, commitment, coherence, quantization).
-- [ ] Add fuzz targets for `internal/analysis` (CKA, concept cone, latent vis, externalities).
-- [ ] Add fuzz targets for `internal/engine` (MoE routing, ONNX parsing, top-k selection).
-- [ ] Add fuzz targets for `internal/hallucination` (energy, family features, calibration).
-- [ ] Add fuzz targets for `internal/checkpoint`, `internal/compliance`, `internal/datasets`, `internal/downloader`, `internal/policydetect`.
+- [x] Add fuzz targets for `internal/scoring` (scorer, async scorer, normalizer, vecDot, vecNorm).
+- [x] Add fuzz targets for `internal/steer` (biprojection, CAST, commitment, coherence, quantization).
+- [x] Add fuzz targets for `internal/analysis` (CKA, concept cone, latent vis, externalities).
+- [x] Add fuzz targets for `internal/engine` (MoE routing, ONNX parsing, top-k selection).
+- [x] Add fuzz targets for `internal/hallucination` (energy, family features, calibration).
+- [x] Add fuzz targets for `internal/checkpoint`, `internal/compliance`, `internal/datasets`, `internal/downloader`, `internal/policydetect`, `internal/engine/native`.
 - [ ] Add property-based tests for cosine similarity bounds.
 - [ ] Add property-based tests for DoRA KL ceiling.
 - [ ] Add property-based tests for SAE metric ranges.
 - [ ] Add property-based tests for angular drift bound.
-- [ ] Run `go test -shuffle=on` in CI to catch order-dependent tests.
+- [x] Run `go test -shuffle=on` in CI to catch order-dependent tests.
 - [ ] Run `golangci-lint` with additional linters (gocyclo, gocognit, funlen).
 - [ ] Add code complexity thresholds to CI (max cyclomatic complexity 15).
-- [ ] Target: 90+ fuzz targets across 34 packages.
+- [x] Target: 90+ fuzz targets across 34 packages (achieved: 92 targets).
 
 **Acceptance criteria**: 90+ fuzz targets; complexity thresholds enforced; shuffle tests in CI.
 

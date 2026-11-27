@@ -80,7 +80,7 @@ BurnNotice provides native, architecture-calibrated profiling, extraction, and s
 │   ├── roadmap.md                    # Implementation roadmap, completed milestones & CI quality gates
 │   ├── svd.md                        # Winsorized Ledoit-Wolf ZCA Whitened SVD mathematical pipeline
 │   ├── telemetry.md                  # Telemetry payload schema and zero-knowledge privacy specification
-│   └── testing.md                    # Testing strategy, 90%+ coverage, 73 fuzz targets, accuracy & oracle gates
+│   └── testing.md                    # Testing strategy, 90%+ coverage, 92 fuzz targets, accuracy & oracle gates
 ├── internal/
 │   ├── agent/             # Multi-agent & MCP monitoring hooks with OPA Latent-Aware Authorization
 │   ├── analysis/          # Geometry: latent visualizer, concept cone, externalities, Heretic score
@@ -137,7 +137,7 @@ BurnNotice provides native, architecture-calibrated profiling, extraction, and s
 | [latent_space_visualization.md](docs/latent_space_visualization.md) | FNV-1a cached Thin-SVD 2D manifold projection, 95% CI hulls, and token trajectories |
 | [svd.md](docs/svd.md) | Winsorized Ledoit-Wolf shrinkage ZCA Whitened SVD extraction |
 | [metrics.md](docs/metrics.md) | Prometheus metrics (50+) and OpenTelemetry OTLP/HTTP export configuration |
-| [testing.md](docs/testing.md) | Testing strategy, 90.3%–100% coverage, 72 fuzz targets, accuracy/oracle gates |
+| [testing.md](docs/testing.md) | Testing strategy, 90.3%–100% coverage, 92 fuzz targets, accuracy/oracle gates |
 | [roadmap.md](docs/roadmap.md) | Implementation roadmap, completed milestones, and reproducible quality gates |
 | [telemetry.md](docs/telemetry.md) | Telemetry schema, zero-knowledge privacy guarantees, `burnnotice aggregate` CLI |
 | [arxiv/paper.pdf](arxiv/paper.pdf) | Full v0.8 technical paper ([LaTeX source](arxiv/paper.tex)) |
