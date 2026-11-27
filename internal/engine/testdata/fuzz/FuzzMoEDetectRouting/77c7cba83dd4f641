@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("0000000a")
+int(2)
+int(3)
