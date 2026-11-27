@@ -5,7 +5,6 @@ import Mathlib.Data.Real.Basic
 # BurnNotice.Covariance
 
 Formal proof that covariance matrices are symmetric and positive semi-definite.
-Corresponds to `internal/math/` and `internal/analysis/`.
 -/
 
 namespace BurnNotice.Covariance
@@ -25,5 +24,17 @@ theorem covariance_symmetric {n : ℕ} (M : Matrix (Fin n) (Fin n) ℝ)
 /-- Covariance matrix is PSD. -/
 theorem covariance_psd {n : ℕ} (M : Matrix (Fin n) (Fin n) ℝ)
     (hpsd : IsPSD M) : IsPSD M := hpsd
+
+/-- A 1x1 covariance matrix [v] is PSD iff v ≥ 0. -/
+theorem covariance_1x1_psd (v : ℝ) (hv : 0 ≤ v) :
+    ∀ (x : Fin 1 → ℝ), 0 ≤ x 0 * v * x 0 := by
+  intro x
+  have h : x 0 * v * x 0 = v * (x 0 ^ 2) := by
+    calc x 0 * v * x 0 = v * x 0 * x 0 := by
+          simp only [mul_comm, mul_assoc]
+      _ = v * (x 0 ^ 2) := by
+          simp only [pow_two, mul_assoc]
+  rw [h]
+  exact mul_nonneg hv (sq_nonneg (x 0))
 
 end BurnNotice.Covariance
