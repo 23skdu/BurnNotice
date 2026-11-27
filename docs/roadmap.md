@@ -157,17 +157,17 @@
 
 **Goal**: Fix all documentation inaccuracies and keep docs in sync with code.
 
-- [ ] Update README.md fuzz count: 72 → 76 targets, 25 → 27 packages.
-- [ ] Update README.md metrics count: 50+ → 55+.
-- [ ] Update testing.md mermaid diagram fuzz count: 72 → 76.
-- [ ] Update testing.md coverage claims to reflect actual per-package numbers.
-- [ ] Verify all file paths referenced in docs exist.
-- [ ] Verify all CLI flags documented match `cmd/burnnotice/main.go`.
-- [ ] Verify all metrics documented match `internal/metrics/metrics.go`.
+- [x] Update README.md fuzz count: 72 → 97 targets, 25 → 34 packages.
+- [x] Update README.md metrics count: 50+ → 55+.
+- [x] Update testing.md mermaid diagram fuzz count: 76 → 97.
+- [x] Update testing.md coverage claims to reflect actual per-package numbers.
+- [x] Verify all file paths referenced in docs exist (all valid).
+- [x] Verify all CLI flags documented match `cmd/burnnotice/main.go`.
+- [x] Verify all metrics documented match `internal/metrics/metrics.go` (55 metrics).
 - [ ] Add changelog entry for v0.9.3 improvements.
 - [ ] Run markdownlint on all docs and fix violations.
 - [ ] Add `docs/formalproof.md` reference to README documentation table (done).
-- [ ] Verify architecture.md threat model table is current.
+- [x] Verify architecture.md threat model table is current.
 - [ ] Update `docs/cli.md` with all current commands and flags.
 
 **Acceptance criteria**: All documentation accurate; markdownlint clean (except pre-existing MD013).

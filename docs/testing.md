@@ -20,7 +20,7 @@ flowchart LR
     subgraph Dynamic["Unit, Race & Fuzz Matrix"]
         UNIT["Unit Suite\n(>=90% internal, >=85% cmd)"]
         RACE["Concurrent Race Detector\n(go test -race ./...)"]
-        FUZZ["92 Native Fuzz Targets\n(34 Packages)"]
+        FUZZ["97 Native Fuzz Targets\n(34 Packages)"]
     end
 
     subgraph Invariants["Mathematical & Release Gates"]

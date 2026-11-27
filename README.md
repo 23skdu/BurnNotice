@@ -96,7 +96,7 @@ BurnNotice provides native, architecture-calibrated profiling, extraction, and s
 │   ├── longbow/           # Vector store client (Apache Arrow Flight with SQLite fallback)
 │   ├── math/              # Robust statistics: winsorization, ZCA whitening, covariance
 │   ├── memory/            # sync.Pool activation buffer management
-│   ├── metrics/           # Prometheus instruments (50+) and OTel OTLP exporter
+│   ├── metrics/           # Prometheus instruments (55+) and OTel OTLP exporter
 │   ├── onnxpb/            # ONNX protobuf bindings and accessor helpers
 │   ├── policy/            # Policy engine, OPA WASM/REST/compound evaluator, semantic gater, kill-switch
 │   ├── policydetect/      # Policy violation detector
