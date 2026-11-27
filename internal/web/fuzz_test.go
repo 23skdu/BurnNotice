@@ -45,3 +45,18 @@ func FuzzHandlersAndSSE(f *testing.F) {
 		}
 	})
 }
+
+func FuzzSSEHubBroadcastExtra(f *testing.F) {
+	f.Add("test-event", "test-data")
+
+	f.Fuzz(func(t *testing.T, event, data string) {
+		if len(event) > 100 || len(data) > 1000 {
+			return
+		}
+		hub := NewSSEHub()
+		hub.Broadcast(event, data)
+		ch := hub.AddClient()
+		hub.Broadcast(event, data)
+		hub.RemoveClient(ch)
+	})
+}
