@@ -76,7 +76,7 @@ BurnNotice provides native, architecture-calibrated profiling, extraction, and s
 │   ├── analysis_packages.md          # Analysis packages: alignment, cone, cross-layer CKA, KL, externalities, Heretic
 │   ├── cli.md                        # Full CLI & dashboard reference for all commands and flags
 │   ├── latent_space_visualization.md # FNV-1a cached Thin-SVD manifold projection, cluster hulls & trajectories
-│   ├── metrics.md                    # Prometheus metrics (50+) and OTel export configuration
+│   ├── metrics.md                    # Prometheus metrics (55+) and OTel export configuration
 │   ├── roadmap.md                    # Implementation roadmap, completed milestones & CI quality gates
 │   ├── svd.md                        # Winsorized Ledoit-Wolf ZCA Whitened SVD mathematical pipeline
 │   ├── telemetry.md                  # Telemetry payload schema and zero-knowledge privacy specification
@@ -136,7 +136,7 @@ BurnNotice provides native, architecture-calibrated profiling, extraction, and s
 | [analysis_packages.md](docs/analysis_packages.md) | Alignment imprint, concept cone, cross-layer CKA, KL divergence, externalities, Heretic score |
 | [latent_space_visualization.md](docs/latent_space_visualization.md) | FNV-1a cached Thin-SVD 2D manifold projection, 95% CI hulls, and token trajectories |
 | [svd.md](docs/svd.md) | Winsorized Ledoit-Wolf shrinkage ZCA Whitened SVD extraction |
-| [metrics.md](docs/metrics.md) | Prometheus metrics (50+) and OpenTelemetry OTLP/HTTP export configuration |
+| [metrics.md](docs/metrics.md) | Prometheus metrics (55+) and OpenTelemetry OTLP/HTTP export configuration |
 | [testing.md](docs/testing.md) | Testing strategy, 90.3%–100% coverage, 92 fuzz targets, accuracy/oracle gates |
 | [roadmap.md](docs/roadmap.md) | Implementation roadmap, completed milestones, and reproducible quality gates |
 | [telemetry.md](docs/telemetry.md) | Telemetry schema, zero-knowledge privacy guarantees, `burnnotice aggregate` CLI |

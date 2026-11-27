@@ -20,7 +20,7 @@ flowchart LR
     subgraph Dynamic["Unit, Race & Fuzz Matrix"]
         UNIT["Unit Suite\n(>=90% internal, >=85% cmd)"]
         RACE["Concurrent Race Detector\n(go test -race ./...)"]
-        FUZZ["76 Native Fuzz Targets\n(27 Packages)"]
+        FUZZ["92 Native Fuzz Targets\n(34 Packages)"]
     end
 
     subgraph Invariants["Mathematical & Release Gates"]
@@ -76,7 +76,7 @@ All core packages meet or exceed the 90% statement coverage target:
 
 ---
 
-## 3. Fuzz Testing (73 Targets Across 25 Packages)
+## 3. Fuzz Testing (92 Targets Across 34 Packages)
 
 Every package in `internal/` and `cmd/` includes native Go `Fuzz*` targets runnable via `make test-fuzz`:
 
