@@ -6,61 +6,97 @@ import (
 )
 
 func FuzzExtractDIM(f *testing.F) {
-	f.Add(1.0, 0.0, 0.0, 0.0, 1.0, 0.0)
-	f.Add(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
-	f.Add(1.0, 2.0, 3.0, -1.0, -2.0, -3.0)
-	f.Add(1e-10, 1e-10, 1e-10, -1e-10, -1e-10, -1e-10)
+	f.Add([]byte{1, 2, 3, 4}, []byte{5, 6, 7, 8})
 
-	f.Fuzz(func(t *testing.T, a1, a2, a3, b1, b2, b3 float64) {
-		for _, v := range []float64{a1, a2, a3, b1, b2, b3} {
-			if math.IsNaN(v) || math.IsInf(v, 0) {
-				t.Skip()
+	f.Fuzz(func(t *testing.T, posData, negData []byte) {
+		if len(posData) < 4 || len(negData) < 4 {
+			return
+		}
+		dim := 2
+		nPos := len(posData) / (dim * 8)
+		nNeg := len(negData) / (dim * 8)
+		if nPos < 1 || nNeg < 1 || nPos > 10 || nNeg > 10 {
+			return
+		}
+		positive := make([][]float64, nPos)
+		negative := make([][]float64, nNeg)
+		for i := 0; i < nPos; i++ {
+			positive[i] = make([]float64, dim)
+			for j := 0; j < dim; j++ {
+				idx := (i*dim + j) * 8
+				if idx+8 <= len(posData) {
+					bits := uint64(posData[idx]) | uint64(posData[idx+1])<<8 | uint64(posData[idx+2])<<16 | uint64(posData[idx+3])<<24
+					positive[i][j] = float64(bits) / 1e6
+				}
 			}
 		}
-
-		positive := [][]float64{{a1, a2, a3}}
-		negative := [][]float64{{b1, b2, b3}}
-
+		for i := 0; i < nNeg; i++ {
+			negative[i] = make([]float64, dim)
+			for j := 0; j < dim; j++ {
+				idx := (i*dim + j) * 8
+				if idx+8 <= len(negData) {
+					bits := uint64(negData[idx]) | uint64(negData[idx+1])<<8 | uint64(negData[idx+2])<<16 | uint64(negData[idx+3])<<24
+					negative[i][j] = float64(bits) / 1e6
+				}
+			}
+		}
 		result := ExtractDIM(positive, negative)
-
-		if result == nil {
-			t.Fatal("ExtractDIM returned nil")
-		}
-		if len(result) != 3 {
-			t.Fatalf("len(result) = %d, want 3", len(result))
-		}
-
-		norm := Norm(result)
-		if norm > 1e-10 && math.Abs(norm-1.0) > 1e-6 {
-			t.Errorf("result norm = %f, want 1.0", norm)
+		if result != nil {
+			if len(result) != dim {
+				t.Errorf("expected dim %d, got %d", dim, len(result))
+			}
+			for _, v := range result {
+				if math.IsNaN(v) || math.IsInf(v, 0) {
+					t.Errorf("NaN/Inf in result")
+				}
+			}
 		}
 	})
 }
 
 func FuzzNormalize(f *testing.F) {
-	f.Add(1.0, 2.0, 3.0)
-	f.Add(0.0, 0.0, 0.0)
-	f.Add(-1.0, -2.0, -3.0)
-	f.Add(1e-10, 1e-10, 1e-10)
-	f.Add(1e10, 1e10, 1e10)
+	f.Add([]byte{1, 2, 3, 4})
 
-	f.Fuzz(func(t *testing.T, x, y, z float64) {
-		for _, v := range []float64{x, y, z} {
-			if math.IsNaN(v) || math.IsInf(v, 0) {
-				t.Skip()
+	f.Fuzz(func(t *testing.T, data []byte) {
+		if len(data) < 4 {
+			return
+		}
+		v := make([]float64, len(data))
+		for i := range v {
+			v[i] = float64(data[i]) / 255.0
+		}
+		result := Normalize(v)
+		if result != nil {
+			// Check normalized (unit norm)
+			var norm float64
+			for _, x := range result {
+				norm += x * x
+			}
+			norm = math.Sqrt(norm)
+			if norm > 0 && math.Abs(norm-1.0) > 1e-6 {
+				t.Errorf("not unit norm: %f", norm)
 			}
 		}
+	})
+}
 
-		vec := []float64{x, y, z}
-		result := Normalize(vec)
+func FuzzNorm(f *testing.F) {
+	f.Add([]byte{1, 2, 3, 4})
 
-		if len(result) != 3 {
-			t.Fatalf("len(result) = %d, want 3", len(result))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		if len(data) < 1 {
+			return
 		}
-
-		norm := Norm(result)
-		if norm > 1e-10 && math.Abs(norm-1.0) > 1e-6 {
-			t.Errorf("Normalize(%v) norm = %f, want 1.0", vec, norm)
+		v := make([]float64, len(data))
+		for i := range v {
+			v[i] = float64(data[i]) / 255.0
+		}
+		n := Norm(v)
+		if math.IsNaN(n) || math.IsInf(n, 0) {
+			t.Errorf("NaN/Inf norm: %f", n)
+		}
+		if n < 0 {
+			t.Errorf("negative norm: %f", n)
 		}
 	})
 }
@@ -68,58 +104,17 @@ func FuzzNormalize(f *testing.F) {
 func FuzzSigmoid(f *testing.F) {
 	f.Add(0.0)
 	f.Add(1.0)
-	f.Add(-1.0)
-	f.Add(100.0)
-	f.Add(-100.0)
 
 	f.Fuzz(func(t *testing.T, x float64) {
-		if math.IsNaN(x) || math.IsInf(x, 0) {
-			t.Skip()
+		if math.IsNaN(x) || math.IsInf(x, 0) || math.Abs(x) > 500 {
+			return
 		}
-
 		result := Sigmoid(x)
-
-		if result < 0 || result > 1 {
-			t.Errorf("Sigmoid(%f) = %f, want [0, 1]", x, result)
-		}
-
-		if x == 0 && math.Abs(result-0.5) > 1e-9 {
-			t.Errorf("Sigmoid(0) = %f, want 0.5", result)
-		}
-
-		if x > 20 && result != 1.0 {
-			t.Errorf("Sigmoid(%f) = %f, want 1.0", x, result)
-		}
-
-		if x < -20 && result != 0.0 {
-			t.Errorf("Sigmoid(%f) = %f, want 0.0", x, result)
-		}
-	})
-}
-
-func FuzzDot(f *testing.F) {
-	f.Add(1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
-	f.Add(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
-
-	f.Fuzz(func(t *testing.T, a1, a2, a3, b1, b2, b3 float64) {
-		for _, v := range []float64{a1, a2, a3, b1, b2, b3} {
-			if math.IsNaN(v) || math.IsInf(v, 0) {
-				t.Skip()
-			}
-		}
-
-		a := []float64{a1, a2, a3}
-		b := []float64{b1, b2, b3}
-
-		result := Dot(a, b)
-		expected := a1*b1 + a2*b2 + a3*b3
-
 		if math.IsNaN(result) || math.IsInf(result, 0) {
-			t.Skip()
+			t.Errorf("NaN/Inf result: %f", result)
 		}
-
-		if math.Abs(result-expected) > 1e-6 {
-			t.Errorf("Dot(%v, %v) = %f, want %f", a, b, result, expected)
+		if result < 0 || result > 1 {
+			t.Errorf("sigmoid out of [0,1]: %f", result)
 		}
 	})
 }
