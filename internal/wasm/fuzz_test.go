@@ -26,3 +26,24 @@ func FuzzEncodeDecodeF32(f *testing.F) {
 		}
 	})
 }
+
+func FuzzWASMBackendForward(f *testing.F) {
+	f.Add([]byte{0, 0, 128, 63, 0, 0, 0, 0})
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		if len(data) < 4 || len(data)%4 != 0 {
+			return
+		}
+		input := decodeF32(data)
+		for _, v := range input {
+			if math.IsNaN(float64(v)) || math.IsInf(float64(v), 0) {
+				return
+			}
+		}
+		encoded := encodeF32(input)
+		decoded := decodeF32(encoded)
+		if len(decoded) != len(input) {
+			t.Errorf("len mismatch: %d vs %d", len(decoded), len(input))
+		}
+	})
+}
